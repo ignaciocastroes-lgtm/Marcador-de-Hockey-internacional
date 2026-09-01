@@ -286,3 +286,71 @@
     animation-duration: 1ms !important;
   }
 }
+
+
+/* ── DSEG: la tipografía de display de siete segmentos ─────────────────────
+   No está en Google Fonts, y por eso se descartó en su momento. Ahora viaja
+   en /public dentro del despliegue: cero dependencia externa. */
+
+@font-face {
+  font-family: 'DSEG7 Classic';
+  src: url('/fonts/DSEG7Classic-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DSEG14 Classic';
+  src: url('/fonts/DSEG14Classic-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* ── ACABADOS ──────────────────────────────────────────────────────────────
+   No son colores: son cómo se comporta la luz sobre el color ya elegido.
+
+   NEÓN y FLÚOR imitan una FUENTE de luz, que es lo que una pantalla hace bien:
+   núcleo claro, color saturado alrededor y halo amplio. Sin degradado, así que
+   la masa del dígito queda intacta y se lee de lejos.
+
+   METAL sí necesita degradado con brillo especular, y ese degradado PARTE el
+   dígito en dos. Por eso se reserva para nombres y letreros, nunca para el
+   reloj, el marcador ni la posesión. */
+
+.fx-solid { /* sin efecto: el color tal cual */ }
+
+.fx-neon {
+  color: #fff;
+  text-shadow:
+    0 0 2px  currentColor,
+    0 0 10px var(--fx-color),
+    0 0 24px var(--fx-color),
+    0 0 60px var(--fx-color);
+}
+
+.fx-fluor {
+  color: var(--fx-color);
+  filter: saturate(1.6) brightness(1.12);
+  text-shadow:
+    0 0 6px  var(--fx-color),
+    0 0 22px var(--fx-color);
+}
+
+.fx-metal {
+  background-image: linear-gradient(
+    175deg,
+    color-mix(in srgb, var(--fx-color) 55%, #000) 0%,
+    color-mix(in srgb, var(--fx-color) 92%, #fff) 34%,
+    #ffffff 47%,
+    color-mix(in srgb, var(--fx-color) 92%, #fff) 58%,
+    color-mix(in srgb, var(--fx-color) 45%, #000) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .55));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-neon, .fx-fluor { text-shadow: 0 0 8px var(--fx-color); }
+}

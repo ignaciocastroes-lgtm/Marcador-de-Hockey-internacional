@@ -1,5 +1,7 @@
 "use client"
 
+import { RigidClock } from '@/components/scoreboard/RigidClock'
+
 import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
@@ -23,17 +25,17 @@ import { BenchModal, type BenchStaffUI } from '@/components/scoreboard/BenchModa
 import { OfficialSheetModal } from '@/components/scoreboard/OfficialSheetModal'
 import { PreMatchSetup } from '@/components/scoreboard/PreMatchSetup'
 import { MatchHistoryModal } from '@/components/scoreboard/MatchHistoryModal'
-import { HotkeysModal } from '@/components/scoreboard/HotkeysModal'
 import { AudioModal } from '@/components/scoreboard/AudioModal'
 import { getShootout, shotsBy, SHOOTOUT_ROUNDS } from '@/lib/match-summary'
 import {
-  loadAudioConfig, playHorn, playBeep, releaseAudio,
+  loadAppearance, saveAppearance, activeKit, TOKEN_STYLES,
+  APPEARANCE_EVENT, DEFAULT_APPEARANCE, type Appearance
+} from '@/lib/appearance'
+import {
+  loadAudioConfig, playHorn, playBeep, releaseAudio, armAudio,
   AUDIO_EVENT, DEFAULT_AUDIO, type AudioConfig
 } from '@/lib/audio-engine'
-import {
-  loadHotkeys, actionForKey, normalizeKey, KEYS_NEEDING_PREVENT,
-  DEFAULT_HOTKEYS, type HotkeyMap
-} from '@/lib/hotkeys'
+import { HOTKEY_EVENT, OPEN_HOTKEYS_EVENT } from '@/lib/hotkeys'
 import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
 
 import {
@@ -145,6 +147,24 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const [showDrawer, setShowDrawer] = useState(false)
   const [showHotkeys, setShowHotkeys] = useState(false)
   const [showAudio, setShowAudio] = useState(false)
+  // Árbitro: las faltas son del EQUIPO, no de un jugador
+  const [refOpen, setRefOpen] = useState(false)
+
+  /**
+   * Juego detenido: entretiempo o tiempo muerto. Con el juego parado NO puede
+   * haber goles ni faltas, y no se solicita otro tiempo de banca. Las tarjetas
+   * SI se pueden cargar: el árbitro puede sancionar con el juego detenido.
+   */
+  const stopped = state.isIntermission || !!state.activeTimeout
+  const stoppedLabel = state.activeTimeout ? 'tiempo muerto' : 'entretiempo'
+  const [look, setLook] = useState<Appearance>(DEFAULT_APPEARANCE)
+  useEffect(() => {
+    const load = () => setLook(loadAppearance())
+    load()
+    window.addEventListener(APPEARANCE_EVENT, load)
+    return () => window.removeEventListener(APPEARANCE_EVENT, load)
+  }, [])
+  const patchLook = (a: Appearance) => { setLook(a); saveAppearance(a) }
 
   /** Pantalla completa: en tablet y celular gana el alto de la barra del navegador. */
   const toggleFullscreen = async () => {
@@ -160,8 +180,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     window.addEventListener(AUDIO_EVENT, load)
     return () => window.removeEventListener(AUDIO_EVENT, load)
   }, [])
-  const [hotkeys, setHotkeys] = useState<HotkeyMap>(DEFAULT_HOTKEYS)
-  useEffect(() => { setHotkeys(loadHotkeys()) }, [])
   const [renaming, setRenaming] = useState<{ player: Player; team: 'home' | 'away' } | null>(null)
   const [newNumber, setNewNumber] = useState('')
   const [addTo, setAddTo] = useState<'home' | 'away' | null>(null)
@@ -281,6 +299,9 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const shooters = (shootingTeam === 'home' ? homePlayers : awayPlayers)
     .filter(p => !isStaff(p) && !isPlayerExpelled(p, shootingTeam, cardHistory, sanctions))
 
+  const shootingKeeper = (shootingTeam === 'home' ? homeLineup : awayLineup).goalie
+    || (shootingTeam === 'home' ? homePlayers : awayPlayers).find(isGoalie)
+
   const keeper = (keepingTeam === 'home' ? homeLineup : awayLineup).goalie
     || (keepingTeam === 'home' ? homePlayers : awayPlayers).find(isGoalie)
 
@@ -361,10 +382,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         if (team === 'home') props.adjustHomePenalties(1)
         else props.adjustAwayPenalties(1)
         break
-      case 'falta':
-        if (team === 'home') props.adjustHomeFouls(1)
-        else props.adjustAwayFouls(1)
-        break
       case 'yellow':
       case 'blue':
       case 'red':
@@ -437,7 +454,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const buzz = useCallback((ms = 800) => { playHorn(ms, loadAudioConfig()) }, [])
   const skipNextBuzzer = useRef(false)
 
-  useEffect(() => () => { releaseAudio() }, [])
+  useEffect(() => { armAudio(); return () => { releaseAudio() } }, [])
 
   // Automatizacion de chicharra
   const prevClockRunning = useRef(state.isMainClockRunning)
@@ -486,47 +503,23 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
   // ─── Atajos de teclado ─────────────────────────────────────────────────────
 
+  /**
+   * Los atajos viven en app/page: son de la estacion de trabajo, no de la vista.
+   * Aqui solo se atienden las dos acciones que la vista puede resolver.
+   */
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-      if (e.repeat) return                        // el botón mantenido no dispara ráfagas
-      const pressed = normalizeKey(e)
-      const action = actionForKey(hotkeys, pressed)
-      if (!action) return
-
-      // Cerrar diálogo funciona siempre, incluso con la hoja de acciones abierta
+    const onHotkey = (e: Event) => {
+      const action = (e as CustomEvent).detail as string
       if (action === 'undo') {
-        e.preventDefault()
-        setSelected(null); setCancelling(null); setRenaming(null); setAddTo(null)
-        return
-      }
-
-      // El reloj y la chicharra responden aunque haya un modal: son de seguridad
-      const siempre = action === 'clockSound' || action === 'clockMute' || action === 'buzzer'
-      if (!siempre && (matchEnded || state.isIntermission || selected)) return
-      if (matchEnded && !siempre) return
-
-      if (KEYS_NEEDING_PREVENT.includes(pressed)) e.preventDefault()
-
-      switch (action) {
-        case 'clockSound':      skipNextBuzzer.current = false; props.toggleMainClock(); break
-        case 'clockMute':       skipNextBuzzer.current = true;  props.toggleMainClock(); break
-        case 'buzzer':          buzz(1200); break
-        case 'possLeftToggle':  props.togglePossessionLeft(); break
-        case 'possLeftReset':   props.resetPossessionLeft(); break
-        case 'possRightToggle': props.togglePossessionRight(); break
-        case 'possRightReset':  props.resetPossessionRight(); break
-        case 'homeGoal':        props.adjustHomeScore(1); break
-        case 'awayGoal':        props.adjustAwayScore(1); break
-        case 'homeFoul':        props.adjustHomeFouls(1); break
-        case 'awayFoul':        props.adjustAwayFouls(1); break
-        case 'nextPeriod':      props.nextPeriod(); break
-        case 'intermission':    setShowIntermissionSelector(true); break
+        setSelected(null); setCancelling(null); setRenaming(null)
+        setAddTo(null); setSubbing(null); setRefOpen(false)
+      } else if (action === 'intermission' && !matchEnded) {
+        setShowIntermissionSelector(true)
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [hotkeys, matchEnded, state.isIntermission, selected, props, buzz])
+    window.addEventListener(HOTKEY_EVENT, onHotkey)
+    return () => window.removeEventListener(HOTKEY_EVENT, onHotkey)
+  }, [matchEnded])
 
   // ─── Pre-partido ───────────────────────────────────────────────────────────
 
@@ -563,27 +556,26 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   // ─── Ficha ─────────────────────────────────────────────────────────────────
 
   const Token = ({ p, team, onCourt }: { p: Player; team: 'home' | 'away'; onCourt: boolean }) => {
-    const c1 = team === 'home' ? jersey.homeJ1 : jersey.awayJ1
-    const c2 = team === 'home' ? jersey.homeJ2 : jersey.awayJ2
-    const design = jersey.jerseyDesign || 'solid'
+    const kit = activeKit(team === 'home' ? look.home : look.away)
+    const c1 = kit.shirt
+    const c2 = kit.pants
     const yellows = getYellowCount(p, team, cardHistory, sanctions)
     const blues = getBlueCount(p, team, cardHistory)
     const goalie = isGoalie(p)
     const staff = isStaff(p)
     const display = getDisplayNumber(p)
+    const style = look.tokenStyle
 
-    const bg = design === 'striped'
-      ? { background: `repeating-linear-gradient(90deg, ${c1}, ${c1} 8px, ${c2} 8px, ${c2} 16px)` }
-      : design === 'halved'
-        ? { background: `linear-gradient(90deg, ${c1} 50%, ${c2} 50%)` }
-        : { background: c1 }
+    const bg = style !== 'cubo'
+      ? { background: 'transparent' }
+      : { background: c1 }
 
     return (
       <button
         onClick={() => openSheet(p, team)}
         className={`relative flex flex-col items-center justify-center rounded-xl border-2 shadow-lg transition-transform hover:scale-105 active:scale-95
           ${onCourt ? 'w-[46px] h-[46px] sm:w-[68px] sm:h-[68px] lg:w-[76px] lg:h-[76px]' : 'w-[38px] h-[38px] sm:w-[54px] sm:h-[54px] lg:w-[60px] lg:h-[60px] opacity-90'}
-          ${goalie ? 'border-white ring-2 ring-green-400/60' : staff ? 'border-purple-400/70' : 'border-white/70'}`}
+          ${style !== 'cubo' ? 'border-transparent' : goalie ? 'border-white ring-2 ring-green-400/60' : staff ? 'border-purple-400/70' : 'border-white/70'}`}
         style={bg}
         title={p.name || `Jugador ${display}`}
       >
@@ -596,14 +588,31 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         )}
         {blues > 0 && (
           <div className="absolute -top-1.5 -right-1.5 flex -space-x-1 z-20">
-            {Array.from({ length: Math.min(blues, 2) }).map((_, i) => (
-              <div key={i} className="w-3 h-4 bg-blue-500 border border-blue-800 rounded-[1px] rotate-12 shadow" />
+            {Array.from({ length: Math.min(blues, 3) }).map((_, i) => (
+              <div key={i} className="w-3 h-4 bg-blue-500 border border-blue-200 rounded-[1px] rotate-12 shadow-lg" />
             ))}
           </div>
         )}
-        <span className={`font-black text-white bg-black/50 px-1.5 rounded backdrop-blur-sm ${onCourt ? 'text-sm sm:text-lg lg:text-xl' : 'text-[11px] sm:text-sm'}`}>
-          {display}
-        </span>
+        {style === 'cubo' ? (
+          <span className={`font-black text-white bg-black/50 px-1.5 rounded backdrop-blur-sm ${onCourt ? 'text-sm sm:text-lg lg:text-xl' : 'text-[11px] sm:text-sm'}`}>
+            {display}
+          </span>
+        ) : (
+          <svg viewBox="0 0 40 44" className="w-full h-full" aria-hidden>
+            {/* Casco del portero o cabeza */}
+            {style === 'jugador' && goalie
+              ? <rect x="12" y="3" width="16" height="13" rx="5" fill={c2} stroke="#fff" strokeWidth="1.2" />
+              : <circle cx="20" cy="10" r="7" fill={c2} stroke="#fff" strokeWidth="1.2" />}
+            {/* Torso */}
+            <path d="M6 40c0-8 6-14 14-14s14 6 14 14z" fill={c1} stroke="#fff" strokeWidth="1.2" />
+            {/* Patines */}
+            {style === 'jugador' && (
+              <path d="M10 41h8M22 41h8" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+            )}
+            <text x="20" y="38" textAnchor="middle" fontSize="14" fontWeight="900"
+              fill="#fff" stroke="#000" strokeWidth="0.6" paintOrder="stroke">{display}</text>
+          </svg>
+        )}
         {goalie && (
           <span className="absolute -bottom-2 px-1 bg-green-600 rounded text-[8px] text-white font-bold border border-green-400">PO</span>
         )}
@@ -642,6 +651,46 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <Button onClick={() => openBench(team, 'yellow')} disabled={matchEnded} size="sm" className="h-7 px-0 text-[9px] font-black bg-yellow-500 hover:bg-yellow-400 text-black">AM. BANCA</Button>
           <Button onClick={() => openBench(team, 'red')} disabled={matchEnded} size="sm" className="h-7 px-0 text-[9px] font-black bg-red-600 hover:bg-red-500 text-white">RJ. BANCA</Button>
         </div>
+
+        {/* El tiempo de banca lo pide la banca: va donde esta la banca */}
+        {(() => {
+          const used = team === 'home' ? (state.homeTimeoutsUsed || 0) : (state.awayTimeoutsUsed || 0)
+          const req = team === 'home' ? state.homeTimeoutRequested : state.awayTimeoutRequested
+          return (
+            <div className="grid grid-cols-2 gap-1 mt-1">
+              <Button size="sm"
+                onClick={() => req ? props.cancelTimeoutRequest(team) : (team === 'home' ? props.requestTimeoutHome() : props.requestTimeoutAway())}
+                disabled={stopped || matchEnded || state.period === 'penales' || used >= 2}
+                className={`h-7 px-0 text-[9px] font-black ${req ? 'bg-red-600 hover:bg-red-500 animate-pulse' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+                {req ? 'CANCELAR' : 'SOLICITAR'}
+              </Button>
+              <Button size="sm"
+                onClick={() => team === 'home' ? props.grantTimeoutHome() : props.grantTimeoutAway()}
+                disabled={stopped || matchEnded || state.period === 'penales' || !req || used >= 2}
+                className="h-7 px-0 text-[9px] font-black bg-cyan-700 hover:bg-cyan-600 disabled:opacity-30">
+                T.B. {used}/2
+              </Button>
+            </div>
+          )
+        })()}
+      </div>
+    )
+  }
+
+  /** Tarjetas acumuladas del sancionado, sobre su ficha en la zona de castigo. */
+  const CardTally = ({ team, number }: { team: 'home' | 'away'; number: string }) => {
+    const hist = cardHistory.filter(c => c.team === team && c.playerNumber === number)
+    const am = hist.filter(c => c.cardType === 'yellow').length
+    const az = hist.filter(c => c.cardType === 'blue').length
+    if (am + az === 0) return null
+    return (
+      <div className="absolute -top-2 -right-2 flex -space-x-1">
+        {Array.from({ length: Math.min(am, 3) }).map((_, i) => (
+          <span key={`a${i}`} className="w-2.5 h-3.5 bg-yellow-400 border border-yellow-700 rounded-[1px] -rotate-12 shadow" />
+        ))}
+        {Array.from({ length: Math.min(az, 3) }).map((_, i) => (
+          <span key={`b${i}`} className="w-2.5 h-3.5 bg-blue-500 border border-blue-200 rounded-[1px] rotate-12 shadow" />
+        ))}
       </div>
     )
   }
@@ -685,16 +734,16 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
             <span className="text-[10px] font-bold text-zinc-500 block">GOLES</span>
             <span className="text-4xl font-black text-red-500 tabular-nums block">{score}</span>
             <div className="flex justify-center gap-1 mt-1">
-              <Button size="sm" disabled={matchEnded || state.isIntermission} onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3" /></Button>
-              <Button size="sm" disabled={matchEnded || state.isIntermission} onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3" /></Button>
+              <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3" /></Button>
+              <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3" /></Button>
             </div>
           </div>
           <div className={`rounded-lg p-2 text-center border-2 ${foulActive ? 'bg-red-900/50 border-red-500 animate-pulse' : 'bg-black/60 border-transparent'}`}>
             <span className="text-[10px] font-bold text-zinc-500 block">FALTAS</span>
             <span className={`text-4xl font-black tabular-nums block ${foulActive ? 'text-red-500' : 'text-amber-400'}`}>{fouls}</span>
             <div className="flex justify-center gap-1 mt-1">
-              <Button size="sm" disabled={matchEnded || state.isIntermission} onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3" /></Button>
-              <Button size="sm" disabled={matchEnded || state.isIntermission} onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3" /></Button>
+              <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3" /></Button>
+              <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3" /></Button>
             </div>
           </div>
         </div>
@@ -713,14 +762,14 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         <div className="grid grid-cols-2 gap-1">
           <Button
             onClick={() => requested ? props.cancelTimeoutRequest(team) : (isHome ? props.requestTimeoutHome() : props.requestTimeoutAway())}
-            disabled={matchEnded || state.period === 'penales' || used >= 2 || !!state.activeTimeout}
+            disabled={stopped || matchEnded || state.period === 'penales' || used >= 2}
             className={`h-8 text-[9px] font-bold px-1 ${requested ? 'bg-red-600 hover:bg-red-500' : 'bg-zinc-800 hover:bg-zinc-700'}`}
           >
             {requested ? 'CANCELAR' : 'SOLICITAR T.B.'}
           </Button>
           <Button
             onClick={() => isHome ? props.grantTimeoutHome() : props.grantTimeoutAway()}
-            disabled={matchEnded || state.period === 'penales' || !requested || used >= 2 || !!state.activeTimeout}
+            disabled={stopped || matchEnded || state.period === 'penales' || !requested || used >= 2}
             className="h-8 text-[9px] font-bold px-1 bg-cyan-700 hover:bg-cyan-600"
           >
             <Coffee className="w-3 h-3 mr-1" /> CONCEDER ({used}/2)
@@ -754,8 +803,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       />
 
       <AudioModal open={showAudio} onClose={() => setShowAudio(false)} onChange={setAudioCfg} />
-
-      <HotkeysModal open={showHotkeys} onClose={() => setShowHotkeys(false)} onChange={setHotkeys} />
 
       <MatchHistoryModal
         open={showHistory}
@@ -791,11 +838,12 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         </Button>
 
         <div className="flex flex-col items-center px-4">
-          <span className={`text-[10px] font-black tracking-widest ${state.isIntermission ? 'text-amber-400' : 'text-zinc-500'}`}>
-            {state.isIntermission ? 'DESCANSO' : 'TIEMPO DE JUEGO'}
+          <span className={`text-[10px] font-black tracking-widest ${
+            state.activeTimeout ? 'text-cyan-400' : state.isIntermission ? 'text-amber-400' : 'text-zinc-500'}`}>
+            {state.activeTimeout ? 'TIEMPO MUERTO' : state.isIntermission ? 'DESCANSO' : 'TIEMPO DE JUEGO'}
           </span>
           <span className="text-4xl sm:text-6xl lg:text-7xl font-black leading-none tabular-nums text-red-500" style={{ fontFamily: 'var(--font-led)' }}>
-            {formatTime(state.mainClock)}
+            <RigidClock seconds={state.activeTimeout ? state.timeoutClock : state.mainClock} tenthsUnder={state.isMainClockRunning ? 10 : 0} />
           </span>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-[10px] font-bold text-zinc-500">
@@ -868,39 +916,39 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       {/* ── PISTA ───────────────────────────────────────────────────────────── */}
       {isShootout ? (
-        <div className="w-full aspect-[2.6/1] min-h-[300px] rounded-2xl overflow-hidden border-4 border-purple-800 shadow-2xl bg-slate-900 relative">
+        <div className="w-full aspect-[1.8/1] sm:aspect-[2.4/1] min-h-[300px] rounded-2xl overflow-hidden border-4 border-purple-800 shadow-2xl bg-slate-900 relative">
 
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1">
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1">
             <div className="bg-black/80 border-2 border-purple-700 rounded-lg px-4 py-1">
               <span className="text-white font-black text-2xl tabular-nums">
                 {shootout.homeGoals} <span className="text-zinc-600 text-base">-</span> {shootout.awayGoals}
               </span>
             </div>
-            <span className={`text-[11px] font-black px-2 py-0.5 rounded ${
-              shootout.decided ? 'bg-green-600 text-white animate-pulse' : 'bg-zinc-800 text-zinc-400'}`}>
+            <span className={`text-[11px] font-black px-2 py-0.5 rounded ${shootout.decided ? 'bg-green-600 text-white animate-pulse' : 'bg-zinc-800 text-zinc-400'}`}>
               {shootout.message}
             </span>
           </div>
 
-          {/* Arco y portero que defiende */}
-          <div className={`absolute top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 ${isFlipped ? 'left-[8%]' : 'right-[8%]'}`}>
-            <div className="w-3 h-[110px] bg-red-600/70 border-2 border-red-400 rounded" />
-            {keeper ? (
-              <Token p={keeper} team={keepingTeam} onCourt />
-            ) : (
-              <span className="text-[10px] text-zinc-600 font-bold">SIN PORTERO</span>
-            )}
-            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-              {keepingTeam === 'home' ? homeTeamName : awayTeamName}
-            </span>
+          <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white/20 -translate-x-1/2" />
+          <div className={`absolute top-1/2 -translate-y-1/2 w-[22%] h-[58%] border-2 border-white/25 ${isFlipped ? 'right-[7.5%] rounded-l-lg' : 'left-[7.5%] rounded-r-lg'}`} />
+
+          <div className={`absolute top-1/2 -translate-y-1/2 h-[16%] z-[5] flex ${isFlipped ? 'right-[4.5%] flex-row-reverse' : 'left-[4.5%] flex-row'}`}>
+            <div className="w-[6px] h-full bg-red-600 rounded-sm shadow-[0_0_8px_rgba(220,38,38,.8)]" />
+            <div className="w-[18px] h-full opacity-70" style={{ background: 'repeating-linear-gradient(45deg, rgba(255,255,255,.45) 0 1px, transparent 1px 5px), repeating-linear-gradient(-45deg, rgba(255,255,255,.45) 0 1px, transparent 1px 5px)', borderTop: '2px solid rgba(255,255,255,.6)', borderBottom: '2px solid rgba(255,255,255,.6)' }} />
           </div>
 
-          {/* Fila de lanzadores al medio de la pista */}
-          <div className={`absolute top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 ${isFlipped ? 'right-[8%] left-[26%]' : 'left-[8%] right-[26%]'}`}>
+          <div className={`absolute top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1 ${isFlipped ? 'right-[9.5%]' : 'left-[9.5%]'}`}>
+            {keeper ? <Token p={keeper} team={keepingTeam} onCourt /> : <span className="text-[10px] text-zinc-600 font-bold">SIN PORTERO</span>}
+            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{keepingTeam === 'home' ? homeTeamName : awayTeamName}</span>
+          </div>
+
+          <div className={`absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-white/70 rounded-full z-[6] ${isFlipped ? 'right-[21%]' : 'left-[21%]'}`} />
+
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[52%] flex flex-col items-center gap-2">
             <span className={`text-[11px] font-black uppercase tracking-widest ${shootingTeam === 'home' ? 'text-blue-400' : 'text-amber-400'}`}>
               Lanza {shootingTeam === 'home' ? homeTeamName : awayTeamName}
             </span>
-            <div className="flex flex-wrap justify-center gap-2 max-h-[190px] overflow-y-auto">
+            <div className="flex flex-wrap justify-center gap-2 max-h-[150px] overflow-y-auto px-2">
               {shooters.map(p => {
                 const mine = shotsBy(shootingTeam === 'home' ? shootout.home : shootout.away, getDisplayNumber(p))
                 return (
@@ -916,14 +964,20 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                   </div>
                 )
               })}
-              {shooters.length === 0 && (
-                <span className="text-xs text-zinc-600 font-bold">Sin lanzadores disponibles</span>
-              )}
+              {shooters.length === 0 && <span className="text-xs text-zinc-600 font-bold">Sin lanzadores disponibles</span>}
             </div>
-            <span className="text-[10px] text-zinc-600 font-bold text-center px-4">
-              CAMBIAR LADO alterna qué equipo lanza · el árbitro guía el orden
-            </span>
           </div>
+
+          {shootingKeeper && (
+            <div className={`absolute top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1 opacity-45 ${isFlipped ? 'left-[6%]' : 'right-[6%]'}`}>
+              <Token p={shootingKeeper} team={shootingTeam} onCourt={false} />
+              <span className="text-[8px] font-bold text-zinc-600 uppercase">en su area</span>
+            </div>
+          )}
+
+          <span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[10px] text-zinc-600 font-bold text-center px-4">
+            CAMBIAR LADO alterna que equipo lanza - el arbitro guia el orden
+          </span>
         </div>
       ) : (
       <div className={`w-full aspect-[1.4/1] sm:aspect-[2/1] lg:aspect-[2.6/1] min-h-[260px] sm:min-h-[300px] flex rounded-2xl overflow-hidden border-2 sm:border-4 border-zinc-700 shadow-2xl ${isFlipped ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -933,10 +987,24 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           {powerPlay.home && <div className={`absolute ${isFlipped ? 'right-2' : 'left-2'} top-2 bg-green-500 text-white text-[9px] sm:text-[10px] font-black px-2 py-1 rounded shadow z-20 animate-pulse`}>POWER PLAY</div>}
           {powerPlay.away && <div className={`absolute ${isFlipped ? 'left-2' : 'right-2'} top-2 bg-green-500 text-white text-[9px] sm:text-[10px] font-black px-2 py-1 rounded shadow z-20 animate-pulse`}>POWER PLAY</div>}
 
-          <div className="absolute top-1 sm:top-2 left-1/2 -translate-x-1/2 bg-black/70 border border-zinc-700 rounded-lg px-2 sm:px-3 py-0.5 sm:py-1 z-20">
-            <span className="text-white font-black text-sm sm:text-lg tabular-nums">
-              {isFlipped ? awayLineup.count : homeLineup.count} <span className="text-zinc-500 text-xs">vs</span> {isFlipped ? homeLineup.count : awayLineup.count}
-            </span>
+          <div className="absolute top-1 sm:top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
+            <div className="bg-black/70 border border-zinc-700 rounded-lg px-2 sm:px-3 py-0.5 sm:py-1">
+              <span className="text-white font-black text-sm sm:text-lg tabular-nums">
+                {isFlipped ? awayLineup.count : homeLineup.count} <span className="text-zinc-500 text-xs">vs</span> {isFlipped ? homeLineup.count : awayLineup.count}
+              </span>
+            </div>
+            {/* El árbitro cobra la falta al EQUIPO, no a un jugador */}
+            <button onClick={() => { if (stopped) { toast.info(`Juego detenido (${stoppedLabel}): no se cobran faltas`); return } setRefOpen(true) }}
+              disabled={matchEnded}
+              title="Árbitro — cobrar falta de equipo"
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-zinc-900 border-2 border-zinc-400 hover:border-white flex items-center justify-center shadow-lg disabled:opacity-30">
+              <svg viewBox="0 0 40 44" className="w-8 h-8" aria-hidden>
+                <circle cx="20" cy="10" r="7" fill="#18181b" stroke="#e4e4e7" strokeWidth="1.6" />
+                <path d="M6 40c0-8 6-14 14-14s14 6 14 14z" fill="#18181b" stroke="#e4e4e7" strokeWidth="1.6" />
+                <path d="M6 30h28" stroke="#e4e4e7" strokeWidth="3" />
+                <path d="M6 35h28" stroke="#e4e4e7" strokeWidth="3" />
+              </svg>
+            </button>
           </div>
 
           {/* Linea central y circulo */}
@@ -949,8 +1017,12 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <div className="absolute right-[7.5%] top-1/2 -translate-y-1/2 w-[22%] h-[58%] border-2 border-white/25 rounded-l-lg" />
 
           {/* Arcos adelantados ~3 m del fondo: queda el pasillo por detras */}
-          <div className="absolute left-[7.5%] top-1/2 -translate-y-1/2 w-[7px] h-[13%] bg-red-600/80 border-y-2 border-red-400 rounded-sm z-[5]" />
-          <div className="absolute right-[7.5%] top-1/2 -translate-y-1/2 w-[7px] h-[13%] bg-red-600/80 border-y-2 border-red-400 rounded-sm z-[5]" />
+          {(['left', 'right'] as const).map(side => (
+            <div key={side} className={`absolute top-1/2 -translate-y-1/2 h-[13%] z-[5] flex ${side === 'left' ? 'left-[4.5%] flex-row' : 'right-[4.5%] flex-row-reverse'}`}>
+              <div className="w-[6px] h-full bg-red-600 rounded-sm shadow-[0_0_6px_rgba(220,38,38,0.7)]" />
+              <div className="w-[16px] h-full opacity-70" style={{ background: 'repeating-linear-gradient(45deg, rgba(255,255,255,.45) 0 1px, transparent 1px 5px), repeating-linear-gradient(-45deg, rgba(255,255,255,.45) 0 1px, transparent 1px 5px)', borderTop: '2px solid rgba(255,255,255,.6)', borderBottom: '2px solid rgba(255,255,255,.6)' }} />
+            </div>
+          ))}
 
           {/* Puntos de penal (5,40 m) y de falta directa (7,40 m) */}
           <div className="absolute left-[21%] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/50 rounded-full" />
@@ -959,7 +1031,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <div className="absolute right-[26%] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/35 rounded-full" />
 
           {homeLineup.goalie && (
-            <div className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 ${isFlipped ? 'right-[12%]' : 'left-[12%]'}`}>
+            <div className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 ${isFlipped ? 'right-[9.5%]' : 'left-[9.5%]'}`}>
               <Token p={homeLineup.goalie} team="home" onCourt />
             </div>
           )}
@@ -974,7 +1046,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           })}
 
           {awayLineup.goalie && (
-            <div className={`absolute top-1/2 -translate-y-1/2 translate-x-1/2 z-10 ${isFlipped ? 'left-[12%]' : 'right-[12%]'}`}>
+            <div className={`absolute top-1/2 -translate-y-1/2 translate-x-1/2 z-10 ${isFlipped ? 'left-[9.5%]' : 'right-[9.5%]'}`}>
               <Token p={awayLineup.goalie} team="away" onCourt />
             </div>
           )}
@@ -1047,14 +1119,20 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               {side.blues.map(s => (
                 <button key={s.id} onClick={() => askCancel(s.id, s.playerNumber, 'azul')}
                   className="flex flex-col items-center z-20 group" title="Tocar para anular esta sanción">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-black border-2 group-hover:ring-2 group-hover:ring-white/60 ${side.chip}`}>{s.playerNumber}</div>
+                  <div className="relative">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-black border-2 group-hover:ring-2 group-hover:ring-white/60 ${side.chip}`}>{s.playerNumber}</div>
+                    <CardTally team={idx === 0 ? 'home' : 'away'} number={s.playerNumber} />
+                  </div>
                   <span className="text-[9px] font-mono font-bold mt-0.5 text-blue-300">{formatTime(s.remainingTime)}</span>
                 </button>
               ))}
               {side.reds.map(s => (
                 <button key={s.id} onClick={() => askCancel(s.id, s.playerNumber, 'roja')}
                   className="flex flex-col items-center z-20 bg-red-950/50 px-2 py-1 rounded border border-red-800 group" title="Tocar para anular esta sanción">
-                  <div className="w-8 h-8 rounded bg-red-600 border-2 border-white flex items-center justify-center text-white text-xs font-black group-hover:ring-2 group-hover:ring-white/60">{s.playerNumber}</div>
+                  <div className="relative">
+                    <div className="w-8 h-8 rounded bg-red-600 border-2 border-white flex items-center justify-center text-white text-xs font-black group-hover:ring-2 group-hover:ring-white/60">{s.playerNumber}</div>
+                    <CardTally team={idx === 0 ? 'home' : 'away'} number={s.playerNumber} />
+                  </div>
                   <span className="text-[9px] font-mono font-bold mt-0.5 text-red-400">{formatTime(s.remainingTime)}</span>
                 </button>
               ))}
@@ -1074,12 +1152,33 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       {/* ── ADMINISTRACION ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pb-4">
-        <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-2">
-          <span className="text-[9px] text-zinc-500 font-bold uppercase">Camisetas</span>
-          <input type="color" value={jersey.homeJ1} onChange={e => saveJersey({ homeJ1: e.target.value })} className="w-6 h-6 rounded border-0 bg-transparent p-0 cursor-pointer" title="Local primario" />
-          <input type="color" value={jersey.homeJ2} onChange={e => saveJersey({ homeJ2: e.target.value })} className="w-6 h-6 rounded border-0 bg-transparent p-0 cursor-pointer" title="Local secundario" />
-          <input type="color" value={jersey.awayJ1} onChange={e => saveJersey({ awayJ1: e.target.value })} className="w-6 h-6 rounded border-0 bg-transparent p-0 cursor-pointer" title="Visita primario" />
-          <input type="color" value={jersey.awayJ2} onChange={e => saveJersey({ awayJ2: e.target.value })} className="w-6 h-6 rounded border-0 bg-transparent p-0 cursor-pointer" title="Visita secundario" />
+        <div className="col-span-2 lg:col-span-1 flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 overflow-x-auto">
+          <span className="text-[9px] text-zinc-500 font-black uppercase shrink-0">Fichas</span>
+          <div className="flex gap-1 shrink-0">
+            {TOKEN_STYLES.map(t => (
+              <button key={t.id} onClick={() => patchLook({ ...look, tokenStyle: t.id })} title={t.hint}
+                className={`px-2 h-7 rounded text-[9px] font-black transition-colors ${
+                  look.tokenStyle === t.id ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <span className="w-px h-6 bg-zinc-700 shrink-0" />
+          {(['home', 'away'] as const).map(side => {
+            const kits = look[side]
+            const k = activeKit(kits)
+            return (
+              <button key={side}
+                onClick={() => patchLook({ ...look, [side]: { ...kits, active: kits.active === 'primary' ? 'alternate' : 'primary' } })}
+                title={`${side === 'home' ? homeTeamName : awayTeamName} — ${k.name}. Tocar para cambiar de equipación.`}
+                className="flex items-center gap-1 px-1.5 h-7 rounded bg-zinc-800 hover:bg-zinc-700 shrink-0">
+                <span className="w-3.5 h-3.5 rounded-sm border border-white/40" style={{ background: k.shirt }} />
+                <span className="w-3.5 h-3.5 rounded-sm border border-white/40" style={{ background: k.pants }} />
+                <span className="w-2.5 h-2.5 rounded-full border border-white/40" style={{ background: k.badge }} />
+                <span className="text-[8px] font-black text-zinc-400 uppercase">{k.name.slice(0, 3)}</span>
+              </button>
+            )
+          })}
         </div>
 
         {matchEnded ? (
@@ -1131,7 +1230,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               <span className="text-[9px] font-bold text-zinc-500 uppercase">Atajos y mando</span>
               <div className="flex gap-1">
                 <Button onClick={() => setShowAudio(true)} size="sm" className="h-7 text-[10px] font-bold bg-zinc-700 hover:bg-zinc-600">SONIDO</Button>
-                <Button onClick={() => setShowHotkeys(true)} size="sm" className="h-7 text-[10px] font-bold bg-blue-700 hover:bg-blue-600">ATAJOS</Button>
+                <Button onClick={() => window.dispatchEvent(new Event(OPEN_HOTKEYS_EVENT))} size="sm" className="h-7 text-[10px] font-bold bg-blue-700 hover:bg-blue-600">ATAJOS</Button>
               </div>
             </div>
             <p className="text-[10px] text-zinc-400 leading-relaxed">
@@ -1193,12 +1292,12 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                     </p>
                   </>
                 ) : (
-                <div className={`grid ${state.matchConfig.allowPenalties ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
-                  <Button onClick={() => handleAction('gol')} disabled={state.isIntermission} className="h-16 font-black text-lg bg-green-700 hover:bg-green-600">
+                <div className={`grid ${state.matchConfig.allowPenalties ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                  <Button onClick={() => handleAction('gol')}
+                    disabled={stopped || !selected.onCourt}
+                    title={!selected.onCourt ? 'Un jugador en banca no puede marcar' : stopped ? `Juego detenido (${stoppedLabel}): sin goles` : ''}
+                    className="h-16 font-black text-lg bg-green-700 hover:bg-green-600 disabled:opacity-25">
                     <Goal className="w-5 h-5 mr-1" /> GOL
-                  </Button>
-                  <Button onClick={() => handleAction('falta')} disabled={state.isIntermission} className="h-16 font-black bg-orange-700 hover:bg-orange-600">
-                    FALTA
                   </Button>
                   {state.matchConfig.allowPenalties && (
                     <Button onClick={() => handleAction('penal')} disabled={state.period !== 'penales'} className="h-16 font-black bg-purple-700 hover:bg-purple-600 disabled:opacity-30">
@@ -1228,21 +1327,20 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                   </>
                 ))}
 
-                {!isStaff(selected.player) && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button onClick={handleToggleCourt} className="h-12 font-black bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-xs">
-                      {selected.onCourt
-                        ? <><LogOut className="w-4 h-4 mr-1.5" /> SACAR</>
-                        : <><LogIn className="w-4 h-4 mr-1.5" /> ENTRAR</>}
-                    </Button>
+                {!isStaff(selected.player) && (selected.onCourt ? (
+                    /* Sacar a alguien de la pista SIEMPRE es un cambio: el equipo
+                       no juega con menos por decisión propia. */
                     <Button
                       onClick={() => { setSubbing({ out: selected.player, team: selected.team }); setSelected(null) }}
-                      disabled={!selected.onCourt}
-                      className="h-12 font-black bg-indigo-700 hover:bg-indigo-600 text-xs disabled:opacity-30">
-                      <ArrowRightLeft className="w-4 h-4 mr-1.5" /> CAMBIAR POR…
+                      className="w-full h-12 font-black bg-indigo-700 hover:bg-indigo-600 text-sm">
+                      <ArrowRightLeft className="w-4 h-4 mr-2" /> CAMBIAR POR…
                     </Button>
-                  </div>
-                )}
+                  ) : (
+                    <Button onClick={handleToggleCourt}
+                      className="w-full h-12 font-black bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-sm">
+                      <LogIn className="w-4 h-4 mr-2" /> ENTRAR A PISTA
+                    </Button>
+                  ))}
 
                 {/* Gestión del jugador: poco frecuente, separada de lo que se aprieta a cada rato */}
                 <div className="border-t border-zinc-800 pt-3">
@@ -1295,6 +1393,39 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       </Dialog>
 
       {/* ── DIALOGOS DE CONTROL ────────────────────────────────────────────── */}
+
+      {/* ── ÁRBITRO: la falta es del equipo ─────────────────────────────────── */}
+      <Dialog open={refOpen} onOpenChange={setRefOpen}>
+        <DialogContent className="bg-zinc-900 border-2 border-zinc-500 text-white max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black">Falta de equipo</DialogTitle>
+            <p className="text-[11px] text-zinc-500 leading-snug">
+              En hockey patín la falta se cobra al equipo, no al jugador. El semáforo se
+              enciende en la 9ª avisando que la siguiente es tiro libre directo.
+            </p>
+          </DialogHeader>
+          <div className={`grid grid-cols-2 gap-3 ${isFlipped ? 'flex-row-reverse' : ''}`}>
+            {([
+              { team: 'home' as const, name: homeTeamName, fouls: state.homeFouls, cls: 'border-blue-600 bg-blue-950/40 hover:border-blue-400' },
+              { team: 'away' as const, name: awayTeamName, fouls: state.awayFouls, cls: 'border-amber-600 bg-amber-950/40 hover:border-amber-400' }
+            ]).map(t => (
+              <button key={t.team}
+                onClick={() => {
+                  if (t.team === 'home') props.adjustHomeFouls(1)
+                  else props.adjustAwayFouls(1)
+                  toast.warning(`Falta de ${t.name} — van ${t.fouls + 1}`, { duration: 2200 })
+                  setRefOpen(false)
+                }}
+                className={`h-28 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-colors ${t.cls}`}>
+                <span className="text-sm font-black uppercase truncate max-w-full px-2">{t.name}</span>
+                <span className="text-4xl font-black tabular-nums">{t.fouls}</span>
+                <span className="text-[10px] font-bold text-zinc-500">faltas · tocar para sumar</span>
+              </button>
+            ))}
+          </div>
+          <Button onClick={() => setRefOpen(false)} variant="outline" className="w-full h-11 font-bold border-zinc-600">CERRAR</Button>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Cambio jugador por jugador: una sola operación ──────────────────── */}
       <Dialog open={!!subbing} onOpenChange={o => { if (!o) setSubbing(null) }}>

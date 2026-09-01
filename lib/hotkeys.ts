@@ -118,3 +118,33 @@ export function actionForKey(map: HotkeyMap, pressed: string): HotkeyAction | nu
     .find(([, key]) => keyMatches(pressed, key))
   return entry ? entry[0] : null
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUENTE HACIA LA VISTA ACTIVA
+//
+// Los atajos viven en la estacion de trabajo (app/page), no en cada vista: si
+// vivieran en la vista, cambiar de modo cambiaria el teclado bajo las manos del
+// operador. Pero un par de acciones son de la vista —cerrar el dialogo abierto,
+// abrir el selector de descanso— y para esas el page emite un evento que la
+// vista activa escucha.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const HOTKEY_EVENT = 'ardi-hotkey'
+export const OPEN_HOTKEYS_EVENT = 'ardi-open-hotkeys'
+
+/** Acciones que resuelve la vista, no el estado global. */
+export const VIEW_ACTIONS: HotkeyAction[] = ['undo', 'intermission']
+
+export const emitHotkey = (action: HotkeyAction): void => {
+  window.dispatchEvent(new CustomEvent(HOTKEY_EVENT, { detail: action }))
+}
+
+/**
+ * Con un dialogo abierto el teclado se apaga, salvo reloj y chicharra: con un
+ * mando en la mano, que un modal deje la mesa muda es inaceptable.
+ */
+export const dialogIsOpen = (): boolean =>
+  typeof document !== 'undefined' && !!document.querySelector('[role="dialog"][data-state="open"]')
+
+export const ALWAYS_ON: HotkeyAction[] = ['clockSound', 'clockMute', 'buzzer', 'undo']

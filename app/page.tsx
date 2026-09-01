@@ -11,6 +11,14 @@ import { OperatorView } from '@/components/operator-view'
 import { CourtOperatorView } from '@/components/court-operator-view'
 import { useVenueSetup } from '@/hooks/use-venue-setup'
 import { OverlaysModal } from '@/components/scoreboard/OverlaysModal'
+import { ScreensPanel } from '@/components/scoreboard/ScreensPanel'
+import { HotkeysModal } from '@/components/scoreboard/HotkeysModal'
+import { playHorn, playBeep, armAudio, loadAudioConfig } from '@/lib/audio-engine'
+import {
+  loadHotkeys, actionForKey, normalizeKey, KEYS_NEEDING_PREVENT,
+  DEFAULT_HOTKEYS, VIEW_ACTIONS, ALWAYS_ON, dialogIsOpen, emitHotkey,
+  OPEN_HOTKEYS_EVENT, type HotkeyMap
+} from '@/lib/hotkeys'
 import { CLUB_BRAND, defaultHomeLogo } from '@/lib/club-brand'
 import { ScoreboardView } from '@/components/scoreboard-view'
 import { toast } from 'sonner'
@@ -128,6 +136,17 @@ export default function HockeyControlPanel() {
     } catch { /* ignorar */ }
   }, [])
   const [showOverlays, setShowOverlays] = useState(false)
+  const [showHotkeys, setShowHotkeys] = useState(false)
+  const [hotkeys, setHotkeys] = useState<HotkeyMap>(DEFAULT_HOTKEYS)
+
+  useEffect(() => {
+    armAudio()
+    setHotkeys(loadHotkeys())
+    const open = () => setShowHotkeys(true)
+    window.addEventListener(OPEN_HOTKEYS_EVENT, open)
+    return () => window.removeEventListener(OPEN_HOTKEYS_EVENT, open)
+  }, [])
+
   const [viewMode, setViewMode] = useState<ViewMode>('pista')
 
   useEffect(() => {
@@ -144,6 +163,50 @@ export default function HockeyControlPanel() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   
   const gameState = useGameState() as any; 
+
+  /**
+   * Teclado ÚNICO de la estación de trabajo. Antes vivía duplicado dentro de
+   * cada vista —seis atajos en el clásico, catorce en la Pista— así que cambiar
+   * de modo cambiaba el teclado bajo las manos del operador.
+   */
+  useEffect(() => {
+    const g = gameState as unknown as Record<string, (n?: number) => void>
+    const st = gameState.state
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.repeat) return
+      const pressed = normalizeKey(e)
+      const action = actionForKey(hotkeys, pressed)
+      if (!action) return
+
+      if (dialogIsOpen() && !ALWAYS_ON.includes(action)) return
+      if (KEYS_NEEDING_PREVENT.includes(pressed)) e.preventDefault()
+
+      // Las que resuelve la vista activa
+      if (VIEW_ACTIONS.includes(action)) { emitHotkey(action); return }
+
+      const stopped = st.isIntermission || !!st.activeTimeout
+      const ended = st.isMatchEnded
+      const cfg = loadAudioConfig()
+
+      switch (action) {
+        case 'clockSound':      if (!ended) { playHorn(500, cfg); g.toggleMainClock() } break
+        case 'clockMute':       if (!ended) g.toggleMainClock(); break
+        case 'buzzer':          playHorn(1200, cfg); break
+        case 'possLeftToggle':  if (!ended) g.togglePossessionLeft(); break
+        case 'possLeftReset':   if (!ended) g.resetPossessionLeft(); break
+        case 'possRightToggle': if (!ended) g.togglePossessionRight(); break
+        case 'possRightReset':  if (!ended) g.resetPossessionRight(); break
+        case 'homeGoal':        if (!stopped && !ended) g.adjustHomeScore(1); break
+        case 'awayGoal':        if (!stopped && !ended) g.adjustAwayScore(1); break
+        case 'homeFoul':        if (!stopped && !ended) g.adjustHomeFouls(1); break
+        case 'awayFoul':        if (!stopped && !ended) g.adjustAwayFouls(1); break
+        case 'nextPeriod':      if (!ended) g.nextPeriod(); break
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [hotkeys, gameState])
 
   const [liveLogos, setLiveLogos] = useState({ 
     homeUrl: '', 
@@ -216,6 +279,7 @@ export default function HockeyControlPanel() {
   return (
     <div className="h-screen w-screen bg-black flex flex-col font-sans overflow-hidden">
       <OverlaysModal open={showOverlays} onClose={() => setShowOverlays(false)} />
+      <HotkeysModal open={showHotkeys} onClose={() => setShowHotkeys(false)} onChange={setHotkeys} />
       
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes sway3d { 0% { transform: perspective(1000px) rotateY(-15deg) rotateX(10deg) scale(1) translateZ(0); } 33% { transform: perspective(1000px) rotateY(-5deg) rotateX(15deg) scale(1.04) translateZ(0); } 66% { transform: perspective(1000px) rotateY(-20deg) rotateX(5deg) scale(1.02) translateZ(0); } 100% { transform: perspective(1000px) rotateY(-15deg) rotateX(10deg) scale(1) translateZ(0); } }
@@ -226,13 +290,16 @@ export default function HockeyControlPanel() {
 
       <nav className="bg-zinc-900 border-b border-zinc-800 px-4 py-2 flex items-center justify-between z-50 shrink-0 shadow-md">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center shadow-lg shadow-blue-500/30 border border-amber-400/50">
-            <span className="text-amber-400 font-black text-sm">A</span>
-          </div>
+          {/* El escudo del club es el avatar: una sola marca, no dos */}
+          {CLUB_BRAND.logoUrl ? (
+            <img src={CLUB_BRAND.logoUrl} alt={CLUB_BRAND.name}
+              className="w-9 h-9 object-contain rounded-full shrink-0 bg-black/40 border border-amber-400/40 shadow-lg" />
+          ) : (
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center shadow-lg border border-amber-400/50">
+              <span className="text-amber-400 font-black text-sm">A</span>
+            </div>
+          )}
           <span className="text-amber-400 font-black hidden sm:inline tracking-wider">
-            {CLUB_BRAND.logoUrl && (
-              <img src={CLUB_BRAND.logoUrl} alt={CLUB_BRAND.name} className="h-7 w-7 object-contain rounded-full shrink-0" />
-            )}
             {CLUB_BRAND.appTitle}
           </span>
         </div>
@@ -299,205 +366,14 @@ export default function HockeyControlPanel() {
 
           <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8">
 
-            <button onClick={() => setShowOverlays(true)}
-              className="w-full flex items-center gap-3 bg-gradient-to-r from-yellow-950/40 to-zinc-900 border border-yellow-800/60 hover:border-yellow-600 rounded-2xl p-4 text-left transition-colors">
-              <Layers className="w-6 h-6 text-yellow-400 shrink-0" />
-              <span className="flex-1 min-w-0">
-                <span className="block text-yellow-400 font-black text-base">Lanzadores de proyección</span>
-                <span className="block text-zinc-500 text-xs leading-snug">Animación de gol, fin de partido y estadísticas</span>
-              </span>
-            </button>
-
-            
-            {/* SECCIÓN 1: DISEÑO Y ESCUDOS */}
-            <div className="space-y-4 border border-yellow-900/50 bg-yellow-950/10 p-4 md:p-5 rounded-2xl shadow-inner">
-              <h3 className="text-yellow-400 font-bold text-base flex items-center gap-2 mb-3"><Shield className="w-5 h-5" /> Escudos y Tipografías</h3>
-              
-              <div className="flex justify-around items-center py-6 bg-zinc-900/80 rounded-xl border border-zinc-800 mb-6 shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]">
-                 <PreviewTeamLogo team="home" url={liveLogos.homeUrl} shape={liveLogos.shape} is3D={liveLogos.effect3D} isAnim={liveLogos.effectAnimated} size={90} />
-                 <span className="text-zinc-600 font-black text-sm px-3">VS</span>
-                 <PreviewTeamLogo team="away" url={liveLogos.awayUrl} shape={liveLogos.shape} is3D={liveLogos.effect3D} isAnim={liveLogos.effectAnimated} size={90} />
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-zinc-300 text-sm font-semibold">URL Escudo Local</Label>
-                  <Input value={liveLogos.homeUrl || ''} onChange={e => updateLiveLogos({ homeUrl: e.target.value })} placeholder="https://ejemplo.com/logo.png" className="bg-zinc-900 border-zinc-700 h-10 text-sm mt-1.5 text-white rounded-md" />
-                </div>
-                <div>
-                  <Label className="text-zinc-300 text-sm font-semibold">URL Escudo Visita</Label>
-                  <Input value={liveLogos.awayUrl || ''} onChange={e => updateLiveLogos({ awayUrl: e.target.value })} placeholder="https://ejemplo.com/logo2.png" className="bg-zinc-900 border-zinc-700 h-10 text-sm mt-1.5 text-white rounded-md" />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-zinc-800/80 mt-4">
-                <Label className="text-zinc-300 text-sm font-semibold mb-2 block">Tipografía de Números</Label>
-                <Select value={liveLogos.ledFont || 'led-classic'} onValueChange={(val: any) => updateLiveLogos({ ledFont: val })}>
-                  <SelectTrigger className="h-10 text-sm bg-zinc-900 border-zinc-700 font-bold text-white mb-4 rounded-md"><SelectValue /></SelectTrigger>
-                  <SelectContent position="popper" sideOffset={4} className="z-[9999] bg-zinc-800 border-zinc-700 text-white">
-                    <SelectItem value="led-classic">LED Clásico (Original con corte)</SelectItem>
-                    <SelectItem value="impact">Impact (Gruesa y compacta)</SelectItem>
-                    <SelectItem value="arial-black">Arial Black (Muy gruesa y redonda)</SelectItem>
-                    <SelectItem value="consolas">Consolas (Digital / Consola)</SelectItem>
-                    <SelectItem value="trebuchet">Trebuchet MS (Deportiva y limpia)</SelectItem>
-                    <SelectItem value="system">Sistema (Máxima compatibilidad)</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <Label className="text-zinc-300 text-sm font-semibold mb-2 block">Grosor</Label>
-                    <Select value={liveLogos.fontWeight || '900'} onValueChange={(val: any) => updateLiveLogos({ fontWeight: val })}>
-                      <SelectTrigger className="h-10 text-sm bg-zinc-900 border-zinc-700 font-bold text-white rounded-md"><SelectValue /></SelectTrigger>
-                      <SelectContent position="popper" sideOffset={4} className="z-[9999] bg-zinc-800 border-zinc-700 text-white">
-                        <SelectItem value="400">Fino (Regular)</SelectItem>
-                        <SelectItem value="700">Negrita (Bold)</SelectItem>
-                        <SelectItem value="900">Máximo (Black)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-zinc-300 text-sm font-semibold mb-2 block">Separación</Label>
-                    <Select value={liveLogos.letterSpacing || 'normal'} onValueChange={(val: any) => updateLiveLogos({ letterSpacing: val })}>
-                      <SelectTrigger className="h-10 text-sm bg-zinc-900 border-zinc-700 font-bold text-white rounded-md"><SelectValue /></SelectTrigger>
-                      <SelectContent position="popper" sideOffset={4} className="z-[9999] bg-zinc-800 border-zinc-700 text-white">
-                        <SelectItem value="normal">Normal</SelectItem>
-                        <SelectItem value="0.05em">Separado</SelectItem>
-                        <SelectItem value="0.1em">Muy Separado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* 🛡️ COLORES GENERALES DEL MARCADOR */}
-                <Label className="text-zinc-300 text-sm font-semibold mb-2 block mt-6 border-t border-zinc-800 pt-4">Colores del Marcador Público</Label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4 p-4 bg-black/40 rounded-xl border border-zinc-700 mb-4 shadow-inner">
-                   <div>
-                     <Label className="text-zinc-400 text-xs font-semibold mb-1.5 block uppercase tracking-wider">Fondo</Label>
-                     <input type="color" value={liveLogos.boardBgColor || '#050505'} onChange={e => updateLiveLogos({boardBgColor: e.target.value})} className="w-full h-10 md:h-12 p-0 border border-zinc-600 rounded-md cursor-pointer shadow-sm hover:border-zinc-400 transition-colors" title="Fondo del marcador" />
-                   </div>
-                   <div>
-                     <Label className="text-zinc-400 text-xs font-semibold mb-1.5 block uppercase tracking-wider">Textos</Label>
-                     <input type="color" value={liveLogos.boardTextColor || '#ffffff'} onChange={e => updateLiveLogos({boardTextColor: e.target.value})} className="w-full h-10 md:h-12 p-0 border border-zinc-600 rounded-md cursor-pointer shadow-sm hover:border-zinc-400 transition-colors" title="Nombres de equipos y títulos" />
-                   </div>
-                   <div>
-                     <Label className="text-zinc-400 text-xs font-semibold mb-1.5 block uppercase tracking-wider">Dígitos</Label>
-                     <input type="color" value={liveLogos.boardAccentColor || '#dc2626'} onChange={e => updateLiveLogos({boardAccentColor: e.target.value})} className="w-full h-10 md:h-12 p-0 border border-zinc-600 rounded-md cursor-pointer shadow-sm hover:border-zinc-400 transition-colors" title="Color de números principales" />
-                   </div>
-                   <div>
-                     <Label className="text-zinc-400 text-xs font-semibold mb-1.5 block uppercase tracking-wider">Posesión</Label>
-                     <input type="color" value={liveLogos.possessionColor || '#22c55e'} onChange={e => updateLiveLogos({possessionColor: e.target.value})} className="w-full h-10 md:h-12 p-0 border border-zinc-600 rounded-md cursor-pointer shadow-sm hover:border-zinc-400 transition-colors" title="Color del reloj de posesión" />
-                   </div>
-                   <div>
-                     <Label className="text-zinc-400 text-xs font-semibold mb-1.5 block uppercase tracking-wider">Penales</Label>
-                     <input type="color" value={liveLogos.penaltiesColor || '#eab308'} onChange={e => updateLiveLogos({penaltiesColor: e.target.value})} className="w-full h-10 md:h-12 p-0 border border-zinc-600 rounded-md cursor-pointer shadow-sm hover:border-zinc-400 transition-colors" title="Color de los penales" />
-                   </div>
-                </div>
-
-                {/* 🛡️ DISEÑO DE CAMISETA Y DURACIÓN */}
-                <Label className="text-zinc-300 text-sm font-semibold mb-2 block mt-6 border-t border-zinc-800 pt-4">Animación de Gol (Pantalla Completa)</Label>
-                
-                <div className="grid grid-cols-2 gap-4 mb-4 mt-2">
-                  <div>
-                    <Label className="text-zinc-400 text-xs font-semibold mb-2 block">Diseño de Camiseta</Label>
-                    <Select value={liveLogos.jerseyDesign || 'solid'} onValueChange={(val: any) => updateLiveLogos({ jerseyDesign: val })}>
-                      <SelectTrigger className="h-10 text-sm bg-zinc-900 border-zinc-700 font-bold text-white rounded-md"><SelectValue placeholder="Selecciona Diseño" /></SelectTrigger>
-                      <SelectContent position="popper" sideOffset={4} className="z-[9999] bg-zinc-800 border-zinc-700 text-white">
-                        <SelectItem value="solid">Color Sólido</SelectItem>
-                        <SelectItem value="striped">Rayada (Bastones)</SelectItem>
-                        <SelectItem value="halved">Mitades (Arlequín)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-zinc-400 text-xs font-semibold mb-2 block">Duración en Pantalla</Label>
-                    <Select value={liveLogos.goalDuration || '5'} onValueChange={(val: any) => updateLiveLogos({ goalDuration: val })}>
-                      <SelectTrigger className="h-10 text-sm bg-zinc-900 border-zinc-700 font-bold text-white rounded-md"><SelectValue /></SelectTrigger>
-                      <SelectContent position="popper" sideOffset={4} className="z-[9999] bg-zinc-800 border-zinc-700 text-white">
-                        <SelectItem value="5">5 Segundos</SelectItem>
-                        <SelectItem value="8">8 Segundos</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 p-4 bg-black/40 rounded-xl border border-zinc-700 mb-4 shadow-inner">
-                   <div>
-                     <Label className="text-zinc-400 text-xs font-semibold mb-2 block">Local (Fondo/Nº)</Label>
-                     <div className="flex gap-2">
-                        <input type="color" value={liveLogos.homeJ1} onChange={e => updateLiveLogos({homeJ1: e.target.value})} className="w-full h-10 p-0 border border-zinc-600 rounded-md cursor-pointer hover:border-zinc-400 transition-colors" title="Color Base (o Rayas 1)" />
-                        <input type="color" value={liveLogos.homeJ2} onChange={e => updateLiveLogos({homeJ2: e.target.value})} className="w-full h-10 p-0 border border-zinc-600 rounded-md cursor-pointer hover:border-zinc-400 transition-colors" title="Número (y Rayas 2 si aplica)" />
-                     </div>
-                   </div>
-                   <div>
-                     <Label className="text-zinc-400 text-xs font-semibold mb-2 block">Visita (Fondo/Nº)</Label>
-                     <div className="flex gap-2">
-                        <input type="color" value={liveLogos.awayJ1} onChange={e => updateLiveLogos({awayJ1: e.target.value})} className="w-full h-10 p-0 border border-zinc-600 rounded-md cursor-pointer hover:border-zinc-400 transition-colors" title="Color Base (o Rayas 1)" />
-                        <input type="color" value={liveLogos.awayJ2} onChange={e => updateLiveLogos({awayJ2: e.target.value})} className="w-full h-10 p-0 border border-zinc-600 rounded-md cursor-pointer hover:border-zinc-400 transition-colors" title="Número (y Rayas 2 si aplica)" />
-                     </div>
-                   </div>
-                </div>
-
-                <Label className="text-zinc-300 text-sm font-semibold mb-2 block mt-6 border-t border-zinc-800 pt-4">Modo de Presentación (Escudo)</Label>
-                <Select value={liveLogos.displayMode || 'logoAndName'} onValueChange={(val: any) => updateLiveLogos({ displayMode: val })}>
-                  <SelectTrigger className="h-10 text-sm bg-zinc-900 border-zinc-700 font-bold text-white mb-4 rounded-md"><SelectValue placeholder="Selecciona Presentación" /></SelectTrigger>
-                  <SelectContent position="popper" sideOffset={4} className="z-[9999] bg-zinc-800 border-zinc-700 text-white">
-                    <SelectItem value="logoOnly">Solo Escudo 3D</SelectItem>
-                    <SelectItem value="logoAndName">Escudo + Nombre (Separados)</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Label className="text-zinc-300 text-sm font-semibold mb-2 block mt-4">Forma (Máscara de Recorte)</Label>
-                <Select value={liveLogos.shape || 'shield'} onValueChange={(val: any) => updateLiveLogos({ shape: val })}>
-                  <SelectTrigger className="h-10 text-sm bg-zinc-900 border-zinc-700 font-bold text-white rounded-md"><SelectValue placeholder="Selecciona Forma" /></SelectTrigger>
-                  <SelectContent position="popper" sideOffset={4} className="z-[9999] bg-zinc-800 border-zinc-700 text-white">
-                    <SelectItem value="none">Sin Marco (Original)</SelectItem>
-                    <SelectItem value="circle">Círculo</SelectItem>
-                    <SelectItem value="square">Cuadrado Redondeado</SelectItem>
-                    <SelectItem value="shield">Escudo Clásico</SelectItem>
-                    <SelectItem value="iberico">Escudo Ibérico</SelectItem>
-                    <SelectItem value="gotico">Escudo Gótico</SelectItem>
-                    <SelectItem value="tudor">Escudo Tudor (Inglés)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center justify-between bg-zinc-900 p-3 md:p-4 rounded-xl border border-yellow-900/50 mt-6 shadow-sm">
-                <span className={`text-sm font-bold ${liveLogos.effect3D ? 'text-yellow-400' : 'text-zinc-400'}`}>Perspectiva 3D Premium</span>
-                <button onClick={() => updateLiveLogos({ effect3D: !liveLogos.effect3D })} className={`w-12 h-6 rounded-full transition-colors relative shadow-inner ${liveLogos.effect3D ? 'bg-yellow-500' : 'bg-zinc-700'}`}><div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all shadow ${liveLogos.effect3D ? 'left-[28px]' : 'left-[4px]'}`} /></button>
-              </div>
-              <div className="flex items-center justify-between bg-zinc-900 p-3 md:p-4 rounded-xl border border-blue-900/50 mt-3 shadow-sm">
-                <span className={`text-sm font-bold ${liveLogos.effectAnimated ? 'text-blue-400' : 'text-zinc-400'}`}>Animación Flotante</span>
-                <button onClick={() => updateLiveLogos({ effectAnimated: !liveLogos.effectAnimated })} className={`w-12 h-6 rounded-full transition-colors relative shadow-inner ${liveLogos.effectAnimated ? 'bg-blue-500' : 'bg-zinc-700'}`}><div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all shadow ${liveLogos.effectAnimated ? 'left-[28px]' : 'left-[4px]'}`} /></button>
-              </div>
-            </div>
-
-            <div className="h-px bg-zinc-800 w-full" />
-
-            {/* SECCIÓN 2: VISTAS DEL DASHBOARD */}
-            <div className="space-y-4">
-              <h3 className="text-white font-bold text-base flex items-center gap-2 bg-zinc-900 p-3 rounded-lg border border-zinc-800"><LayoutDashboard className="w-5 h-5 text-amber-500" /> Vistas del Dashboard</h3>
-              <div className="space-y-3">
-                {[{ id: '1', label: 'P1: Marcador Global', fixed: true }, { id: '2', label: 'P2: 45s / Faltas Local', fixed: false }, { id: '3', label: 'P3: 45s / Faltas Visita', fixed: false }, { id: '4', label: 'P4: Tarjetas Local', fixed: false }, { id: '5', label: 'P5: Tarjetas Visita', fixed: false }].map(screen => (
-                  <div key={screen.id} className="flex items-center justify-between bg-zinc-900/50 p-3.5 rounded-xl border border-zinc-800">
-                    <span className={`text-sm md:text-base font-bold ${screen.fixed ? 'text-zinc-500' : 'text-zinc-300'}`}>{screen.label}</span>
-                    <button disabled={screen.fixed} onClick={() => toggleScreenVisibility(screen.id)} className={`w-12 h-6 rounded-full transition-colors relative shadow-inner ${visibleScreens.includes(screen.id) ? 'bg-green-600' : 'bg-zinc-700'} ${screen.fixed ? 'opacity-50 cursor-not-allowed' : ''}`}><div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all shadow ${visibleScreens.includes(screen.id) ? 'left-[28px]' : 'left-[4px]'}`} /></button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="h-px bg-zinc-800 w-full" />
-
-            {/* SECCIÓN 3: PROYECTORES EXTERNOS */}
-            <div className="space-y-4 pb-10">
-              <h3 className="text-white font-bold text-base flex items-center gap-2 bg-zinc-900 p-3 rounded-lg border border-zinc-800"><ExternalLink className="w-5 h-5 text-blue-500" /> Proyectores Externos</h3>
-              <div className="space-y-3">
-                {[{ id: 1, name: 'P1: Marcador Global' }, { id: 2, name: 'P2: 45s / Faltas Local' }, { id: 3, name: 'P3: 45s / Faltas Visita' }, { id: 4, name: 'P4: Tarjetas Local' }, { id: 5, name: 'P5: Tarjetas Visita' }].map(p => (
-                  <Button key={p.id} onClick={() => openScoreboardWindow(p.id)} className="w-full bg-blue-900/20 hover:bg-blue-600 justify-start text-sm md:text-base h-12 md:h-14 font-bold border border-blue-900/50 text-blue-100 transition-all shadow-sm"><Tv className="w-5 h-5 mr-3" /> Lanzar {p.name}</Button>
-                ))}
-              </div>
-            </div>
+            <ScreensPanel
+              liveLogos={liveLogos as unknown as Record<string, string>}
+              updateLiveLogos={u => updateLiveLogos(u as Partial<typeof liveLogos>)}
+              visibleScreens={visibleScreens}
+              toggleScreenVisibility={toggleScreenVisibility}
+              openScoreboardWindow={openScoreboardWindow}
+              onOpenOverlays={() => setShowOverlays(true)}
+            />
 
           </div>
         </div>

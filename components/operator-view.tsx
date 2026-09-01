@@ -1,5 +1,7 @@
 "use client"
 
+import { RigidClock } from '@/components/scoreboard/RigidClock'
+
 import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
@@ -18,12 +20,12 @@ import type { GameState, Period, Team, MatchRecord, MatchConfig, Sanction, Playe
 import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
 import { TacticalBoard } from '@/components/scoreboard/TacticalBoard'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
-import { LiveCourtViewer } from '@/components/scoreboard/LiveCourtViewer'
 import { BenchModal, type BenchStaffUI } from '@/components/scoreboard/BenchModal'
 import { PosModal } from '@/components/scoreboard/PosModal'
 import { OfficialSheetModal } from '@/components/scoreboard/OfficialSheetModal'
 import { PreMatchSetup } from '@/components/scoreboard/PreMatchSetup'
 import { MatchHistoryModal } from '@/components/scoreboard/MatchHistoryModal'
+import { playHorn, playBeep, stopHorn, armAudio, loadAudioConfig } from '@/lib/audio-engine'
 
 // ─── MOTOR DE TEMAS GLOBALES (SKIN ENGINE) ─────────────────────────────────
 type SkinKey = 'neon-original' | 'stadium-led' | 'fiba-fifa' | 'cyber-ambar' | 'broadcast-pro' | 'alto-contraste' | 'retro-arcade';
@@ -259,43 +261,10 @@ export function OperatorView(props: OperatorViewProps) {
   }
 
   // ─── LISTENER GLOBAL DE TECLADO (HOTKEYS) ─────────────────
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  // Los atajos viven en app/page: una sola definicion para toda la estacion
+  // de trabajo. Antes estaban duplicados aqui y en la vista Pista, asi que
+  // cambiar de modo cambiaba el teclado bajo las manos del operador.
 
-      if (matchEnded || state.isIntermission) return; 
-
-      const normalizedKey = e.key === ' ' ? 'Space' : e.key.toLowerCase();
-      
-      const isMatch = (targetHotkey: string) => {
-          if (targetHotkey === 'Space' && normalizedKey === 'Space') return true;
-          return normalizedKey === targetHotkey.toLowerCase();
-      };
-
-      if (isMatch(hotkeys.mainSound)) {
-        e.preventDefault();
-        skipNextClockStartBuzzer.current = false; props.toggleMainClock();
-      } else if (isMatch(hotkeys.mainMute)) {
-        e.preventDefault();
-        skipNextClockStartBuzzer.current = true; props.toggleMainClock();
-      } else if (isMatch(hotkeys.homePosToggle)) {
-        e.preventDefault();
-        props.togglePossessionLeft();
-      } else if (isMatch(hotkeys.homePosReset)) {
-        e.preventDefault();
-        props.resetPossessionLeft();
-      } else if (isMatch(hotkeys.awayPosToggle)) {
-        e.preventDefault();
-        props.togglePossessionRight();
-      } else if (isMatch(hotkeys.awayPosReset)) {
-        e.preventDefault();
-        props.resetPossessionRight();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hotkeys, matchEnded, state.isIntermission, props]);
 
   const theme = GLOBAL_THEMES[currentSkinKey] 
 
@@ -312,61 +281,22 @@ export function OperatorView(props: OperatorViewProps) {
   const activeOscillators = useRef<OscillatorNode[]>([])
 
   useEffect(() => {
-    if (buzzerType === 'native-synth') {
-      props.changeBuzzerSound('') 
-    }
+    armAudio()
+    props.changeBuzzerSound('')
   }, [])
 
-  const startNativeSynth = useCallback(() => {
-    try {
-      if (!window || !window.AudioContext) return; 
-      
-      if (!nativeAudioCtx.current) {
-        nativeAudioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      if (nativeAudioCtx.current.state === 'suspended') {
-        nativeAudioCtx.current.resume();
-      }
-
-      activeOscillators.current.forEach(osc => { try { osc.stop(); osc.disconnect(); } catch (e) {} });
-      activeOscillators.current = [];
-
-      const ctx = nativeAudioCtx.current;
-      const masterGain = ctx.createGain();
-      masterGain.connect(ctx.destination);
-      masterGain.gain.setValueAtTime(0.5, ctx.currentTime);
-
-      const freqs = [110, 114]; 
-      freqs.forEach(freq => {
-        const osc = ctx.createOscillator();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(freq, ctx.currentTime);
-        osc.connect(masterGain);
-        osc.start();
-        activeOscillators.current.push(osc);
-      });
-    } catch (e) {
-      console.warn("Chicharra nativa falló", e);
-    }
-  }, []);
-
-  const stopNativeSynth = useCallback(() => {
-    activeOscillators.current.forEach(osc => {
-      try { osc.stop(); osc.disconnect(); } catch (e) {}
-    });
-    activeOscillators.current = [];
-  }, []);
+  // El sonido lo produce lib/audio-engine, el mismo que usa la vista Pista:
+  // envolvente para que no chasquee y margen de amplitud para que no recorte.
+  const startNativeSynth = useCallback(() => { playHorn(60000, loadAudioConfig()) }, [])
+  const stopNativeSynth  = useCallback(() => { stopHorn() }, [])
 
   const triggerAutoBuzzer = useCallback((durationMs = 800) => {
-    if (stopSynthTimeout.current) clearTimeout(stopSynthTimeout.current);
-
-    if (buzzerType === 'native-synth') {
-      startNativeSynth();
-      stopSynthTimeout.current = setTimeout(stopNativeSynth, durationMs);
-    } else if (buzzerType === 'custom' && customBuzzerFile) {
-      props.playBuzzer();
-    }
-  }, [buzzerType, customBuzzerFile, startNativeSynth, stopNativeSynth, props]);
+    if (stopSynthTimeout.current) clearTimeout(stopSynthTimeout.current)
+    // Sin condicion de tipo: antes, si buzzerType no era exactamente
+    // 'native-synth', la mesa se quedaba muda sin avisar.
+    playHorn(durationMs, loadAudioConfig())
+    props.playBuzzer()
+  }, [props]);
 
   const handleBuzzerPress = () => {
     if (stopSynthTimeout.current) clearTimeout(stopSynthTimeout.current);
@@ -443,7 +373,7 @@ export function OperatorView(props: OperatorViewProps) {
 
     // ⏰ BEEPS INTELIGENTES RELOJ PRINCIPAL (10 segundos a 1 segundo)
     if (state.isMainClockRunning && state.mainClock <= 10 && state.mainClock > 0 && prevMainClock.current !== state.mainClock) {
-        triggerAutoBuzzer(200); // Beep corto
+        playBeep('tick', loadAudioConfig())
     }
 
     // ⏰ BEEPS INTELIGENTES POSESIÓN (10, 8, 6, 4, 3, 2, 1)
@@ -714,7 +644,7 @@ export function OperatorView(props: OperatorViewProps) {
                 {state.isIntermission ? 'DESCANSO' : 'TIEMPO DE JUEGO'}
               </span>
               <div className={`w-[220px] sm:w-[320px] lg:w-[420px] mx-auto flex justify-center text-6xl sm:text-8xl lg:text-[7rem] leading-none tabular-nums transition-colors duration-300 ${clockTextColor}`} style={{...clockTextStyle, fontVariantNumeric: 'tabular-nums'}}>
-                {formatTime(state.mainClock)}
+                <RigidClock seconds={state.activeTimeout ? state.timeoutClock : state.mainClock} tenthsUnder={state.isMainClockRunning ? 10 : 0} />
               </div>
               <div className="flex items-center justify-center gap-2 mt-2 sm:mt-4">
                 <span className={`text-xs sm:text-sm font-bold transition-colors ${theme.clock.label}`}>
@@ -1251,18 +1181,9 @@ export function OperatorView(props: OperatorViewProps) {
         </div>
       )}
 
-      {/* ── Pista Dinámica ────────────────────────────────────────────────── */}
-      <LiveCourtViewer
-        homePlayers={state.matchConfig.homePlayers || []}
-        awayPlayers={state.matchConfig.awayPlayers || []}
-        homeRoster={state.matchConfig.homeRoster || []}
-        awayRoster={state.matchConfig.awayRoster || []}
-        homeTeamName={homeTeamName}
-        awayTeamName={awayTeamName}
-        sanctions={state.sanctions}
-        period={state.period}
-        cardHistory={state.cardHistory}
-      />
+      {/* La pista dinámica vive ahora en el modo PISTA, que la superó: allí es
+          mesa de mando, no vista de sólo lectura. Mantenerla también aquí
+          significaba dos implementaciones de lo mismo. */}
     </div>
   )
 }

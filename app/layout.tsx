@@ -7,6 +7,9 @@ import '@fontsource/orbitron/400.css'
 import '@fontsource/orbitron/700.css'
 import '@fontsource/orbitron/900.css'
 import '@fontsource/share-tech-mono/400.css'
+import '@fontsource/jetbrains-mono/700.css'
+import '@fontsource/fira-code/700.css'
+import '@fontsource/chivo-mono/700.css'
 
 import './globals.css'
 

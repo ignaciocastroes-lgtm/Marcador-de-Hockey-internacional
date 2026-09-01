@@ -15,7 +15,6 @@ interface Props {
   accent: string
   textColor: string
   numberStyle: React.CSSProperties
-  /** Reloj del entretiempo, se mantiene visible durante el resumen. */
   clockLabel?: string
   clockValue?: string
   sections?: StatsOverlayConfig
@@ -29,95 +28,160 @@ export function SummaryOverlay({
 }: Props) {
   const s = buildSummary(state, scope)
   const titulo = scope === 'primer_tiempo' ? 'RESUMEN 1ER TIEMPO' : 'FICHA DEL PARTIDO'
+  const dim = (o: number) => ({ color: textColor, opacity: o })
 
-  const Side = ({
-    name, logo, data, align
-  }: { name: string; logo?: string | null; data: typeof s.home; align: 'left' | 'right' }) => (
-    <div className={`flex-1 flex flex-col ${align === 'right' ? 'items-end text-right' : 'items-start text-left'} gap-[18px]`}>
-      <div className={`flex items-center gap-[20px] ${align === 'right' ? 'flex-row-reverse' : ''}`}>
-        {logo && <img src={logo} alt="" className="h-[90px] w-[90px] object-contain" />}
-        <span className="font-black text-[46px] leading-none truncate max-w-[520px]" style={{ color: textColor }}>
-          {name}
-        </span>
-      </div>
+  /**
+   * Fila comparativa: etiqueta al centro y los dos valores enfrentados.
+   * Es la estructura estandar de las estadisticas de television, y funciona
+   * porque el ojo compara en horizontal sin buscar donde esta cada dato.
+   */
+  const StatRow = ({
+    label, home, away, homeBar, awayBar
+  }: { label: string; home: string; away: string; homeBar?: number; awayBar?: number }) => (
+    <div className="flex items-center w-full gap-[24px]">
+      <span className="flex-1 text-right font-black text-[62px] leading-none tabular-nums" style={{ color: textColor }}>
+        {home}
+      </span>
 
-      <span className="leading-none" style={{ ...numberStyle, fontSize: '150px' }}>{data.score}</span>
-
-      {sections.showScorers && data.scorers.length > 0 && (
-        <div className="flex flex-col gap-[4px]">
-          {data.scorers.slice(0, 6).map(sc => (
-            <span key={sc.number} className="font-bold text-[30px]" style={{ color: textColor, opacity: 0.9 }}>
-              #{sc.number}{sc.goals > 1 ? ` ×${sc.goals}` : ''}
-            </span>
-          ))}
+      <div className="w-[520px] shrink-0">
+        <div className="text-center font-bold tracking-[0.28em] text-[24px] mb-[10px]" style={dim(0.5)}>
+          {label}
         </div>
-      )}
-
-      {sections.showGoalMinutes && data.goals.length > 0 && (
-        <div className={`flex flex-wrap gap-x-[16px] gap-y-[4px] max-w-[560px] ${align === 'right' ? 'justify-end' : ''}`}>
-          {data.goals.slice(0, 12).map((g, i) => (
-            <span key={i} className="font-mono text-[24px]" style={{ color: textColor, opacity: 0.55 }}>
-              {g.minute} #{g.number}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {sections.showCards && data.cards.length > 0 && (
-        <div className={`flex flex-wrap gap-[8px] max-w-[560px] ${align === 'right' ? 'justify-end' : ''}`}>
-          {data.cards.slice(0, 14).map((c, i) => (
-            <span key={i}
-              className="flex items-center justify-center font-black text-[20px] rounded-[4px] px-[8px] py-[2px]"
-              style={{ background: CARD_COLOR[c.type], color: c.type === 'yellow' ? '#000' : '#fff' }}>
-              {c.number}{c.isBench ? 'B' : ''}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className={`flex gap-[28px] ${align === 'right' ? 'justify-end' : ''}`}>
-        {sections.showFouls && <div className={align === 'right' ? 'text-right' : ''}>
-          <span className="block font-bold text-[20px] tracking-widest" style={{ color: textColor, opacity: 0.5 }}>FALTAS</span>
-          <span className="font-black text-[44px]" style={{ color: textColor }}>{data.fouls}</span>
-        </div>}
-        {sections.showPossession && <div className={align === 'right' ? 'text-right' : ''}>
-          <span className="block font-bold text-[20px] tracking-widest" style={{ color: textColor, opacity: 0.5 }}>POSESIÓN</span>
-          <span className="font-black text-[44px]" style={{ color: textColor }}>{data.possessionPct}%</span>
-          <span className="block font-mono text-[22px]" style={{ color: textColor, opacity: 0.5 }}>{fmtDuration(data.possession)}</span>
-        </div>}
-      </div>
-    </div>
-  )
-
-  return (
-    <div className="fixed inset-0 z-[2800] flex flex-col items-center justify-center bg-black px-[70px] py-[50px] bc-in">
-      <div className="flex items-center gap-[40px] mb-[30px] bc-content-in">
-        <span className="font-black tracking-[0.3em] text-[38px]" style={{ color: accent }}>{titulo}</span>
-        {clockValue && (
-          <div className="flex items-center gap-[16px] border-[4px] rounded-[18px] px-[28px] py-[6px]" style={{ borderColor: `${accent}66` }}>
-            <span className="font-bold text-[22px] tracking-widest" style={{ color: textColor, opacity: 0.6 }}>{clockLabel}</span>
-            <span className="leading-none" style={{ ...numberStyle, fontSize: '64px' }}>{clockValue}</span>
+        {homeBar !== undefined && awayBar !== undefined && (
+          <div className="flex h-[14px] w-full rounded-full overflow-hidden" style={{ background: '#ffffff14' }}>
+            <div style={{ width: `${homeBar}%`, background: accent }} />
+            <div style={{ width: `${awayBar}%`, background: `${textColor}55` }} />
           </div>
         )}
       </div>
 
-      <div className="flex w-full items-start gap-[50px] bc-content-in">
-        <Side name={homeTeamName} logo={homeLogo} data={s.home} align="left" />
-        <div className="flex flex-col items-center gap-[14px] pt-[110px]">
+      <span className="flex-1 text-left font-black text-[62px] leading-none tabular-nums" style={{ color: textColor }}>
+        {away}
+      </span>
+    </div>
+  )
+
+  const Cards = ({ data, align }: { data: typeof s.home; align: 'left' | 'right' }) => (
+    <div className={`flex flex-wrap gap-[8px] ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
+      {data.cards.slice(0, 12).map((c, i) => (
+        <span key={i}
+          className="flex items-center justify-center font-black text-[26px] rounded-[6px] px-[12px] py-[2px]"
+          style={{ background: CARD_COLOR[c.type], color: c.type === 'yellow' ? '#000' : '#fff' }}>
+          {c.number}{c.isBench ? 'B' : ''}
+        </span>
+      ))}
+    </div>
+  )
+
+  const Scorers = ({ data, align }: { data: typeof s.home; align: 'left' | 'right' }) => (
+    <div className={`flex flex-col gap-[6px] ${align === 'right' ? 'items-end text-right' : 'items-start text-left'}`}>
+      {data.goals.slice(0, 8).map((g, i) => (
+        <div key={i} className={`flex items-baseline gap-[12px] ${align === 'right' ? 'flex-row-reverse' : ''}`}>
+          <span className="font-black text-[34px] tabular-nums" style={{ color: textColor }}>#{g.number}</span>
+          <span className="font-mono text-[26px]" style={dim(0.55)}>{g.minute}</span>
+        </div>
+      ))}
+      {data.goals.length === 0 && (
+        <span className="font-bold text-[26px]" style={dim(0.35)}>Sin goles</span>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="fixed inset-0 z-[2800] flex flex-col bg-black px-[90px] py-[60px] bc-in">
+
+      {/* ── CABECERA ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-center gap-[36px] shrink-0 bc-content-in">
+        <span className="font-black tracking-[0.32em] text-[40px]" style={{ color: accent }}>{titulo}</span>
+        {clockValue && (
+          <div className="flex items-center gap-[18px] border-[4px] rounded-[16px] px-[28px] py-[4px]"
+            style={{ borderColor: `${accent}66` }}>
+            <span className="font-bold text-[22px] tracking-[0.2em]" style={dim(0.55)}>{clockLabel}</span>
+            <span className="leading-none tabular-nums" style={{ ...numberStyle, fontSize: '60px' }}>{clockValue}</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── MARCADOR: escudo, nombre y goles en una sola linea base ──────── */}
+      <div className="flex items-center justify-between gap-[40px] mt-[46px] shrink-0 bc-content-in">
+        <div className="flex items-center gap-[26px] flex-1 min-w-0">
+          {homeLogo && <img src={homeLogo} alt="" className="h-[128px] w-[128px] object-contain shrink-0" />}
+          <span className="font-black text-[58px] leading-none truncate" style={{ color: textColor }}>{homeTeamName}</span>
+        </div>
+
+        <div className="flex items-center gap-[34px] shrink-0">
+          <span className="leading-none tabular-nums" style={{ ...numberStyle, fontSize: '170px' }}>{s.home.score}</span>
+          <span className="font-black text-[80px] leading-none" style={dim(0.3)}>–</span>
+          <span className="leading-none tabular-nums" style={{ ...numberStyle, fontSize: '170px' }}>{s.away.score}</span>
+        </div>
+
+        <div className="flex items-center gap-[26px] flex-1 min-w-0 justify-end">
+          <span className="font-black text-[58px] leading-none truncate text-right" style={{ color: textColor }}>{awayTeamName}</span>
+          {awayLogo && <img src={awayLogo} alt="" className="h-[128px] w-[128px] object-contain shrink-0" />}
+        </div>
+      </div>
+
+      {/* Parciales por periodo y definicion por penales */}
+      {(sections.showByPeriod || s.hasPenalties) && (
+        <div className="flex items-center justify-center gap-[30px] mt-[16px] shrink-0 bc-content-in">
           {sections.showByPeriod && s.byPeriod.map(p => (
-            <div key={p.label} className="flex items-center gap-[14px]">
-              <span className="font-bold text-[26px] w-[54px] text-right" style={{ color: textColor, opacity: 0.45 }}>{p.label}</span>
-              <span className="font-black text-[34px]" style={{ color: textColor }}>{p.home} – {p.away}</span>
-            </div>
+            <span key={p.label} className="font-bold text-[28px] tabular-nums" style={dim(0.5)}>
+              {p.label} {p.home}–{p.away}
+            </span>
           ))}
           {s.hasPenalties && (
-            <div className="flex items-center gap-[14px]">
-              <span className="font-bold text-[26px] w-[54px] text-right" style={{ color: textColor, opacity: 0.45 }}>PEN</span>
-              <span className="font-black text-[34px]" style={{ color: accent }}>{s.homePenalties} – {s.awayPenalties}</span>
-            </div>
+            <span className="font-black text-[28px] tabular-nums" style={{ color: accent }}>
+              PENALES {s.homePenalties}–{s.awayPenalties}
+            </span>
           )}
         </div>
-        <Side name={awayTeamName} logo={awayLogo} data={s.away} align="right" />
+      )}
+
+      {/* ── COMPARATIVAS: etiqueta al centro, valores enfrentados ─────────── */}
+      <div className="flex-1 flex flex-col justify-center gap-[42px] mt-[36px] bc-content-in">
+        {sections.showPossession && (
+          <StatRow
+            label="POSESIÓN"
+            home={`${s.home.possessionPct}%`}
+            away={`${s.away.possessionPct}%`}
+            homeBar={s.home.possessionPct}
+            awayBar={s.away.possessionPct}
+          />
+        )}
+        {sections.showFouls && (
+          <StatRow label="FALTAS" home={String(s.home.fouls)} away={String(s.away.fouls)} />
+        )}
+        {sections.showPossession && (
+          <div className="flex items-center w-full gap-[24px] -mt-[26px]">
+            <span className="flex-1 text-right font-mono text-[24px]" style={dim(0.4)}>{fmtDuration(s.home.possession)}</span>
+            <span className="w-[520px] shrink-0" />
+            <span className="flex-1 text-left font-mono text-[24px]" style={dim(0.4)}>{fmtDuration(s.away.possession)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── PIE: goleadores y tarjetas, alineados a la misma base ─────────── */}
+      <div className="flex items-start justify-between gap-[60px] shrink-0 pt-[34px] bc-content-in"
+        style={{ borderTop: `2px solid ${textColor}1f` }}>
+        <div className="flex-1 min-w-0 flex flex-col gap-[16px]">
+          {sections.showGoalMinutes && (
+            <>
+              <span className="font-bold tracking-[0.26em] text-[22px]" style={dim(0.45)}>GOLES</span>
+              <Scorers data={s.home} align="left" />
+            </>
+          )}
+          {sections.showCards && s.home.cards.length > 0 && <Cards data={s.home} align="left" />}
+        </div>
+
+        <div className="flex-1 min-w-0 flex flex-col gap-[16px] items-end">
+          {sections.showGoalMinutes && (
+            <>
+              <span className="font-bold tracking-[0.26em] text-[22px]" style={dim(0.45)}>GOLES</span>
+              <Scorers data={s.away} align="right" />
+            </>
+          )}
+          {sections.showCards && s.away.cards.length > 0 && <Cards data={s.away} align="right" />}
+        </div>
       </div>
     </div>
   )

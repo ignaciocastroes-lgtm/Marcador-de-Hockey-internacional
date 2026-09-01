@@ -1,5 +1,7 @@
 "use client"
 
+import { finishClass, finishStyle, resolveFinish, type Finish } from '@/lib/finishes'
+
 import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
 
 import { SummaryOverlay } from '@/components/scoreboard/SummaryOverlay'
@@ -373,7 +375,9 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
     boardTextColor: '#ffffff',
     boardAccentColor: '#dc2626',
     possessionColor: '#22c55e',
-    penaltiesColor: '#eab308'
+    penaltiesColor: '#eab308',
+    finishDigits: 'solid',
+    finishNames: 'solid'
   })
 
   // 🛡️ REGLA: CACHÉ LOCAL (useRef) + SELLO DE TIEMPO PARA BLOQUEAR GOLES FANTASMA
@@ -693,17 +697,25 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
                             liveLogos.ledFont === 'arial-black' ? '"Arial Black", "Arial Bold", sans-serif' :
                             liveLogos.ledFont === 'consolas' ? '"Consolas", "Courier New", monospace' :
                             liveLogos.ledFont === 'trebuchet' ? '"Trebuchet MS", "Lucida Grande", sans-serif' :
-                            liveLogos.ledFont === 'ds-digital' ? '"DS-Digital", sans-serif' :
-                            liveLogos.ledFont === 'digital-7' ? '"Digital-7", sans-serif' :
-                            liveLogos.ledFont === 'liquid-crystal' ? '"Liquid Crystal", sans-serif' :
+                            liveLogos.ledFont === 'dseg7' ? '"DSEG7 Classic", monospace' :
+                            liveLogos.ledFont === 'dseg14' ? '"DSEG14 Classic", monospace' :
+                            liveLogos.ledFont === 'jetbrains' ? '"JetBrains Mono", monospace' :
+                            liveLogos.ledFont === 'fira' ? '"Fira Code", monospace' :
+                            liveLogos.ledFont === 'chivo' ? '"Chivo Mono", monospace' :
                             liveLogos.ledFont === 'orbitron' ? '"Orbitron", sans-serif' :
                             liveLogos.ledFont === 'system' ? 'system-ui, -apple-system, sans-serif' :
                             'var(--font-led)'; 
 
+  const digitFinish = resolveFinish((liveLogos.finishDigits || 'solid') as Finish, true)
+  const nameFinish = (liveLogos.finishNames || 'solid') as Finish
+  const digitFxClass = finishClass(digitFinish)
+  const nameFxClass = finishClass(nameFinish)
+
   const customNumberStyle: React.CSSProperties = {
     fontFamily: currentFontFamily,
     fontWeight: liveLogos.fontWeight || '900',
-    letterSpacing: liveLogos.letterSpacing || 'normal'
+    letterSpacing: liveLogos.letterSpacing || 'normal',
+    ...finishStyle(liveLogos.boardAccentColor || '#dc2626', digitFinish)
   };
 
   const getJerseyFill = (team: 'home' | 'away', design: string) => {

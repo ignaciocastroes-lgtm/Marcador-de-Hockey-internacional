@@ -74,6 +74,38 @@ let customBuffer: AudioBuffer | null = null
 let customSource: AudioBufferSourceNode | null = null
 let decodedFrom = ''
 
+/**
+ * Desbloqueo por gesto. El navegador crea el AudioContext suspendido si no
+ * viene de una interaccion del usuario, y los sonidos disparados por un
+ * temporizador —la cuenta atras, la bocina al llegar a cero— no son un gesto.
+ * Resultado: silencio absoluto hasta que alguien pulsa algo que suene.
+ * Esto engancha el primer toque de la pagina y reanuda el contexto.
+ */
+let unlocked = false
+
+export function armAudio(): void {
+  if (typeof window === 'undefined' || unlocked) return
+  const unlock = () => {
+    unlocked = true
+    try {
+      if (!ctx && window.AudioContext) ctx = new AudioContext()
+      void ctx?.resume()
+      // Un tick mudo termina de habilitar el contexto en iOS y Android
+      if (ctx) {
+        const g = ctx.createGain()
+        g.gain.setValueAtTime(0.0001, ctx.currentTime)
+        g.connect(ctx.destination)
+        const o = ctx.createOscillator()
+        o.connect(g); o.start(); o.stop(ctx.currentTime + 0.01)
+      }
+    } catch { /* noop */ }
+    window.removeEventListener('pointerdown', unlock)
+    window.removeEventListener('keydown', unlock)
+  }
+  window.addEventListener('pointerdown', unlock, { once: false })
+  window.addEventListener('keydown', unlock, { once: false })
+}
+
 function getCtx(): AudioContext | null {
   try {
     if (typeof window === 'undefined' || !window.AudioContext) return null

@@ -1,4 +1,4 @@
-# ARDI Hockey Patín 3.12.1 — "Pista Viva"
+# ARDI Hockey Patín 3.22 — "Pista Viva"
 
 ## Modo PISTA: la ficha es la mesa de mando
 Tocar un jugador abre su hoja de acciones. El menú de tarjetas lo decide la
@@ -217,3 +217,199 @@ hooks sea idéntico en cada render.
 
 Movidos por encima de la salida temprana, con un comentario que marca la frontera.
 Auditados los demás componentes con salida temprana: ninguno tiene hooks después.
+
+## 3.13 — Plantel Express predefinido, fichas y equipaciones
+
+**Express con 10 camisetas predefinidas** (8 jugadores + 2 porteros), el máximo
+reglamentario. El modal abre con ellas cargadas: el operador sólo cambia el número
+que necesite.
+- Lápiz o doble toque en la ficha para cambiar el número, conservando la marca PO.
+- Tope duro: 10 camisetas y 2 porteros, con aviso al intentar pasarse.
+- Botones DEFECTO (restaura las 10), VACIAR y GUARDAR.
+
+**`lib/appearance.ts` — estilo de ficha elegible.** Cubo, Funco (silueta con número)
+y Patinador (silueta con casco y patines; el portero lleva casco integral).
+Se elige desde la barra inferior de la vista Pista y se guarda.
+
+**Dos equipaciones por equipo.** Cada equipo tiene kit titular y alternativo, con
+polera, pantalón e insignia por separado, y se alterna con un toque cuando los
+colores chocan con el rival.
+Internacional Lo Espejo viene cargado: titular polera roja, pantalón azul, insignia
+roja; alternativa polera azul, pantalón azul, insignia roja.
+
+## 3.14 — Pantalla de resumen rediseñada
+La anterior eran dos columnas sin línea base común, con la mitad inferior vacía y
+la posesión más chica que el marcador. Rehecha con jerarquía de televisión:
+
+- **Marcador en una sola línea**: escudo, nombre y goles compartiendo base.
+  Los escudos pasan de 90 a 128 px.
+- **Comparativas con etiqueta al centro** y los dos valores enfrentados, más barra
+  proporcional en posesión. Es la estructura estándar de las estadísticas de TV:
+  el ojo compara en horizontal sin buscar dónde está cada dato.
+- **Un solo tamaño por nivel**: marcador 170, valores comparativos 62, nombres 58,
+  goleadores 34, etiquetas 22-24. Antes había siete tamaños sin criterio.
+- **Parciales por periodo** centrados bajo el marcador, no perdidos al medio.
+- **Pie con goleadores y tarjetas** separado por una línea, ambos lados a la misma
+  altura.
+- Se usa el alto completo: las comparativas ocupan el centro que antes quedaba vacío.
+
+## 3.15 — Correcciones de reglamento en el modo Pista
+
+**La falta es del equipo, no del jugador.** Botón FALTA eliminado de la hoja de
+acciones. Aparece un árbitro al centro superior de la pista: se toca y se elige a
+qué equipo se le cobra, con el acumulado a la vista.
+
+**Un jugador en banca no marca.** GOL queda deshabilitado si no está en pista, con
+el motivo en el tooltip. En banca sólo quedan las tarjetas de banca.
+
+**Sacar de la pista siempre es un cambio.** Se eliminó SACAR suelto: un equipo no
+juega con menos por decisión propia. Sólo la lesión saca sin reemplazo, y para eso
+está LESIONADO en gestión del jugador.
+
+**Juego detenido: entretiempo y tiempo muerto.** Con el juego parado se pueden
+cargar tarjetas —el árbitro puede sancionar con el juego detenido— pero quedan
+bloqueados goles, faltas y la solicitud de tiempo de banca, también por atajo de
+teclado. El rótulo del reloj muestra DESCANSO o TIEMPO MUERTO según corresponda.
+(Antes el tiempo muerto no bloqueaba nada: sólo el entretiempo, y de forma parcial.)
+
+**`lib/series.ts`** con las series reales: Escuelita, Sub-10 y Sub-11 mixtas,
+Sub-13/15/17/19 y Adulta femeninas, Sub-17 y Sub-23 masculinas. La rama va dentro
+de la serie, no como campo aparte: no existe "Sub-13 masculino".
+
+## 3.17 — Plantel del club, con el número en la persona
+`lib/club-roster.ts`. El número pertenece a la PERSONA, no a la serie: una jugadora
+lleva su número en su serie y también cuando la citan a una mayor. Cada serie es
+una selección del plantel, no una lista aparte.
+
+- 18 jugadoras y 3 del cuerpo técnico de Internacional, temporada 2026.
+- Sub-13, Sub-15 y Sub-17 femeninas armadas; el resto de las series quedan listas
+  para cargar.
+- Selector "Cargar serie…" en el modal Express: trae los números de esa citación.
+- **Detección de choques**: Ariadny Olivares y Eloisa Figueroa comparten el 20.
+  Al cargar Sub-17 el sistema avisa con los dos nombres, y si quedan dos fichas
+  repetidas muestra una alerta permanente explicando que el motor de tarjetas no
+  puede distinguirlas.
+
+**Privacidad:** el archivo NO guarda RUT ni documentos. Las citaciones los llevan
+porque son documentos internos; este archivo se versiona en el repositorio y la
+mayoría del plantel son menores. Sólo nombre y número.
+
+## 3.17.1 — Arreglo: los modales quedaban bajo el cajón
+El cajón GESTOR PANTALLAS usa `z-[200]` y su fondo difuminado `z-[150]`, mientras
+los diálogos de shadcn venían con `z-50`. Por eso el modal de Lanzadores se abría
+DEBAJO del cajón y se veía borroso a través del fondo.
+
+`components/ui/dialog.tsx`: fondo a `z-[300]` y contenido a `z-[310]`. Afecta a
+todos los modales de la aplicación, que ahora abren siempre por encima.
+
+## 3.18 — GESTOR PANTALLAS reagrupado
+`components/scoreboard/ScreensPanel.tsx`. El cajón pasa de ~90 controles en un
+scroll único a un menú de cinco tarjetas, cada una con su modal:
+
+1. **Lanzadores de proyección** — gol, fin de partido y estadísticas (ya existía).
+2. **Escudos e identidad** — escudos, URLs, forma de recorte, presentación,
+   perspectiva 3D y animación flotante. Todo lo del escudo, junto: antes la forma
+   estaba doscientos píxeles debajo de la imagen.
+3. **Tipografía y colores** — fuente, grosor, separación y los cinco colores del
+   tablero.
+4. **Animación de gol** — diseño de camiseta, duración y los cuatro colores.
+5. **Vistas y proyectores** — qué panel se ve en el videowall y lanzar cada pantalla.
+
+**Verificado control por control:** las 20 claves de configuración y las 22
+opciones de los selectores del panel original están presentes. Ninguna se perdió.
+
+## 3.19 — Pista, bancas y tanda de penales
+
+**El arco tiene red.** Antes era una línea roja pegada al borde. Ahora es poste
+más malla, dibujada como se ve desde arriba, en los dos arcos y también en la
+pista de penales.
+
+**El portero pegado a su arco.** Estaba al 12% con el arco al 7,5%: quedaba
+separado. Ahora va al 9,5%, justo delante de la portería.
+
+**Tiempo de banca en cada banca.** SOLICITAR y CONCEDER pasan a la zona de banca
+de cada equipo, junto a los botones de tarjeta de banca. Es la banca la que pide
+el tiempo, así que el control va donde está la banca. Siguen también en los
+paneles de equipo: ningún botón se perdió.
+
+**Azules visibles sobre la ficha.** Tenían borde oscuro sobre fondo oscuro y no se
+distinguían. Borde claro, sombra marcada y hasta tres acumuladas.
+
+**Acumulación en la zona de castigo.** Sobre la ficha de cada sancionado aparecen
+sus amarillas y azules acumuladas. Antes había que abrir la hoja del jugador para
+saber en qué situación estaba el que ya está cumpliendo.
+
+**Tanda de penales según World Skate.** Rehecha:
+- Portero defensor SOBRE su línea de meta, en el arco con red.
+- Punto de penal marcado a 5 m del arco.
+- Lanzadores al centro de la pista, uno al lado del otro, mirando al arco.
+- El portero del equipo que lanza aparece atenuado en su propia área, al otro
+  extremo, fuera de la acción.
+- Área de portería dibujada, como en juego.
+
+## 3.20 — Chicharra, reloj rígido y escudo
+
+**La chicharra no sonaba: dos causas.**
+1. El navegador crea el AudioContext *suspendido* si no viene de una interacción
+   del usuario, y los sonidos que dispara un temporizador —la cuenta atrás, la
+   bocina al llegar a cero— no son un gesto. `armAudio()` engancha el primer toque
+   o tecla de la página y reanuda el contexto con un tick mudo. Aplicado a las
+   dos vistas.
+2. En la vista clásica, `triggerAutoBuzzer` sólo sonaba si `buzzerType` era
+   exactamente `'native-synth'`. Cualquier otro valor dejaba la mesa muda sin
+   avisar. Se eliminó la condición.
+
+La vista clásica pasa a usar `lib/audio-engine`: hereda la envolvente que evita el
+chasquido, el margen de amplitud que evita el recorte, y los pulsos de cuenta atrás
+con voz propia en vez de bocinazos cortos.
+
+**`RigidClock`.** Cada carácter en su caja de ancho fijo: el reloj deja de bailar
+al cambiar de número. Bajo los 10 segundos aparecen las décimas mientras el reloj
+corre, como en la mesa de cronometraje.
+
+**El escudo del club reemplaza al avatar "A".** Una sola marca en la barra.
+
+## 3.21 — Atajos anclados a la estación de trabajo
+Los atajos vivían duplicados: seis en la vista clásica y catorce en la Pista. Cambiar
+de modo cambiaba el teclado bajo las manos del operador, y el modal de 14 acciones
+sólo existía en un modo.
+
+Ahora hay **un solo escuchador de teclado, en `app/page.tsx`**, con una sola
+definición de teclas para toda la aplicación. Funciona igual en CONTROL, en PISTA
+y en PANTALLAS.
+
+- Las acciones globales —reloj, chicharra, posesión, goles, faltas, periodo— las
+  ejecuta el page directamente sobre el estado.
+- Las dos que son de la vista —cerrar el diálogo abierto y abrir el descanso— viajan
+  por un evento (`ardi-hotkey`) que atiende la vista activa.
+- Con un diálogo abierto el teclado se apaga, **salvo reloj, chicharra y cerrar**:
+  con un mando en la mano, que un modal deje la mesa muda es inaceptable.
+- La detección de diálogo abierto es global (`[role="dialog"][data-state="open"]`),
+  así que ya no depende de que cada vista informe su propio estado.
+- El botón ATAJOS del cajón de la Pista abre el mismo modal, que ahora monta el page.
+
+## 3.22 — Acabados, tipografías recuperadas y limpieza
+
+**Las fuentes descartadas volvieron.** El problema de entonces no era la tipografía
+sino la distribución: dependían de Google Fonts. Desde la 3.5 el proyecto
+autohospeda, así que ahora entran DSEG7 y DSEG14 —las de siete y catorce segmentos,
+las de los marcadores físicos, copiadas a `/public/fonts`— más JetBrains Mono,
+Fira Code y Chivo Mono desde npm. Todas viajan dentro del despliegue.
+
+De paso se eliminaron `ds-digital`, `digital-7` y `liquid-crystal`, que estaban en
+el código apuntando a fuentes que no existían en ninguna máquina.
+
+**`lib/finishes.ts` — cuatro acabados.** Sólido, Neón, Flúor y Metal. No son colores:
+se aplican SOBRE el color elegido.
+- Neón y Flúor imitan una fuente de luz, que es lo que una pantalla hace bien:
+  núcleo claro y halo, sin degradado, así que la masa del dígito queda intacta.
+- Metal necesita degradado con brillo especular, y ese degradado parte el dígito.
+  Por eso está **bloqueado para reloj, marcador y posesión**, con el motivo en el
+  tooltip, y `resolveFinish()` lo degrada a sólido aunque alguien lo fuerce.
+- Presets de Oro, Plata y Bronce, y los cuatro colores flúor que mejor aguantan
+  en proyector.
+- Vista previa en vivo sobre el color de fondo real del tablero.
+
+**La pista dinámica sale de la vista clásica.** El modo PISTA la superó: allí es
+mesa de mando, no vista de sólo lectura. Mantener las dos era tener dos
+implementaciones de lo mismo.
