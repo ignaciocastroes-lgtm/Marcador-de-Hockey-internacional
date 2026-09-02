@@ -1,4 +1,4 @@
-# ARDI Hockey Patín 3.31 — "Pista Viva"
+# ARDI Hockey Patín 3.32 — "Pista Viva"
 
 ## Modo PISTA: la ficha es la mesa de mando
 Tocar un jugador abre su hoja de acciones. El menú de tarjetas lo decide la
@@ -615,3 +615,26 @@ queda dentro de su caja.
 Con esto, montar la previsualización fiel y el modo edición con arrastre pasa a
 ser trabajo sobre componentes ya aislados, sin volver a tocar el archivo de
 proyección.
+
+## 3.32 — Los desplegables bloqueados, y equipos guardados unificados
+
+**BUG: nada se podía seleccionar.** Cuando en la 3.17.1 subí el diálogo a `z-300`
+para que no quedara bajo el cajón, los componentes flotantes de Radix —Select,
+Popover, Dropdown, Tooltip— **se quedaron en `z-50`**. Los desplegables se abrían
+DETRÁS del modal: invisibles y sin recibir clics, salvo que uno cayera por
+casualidad en un borde asomado. De ahí el "presionando muchísimas veces me dejó".
+
+Escala de apilamiento coherente en toda la aplicación:
+`150` fondo del cajón · `200` cajón · `300/310` diálogo · `400` flotantes.
+Afecta a los seis puntos donde estaba el `z-50`.
+
+**`SavedTeamsModal` — una sola verdad.** El equipo estaba repartido en tres
+lugares: el desplegable de guardados, el selector de serie y el modal de
+camisetas. Tres controles para describir UNA cosa. Ahora un equipo guardado es lo
+que realmente es —un club, en una serie, con sus camisetas— y se edita entero en
+un lugar.
+- Lista con buscador, escudo, serie y número de camisetas por equipo.
+- Ficha con nombre, escudo, serie y camisetas editables.
+- Atajos DEL CLUB (plantel de esa serie) y POR DEFECTO (1 y 10 porteros, 2 al 9).
+- **GUARDAR** deja el equipo para las próximas fechas; **USAR** lo carga en este
+  partido con sus camisetas. Dos acciones distintas que antes estaban mezcladas.
