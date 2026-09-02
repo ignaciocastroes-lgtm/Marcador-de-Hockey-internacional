@@ -14,6 +14,16 @@ export interface Team {
   id: string
   name: string
   logo: string | null
+  /**
+   * Serie a la que pertenece este registro (id de lib/series).
+   * El mismo club en Sub-13 y en Adulta son DOS equipos guardados distintos,
+   * porque tienen planteles y camisetas distintas.
+   * Opcional: los equipos guardados antes de la 3.24 no lo traen y se muestran
+   * en todas las series hasta que el operador los reguarde.
+   */
+  serie?: string
+  /** Camisetas de ese equipo en esa serie. */
+  roster?: Array<{ number: string; isGoalie: boolean }>
 }
 
 // PLANILLA OFICIAL 2026: Jugador registrado

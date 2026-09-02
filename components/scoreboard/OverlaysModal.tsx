@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Goal, Trophy, BarChart3, RotateCcw, Check, Layers } from 'lucide-react'
+import { Goal, Trophy, BarChart3, RotateCcw, Check, Layers, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -89,6 +89,84 @@ export function OverlaysModal({ open, onClose }: Props) {
     </div>
   )
 
+  /** Tamaño y posición, iguales para los tres lanzadores. */
+  const Layout = ({ tab: t }: { tab: Tab }) => {
+    const c = cfg[t] as { scale: number; align: 'top' | 'center' | 'bottom' }
+    const patch = (v: Partial<{ scale: number; align: 'top' | 'center' | 'bottom' }>) =>
+      update({ ...cfg, [t]: { ...cfg[t], ...v } } as OverlaysConfig)
+    return (
+      <div className="border-t border-zinc-800 pt-3 space-y-3">
+        <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Tamaño y posición</p>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-bold text-zinc-300">Tamaño</span>
+            <span className="text-[10px] font-mono text-zinc-500">{Math.round((c.scale || 1) * 100)}%</span>
+          </div>
+          <input type="range" min={60} max={140} step={5}
+            value={Math.round((c.scale || 1) * 100)}
+            onChange={e => patch({ scale: parseInt(e.target.value) / 100 })}
+            className="w-full accent-blue-500" />
+        </div>
+
+        <div>
+          <span className="text-xs font-bold text-zinc-300 block mb-1">Posición vertical</span>
+          <div className="grid grid-cols-3 gap-1">
+            {(['top', 'center', 'bottom'] as const).map(a => (
+              <button key={a} onClick={() => patch({ align: a })}
+                className={`h-9 rounded-lg text-[10px] font-black transition-colors ${
+                  (c.align || 'center') === a ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                {a === 'top' ? 'ARRIBA' : a === 'center' ? 'CENTRO' : 'ABAJO'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Previsualización: proporción real del tablero, 16:9 */}
+        <div>
+          <span className="flex items-center gap-1.5 text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1">
+            <Eye className="w-3 h-3" /> Previsualización
+          </span>
+          <div className="w-full aspect-video bg-black rounded-lg border border-zinc-700 relative overflow-hidden flex justify-center"
+            style={{ alignItems: (c.align || 'center') === 'top' ? 'flex-start' : (c.align || 'center') === 'bottom' ? 'flex-end' : 'center' }}>
+            <div className="p-3" style={{ transform: `scale(${c.scale || 1})`, transformOrigin: 'center' }}>
+              {t === 'goal' && (
+                <div className="flex flex-col items-center gap-1">
+                  <span className="font-black text-2xl" style={{ color: cfg.goal.textColor }}>{cfg.goal.text}</span>
+                  {cfg.goal.showPlayerNumber && (
+                    <span className="w-9 h-9 rounded-lg flex items-center justify-center font-black text-lg"
+                      style={{ background: cfg.goal.homeJ1, color: cfg.goal.homeJ2 }}>7</span>
+                  )}
+                  {cfg.goal.showScore && (
+                    <span className="font-black text-xl tabular-nums" style={{ color: cfg.goal.scoreColor }}>2 - 1</span>
+                  )}
+                </div>
+              )}
+              {t === 'final' && (
+                <div className="flex flex-col items-center gap-1">
+                  <span className="font-black text-xl text-yellow-400">{cfg.final.winnerText}</span>
+                  <span className="font-black text-2xl text-white tabular-nums">3 - 1</span>
+                </div>
+              )}
+              {t === 'stats' && (
+                <div className="flex items-center gap-4">
+                  <span className="font-black text-2xl text-white tabular-nums">2</span>
+                  <div className="text-center">
+                    <span className="block text-[7px] font-bold text-zinc-500 tracking-widest">POSESIÓN</span>
+                    <div className="w-24 h-1.5 rounded-full overflow-hidden flex bg-white/10">
+                      <div className="w-[62%] bg-red-500" /><div className="w-[38%] bg-white/40" />
+                    </div>
+                  </div>
+                  <span className="font-black text-2xl text-white tabular-nums">1</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const TabBtn = ({ id, label, icon }: { id: Tab; label: string; icon: React.ReactNode }) => (
     <button onClick={() => setTab(id)}
       className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-black uppercase tracking-wider transition-colors ${
@@ -136,6 +214,32 @@ export function OverlaysModal({ open, onClose }: Props) {
                 label="Resplandor con color del equipo" hint="Toma el color de camiseta configurado" />
               <ColorField label="Color del texto" value={cfg.goal.textColor} onChange={v => patchGoal({ textColor: v })} />
               <ColorField label="Color del marcador" value={cfg.goal.scoreColor} onChange={v => patchGoal({ scoreColor: v })} />
+
+              {/* La camiseta se editaba en dos modales distintos que escribían en
+                  llaves distintas. Ahora vive sólo aquí. */}
+              <div className="border-t border-zinc-800 pt-3 space-y-2">
+                <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Camiseta de la animación</p>
+                <div>
+                  <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Diseño</Label>
+                  <div className="grid grid-cols-3 gap-1 mt-1">
+                    {([['solid', 'Sólido'], ['striped', 'Rayada'], ['halved', 'Mitad']] as const).map(([v, l]) => (
+                      <button key={v} onClick={() => patchGoal({ jerseyDesign: v })}
+                        className={`h-9 rounded-lg text-[10px] font-black ${
+                          cfg.goal.jerseyDesign === v ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <ColorField label="Local fondo"   value={cfg.goal.homeJ1} onChange={v => patchGoal({ homeJ1: v })} />
+                  <ColorField label="Local número"  value={cfg.goal.homeJ2} onChange={v => patchGoal({ homeJ2: v })} />
+                  <ColorField label="Visita fondo"  value={cfg.goal.awayJ1} onChange={v => patchGoal({ awayJ1: v })} />
+                  <ColorField label="Visita número" value={cfg.goal.awayJ2} onChange={v => patchGoal({ awayJ2: v })} />
+                </div>
+              </div>
+
+              <Layout tab="goal" />
             </>
           )}
 
@@ -158,6 +262,7 @@ export function OverlaysModal({ open, onClose }: Props) {
                     className="h-10 mt-1.5 bg-zinc-900 border-zinc-700 text-center font-black" />
                 </div>
               </div>
+              <Layout tab="final" />
             </>
           )}
 
@@ -176,6 +281,7 @@ export function OverlaysModal({ open, onClose }: Props) {
               <Toggle on={cfg.stats.showCards}      onChange={v => patchStats({ showCards: v })}      label="Tarjetas" hint="La B marca las de banca" />
               <Toggle on={cfg.stats.showFouls}      onChange={v => patchStats({ showFouls: v })}      label="Faltas acumuladas" />
               <Toggle on={cfg.stats.showPossession} onChange={v => patchStats({ showPossession: v })} label="Posesión" hint="Porcentaje y minutos de los relojes de 45" />
+              <Layout tab="stats" />
             </>
           )}
         </div>

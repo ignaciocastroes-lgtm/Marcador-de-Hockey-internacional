@@ -326,6 +326,8 @@ export function OperatorView(props: OperatorViewProps) {
   };
 
   // 🤖 AUTOMATIZACIÓN DE LA CHICHARRA Y BEEPS INTELIGENTES 🤖
+  const prevPossLRun = useRef(state.isPossessionLeftRunning);
+  const prevPossRRun = useRef(state.isPossessionRightRunning);
   const prevPossLeft = useRef(state.possessionClockLeft);
   const prevPossRight = useRef(state.possessionClockRight);
   const prevTimeoutClock = useRef(state.timeoutClock);
@@ -395,6 +397,8 @@ export function OperatorView(props: OperatorViewProps) {
     prevTimeoutClock.current = state.timeoutClock;
     prevActiveTimeout.current = state.activeTimeout;
     prevIntermission.current = state.isIntermission;
+    prevPossLRun.current = state.isPossessionLeftRunning
+    prevPossRRun.current = state.isPossessionRightRunning
     prevClockRunning.current = state.isMainClockRunning;
     prevMainClock.current = state.mainClock;
     prevHomeFouls.current = state.homeFouls;

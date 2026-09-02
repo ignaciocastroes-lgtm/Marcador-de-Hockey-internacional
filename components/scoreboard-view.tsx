@@ -721,7 +721,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   const getJerseyFill = (team: 'home' | 'away', design: string) => {
     if (design === 'striped') return `url(#striped-${team})`;
     if (design === 'halved') return `url(#halved-${team})`;
-    return team === 'home' ? liveLogos.homeJ1 : liveLogos.awayJ1;
+    return team === 'home' ? ov.goal.homeJ1 : ov.goal.awayJ1;
   };
 
   return (
@@ -856,7 +856,8 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         {/* 🛡️ CAPA MAGICA DE ANIMACIÓN DE GOL (PANTALLA COMPLETA 100%) */}
         {/* Solo se proyecta en el marcador Global (P1), dejando los cronómetros P2 y P3 limpios */}
         {goalEvent && !editMode && ov.goal.enabled && showsOn(ov.goal.boards, bId) && (
-          <div className={`fixed inset-0 z-[3000] flex flex-col items-center justify-center bg-black overflow-hidden ${goalPhase === 'out' ? 'bc-out' : 'bc-in'}`}>
+          <div style={{ alignItems: 'center', justifyContent: ov.goal.align === 'top' ? 'flex-start' : ov.goal.align === 'bottom' ? 'flex-end' : 'center' }}
+            className={`overlay-fullscreen z-[3000] flex flex-col items-center bg-black overflow-hidden ${goalPhase === 'out' ? 'bc-out' : 'bc-in'}`}>
              
              {/* BACKGROUND PARALLAX SHIELD WATERMARK */}
              {ov.goal.showWatermark && <div className="absolute inset-0 z-0 flex items-center justify-center opacity-20 animate-parallax-pan pointer-events-none mix-blend-screen">
@@ -864,7 +865,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
              </div>}
 
              {/* Glow Radial del Equipo */}
-             {ov.goal.useTeamColor && <div className="absolute inset-0 z-0 opacity-60" style={{ background: `radial-gradient(circle at center, ${goalEvent.team === 'home' ? liveLogos.homeJ1 : liveLogos.awayJ1} 0%, transparent 80%)` }} />}
+             {ov.goal.useTeamColor && <div className="absolute inset-0 z-0 opacity-60" style={{ background: `radial-gradient(circle at center, ${goalEvent.team === 'home' ? ov.goal.homeJ1 : ov.goal.awayJ1} 0%, transparent 80%)` }} />}
              
              {/* Texto GOL */}
              <div className={`text-[300px] font-black tracking-widest z-10 animate-goal-flash drop-shadow-[0_0_80px_rgba(255,255,255,0.6)] leading-none mt-[-40px] ${goalPhase === 'out' ? 'bc-content-out' : 'bc-content-in'}`} style={{ fontFamily: currentFontFamily, color: ov.goal.textColor }}>
@@ -891,28 +892,28 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
                   <svg viewBox="0 0 512 512" className="absolute inset-0 w-full h-full drop-shadow-[0_40px_50px_rgba(0,0,0,0.9)]">
                     <defs>
                       <pattern id="striped-home" width="60" height="60" patternUnits="userSpaceOnUse">
-                        <rect width="30" height="60" fill={liveLogos.homeJ1} />
-                        <rect x="30" width="30" height="60" fill={liveLogos.homeJ2} />
+                        <rect width="30" height="60" fill={ov.goal.homeJ1} />
+                        <rect x="30" width="30" height="60" fill={ov.goal.homeJ2} />
                       </pattern>
                       <linearGradient id="halved-home" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="50%" stopColor={liveLogos.homeJ1} />
-                        <stop offset="50%" stopColor={liveLogos.homeJ2} />
+                        <stop offset="50%" stopColor={ov.goal.homeJ1} />
+                        <stop offset="50%" stopColor={ov.goal.homeJ2} />
                       </linearGradient>
                       
                       <pattern id="striped-away" width="60" height="60" patternUnits="userSpaceOnUse">
-                        <rect width="30" height="60" fill={liveLogos.awayJ1} />
-                        <rect x="30" width="30" height="60" fill={liveLogos.awayJ2} />
+                        <rect width="30" height="60" fill={ov.goal.awayJ1} />
+                        <rect x="30" width="30" height="60" fill={ov.goal.awayJ2} />
                       </pattern>
                       <linearGradient id="halved-away" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="50%" stopColor={liveLogos.awayJ1} />
-                        <stop offset="50%" stopColor={liveLogos.awayJ2} />
+                        <stop offset="50%" stopColor={ov.goal.awayJ1} />
+                        <stop offset="50%" stopColor={ov.goal.awayJ2} />
                       </linearGradient>
                     </defs>
 
                     {/* Cuerpo y Mangas */}
                     <path 
                       d="M375,76.5c-20-13-50-20-80-20c-13,0-26,5-39,15c-13-10-26-15-39-15c-30,0-60,7-80,20c-40,26-80,86-105,124 c-7,10,0,25,12,30l45,18c12,5,25-2,30-14l12-32v240c0,15,15,25,30,20c30-10,70-15,105-15s75,5,105,15c15,5,30-5,30-20v-240l12,32 c5,12,18,19,30,14l45-18c12-5,19-20,12-30C455,162.5,415,102.5,375,76.5z" 
-                      fill={getJerseyFill(goalEvent.team, liveLogos.jerseyDesign || 'solid')}
+                      fill={getJerseyFill(goalEvent.team, ov.goal.jerseyDesign || 'solid')}
                     />
                     {/* Borde exterior */}
                     <path 
@@ -927,14 +928,14 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
                     <path d="M110,140c10,40,15,80,0,120" stroke="rgba(255,255,255,0.1)" strokeWidth="10" fill="none" strokeLinecap="round" />
                     <path d="M402,140c-10,40-15,80,0,120" stroke="rgba(255,255,255,0.1)" strokeWidth="10" fill="none" strokeLinecap="round" />
                     {/* Cuello en V */}
-                    <path d="M217,71.5 l39,60 l39,-60 c-15,10 -30,15 -39,15 c-9,0 -24,-5 -39,-15 z" fill={goalEvent.team === 'home' ? liveLogos.homeJ2 : liveLogos.awayJ2} />
+                    <path d="M217,71.5 l39,60 l39,-60 c-15,10 -30,15 -39,15 c-9,0 -24,-5 -39,-15 z" fill={goalEvent.team === 'home' ? ov.goal.homeJ2 : ov.goal.awayJ2} />
                     {/* Puños */}
-                    <path d="M35,218.5 l45,18 l10,-26 l-45,-18 z" fill={goalEvent.team === 'home' ? liveLogos.homeJ2 : liveLogos.awayJ2} />
-                    <path d="M477,218.5 l-45,18 l-10,-26 l45,-18 z" fill={goalEvent.team === 'home' ? liveLogos.homeJ2 : liveLogos.awayJ2} />
+                    <path d="M35,218.5 l45,18 l10,-26 l-45,-18 z" fill={goalEvent.team === 'home' ? ov.goal.homeJ2 : ov.goal.awayJ2} />
+                    <path d="M477,218.5 l-45,18 l-10,-26 l45,-18 z" fill={goalEvent.team === 'home' ? ov.goal.homeJ2 : ov.goal.awayJ2} />
                   </svg>
 
                   {/* NÚMERO DEL JUGADOR */}
-                  <span className="relative z-10 font-black pt-[60px] tracking-tighter" style={{ fontSize: goalEvent.playerNumber.length > 3 ? '100px' : '180px', color: goalEvent.team === 'home' ? liveLogos.homeJ2 : liveLogos.awayJ2, fontFamily: currentFontFamily, WebkitTextStroke: '6px rgba(255,255,255,0.9)', textShadow: '0 15px 30px rgba(0,0,0,0.6)' }}>
+                  <span className="relative z-10 font-black pt-[60px] tracking-tighter" style={{ fontSize: goalEvent.playerNumber.length > 3 ? '100px' : '180px', color: goalEvent.team === 'home' ? ov.goal.homeJ2 : ov.goal.awayJ2, fontFamily: currentFontFamily, WebkitTextStroke: '6px rgba(255,255,255,0.9)', textShadow: '0 15px 30px rgba(0,0,0,0.6)' }}>
                     {goalEvent.playerNumber && goalEvent.playerNumber !== 'EQUIPO' ? goalEvent.playerNumber : ''}
                   </span>
                 </div>
@@ -1181,11 +1182,13 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
             clockLabel={showFinalSummary ? undefined : 'DESCANSO'}
             clockValue={showFinalSummary ? undefined : formatTime(state.mainClock)}
             sections={ov.stats}
+            scale={ov.stats.scale}
+            align={ov.stats.align}
           />
         )}
 
         {state.isMatchEnded && !editMode && !showFinalSummary && finalOn && (
-          <div className="fixed inset-0 z-[2900] bc-in rounded-[30px] flex flex-col items-center justify-center" style={{ backgroundColor: liveLogos.boardBgColor ? `${liveLogos.boardBgColor}F2` : 'rgba(0,0,0,0.95)' }}>
+          <div className="overlay-fullscreen z-[2900] bc-in rounded-[30px] flex flex-col items-center justify-center" style={{ backgroundColor: liveLogos.boardBgColor ? `${liveLogos.boardBgColor}F2` : 'rgba(0,0,0,0.95)' }}>
             <div className="animate-pulse font-black tracking-[0.2em] mb-[40px] text-[80px]" style={{ color: liveLogos.penaltiesColor || '#eab308' }}>
               FIN DEL PARTIDO
             </div>

@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import {
   Play, Pause, RotateCcw, Plus, Minus, Bell, Timer, Coffee, Goal, Square,
   ArrowRightLeft, ChevronRight, FileText, AlertTriangle, AlertCircle, Users,
-  VolumeX, LogOut, LogIn, X, History, HeartPulse, Shield, Hash, Star, SlidersHorizontal, Trash2, UserPlus, Maximize
+  VolumeX, LogOut, LogIn, X, History, HeartPulse, Shield, Hash, Star, SlidersHorizontal, Trash2, UserPlus, Maximize, Lock
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,7 +21,6 @@ import type {
   SignatureData, ClosingSignatureData, MatchRecord
 } from '@/hooks/use-game-state'
 
-import { BenchModal, type BenchStaffUI } from '@/components/scoreboard/BenchModal'
 import { OfficialSheetModal } from '@/components/scoreboard/OfficialSheetModal'
 import { PreMatchSetup } from '@/components/scoreboard/PreMatchSetup'
 import { MatchHistoryModal } from '@/components/scoreboard/MatchHistoryModal'
@@ -149,6 +148,16 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const [showAudio, setShowAudio] = useState(false)
   // Árbitro: las faltas son del EQUIPO, no de un jugador
   const [refOpen, setRefOpen] = useState(false)
+  const [resetArmed, setResetArmed] = useState(false)
+
+  /**
+   * Tarjeta de banca armada. El flujo es: elegir la tarjeta, tocar al infractor
+   * directo, y el pintado del resto ocurre solo. El reglamento dice que la
+   * amonestación al banquillo alcanza a TODOS sus integrantes, así que
+   * preguntarlo uno por uno era pedirle al operador que decidiera algo que la
+   * norma ya decidió.
+   */
+  const [benchArm, setBenchArm] = useState<{ team: 'home' | 'away'; card: 'yellow' | 'red' } | null>(null)
 
   /**
    * Juego detenido: entretiempo o tiempo muerto. Con el juego parado NO puede
@@ -193,10 +202,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const [customIntermissionMinutes, setCustomIntermissionMinutes] = useState('')
   const [signingClosingRole, setSigningClosingRole] = useState<keyof ClosingSignatureData | null>(null)
 
-  const [benchModalOpen, setBenchModalOpen] = useState(false)
-  const [benchModalTeam, setBenchModalTeam] = useState<'home' | 'away'>('home')
-  const [benchModalCard, setBenchModalCard] = useState<'yellow' | 'red'>('yellow')
-  const [benchStaffList, setBenchStaffList] = useState<BenchStaffUI[]>([])
 
   // Ficha seleccionada -> hoja de acciones
   const [selected, setSelected] = useState<{ player: Player; team: 'home' | 'away'; onCourt: boolean } | null>(null)
@@ -324,7 +329,50 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
   // ─── Acciones sobre una ficha ──────────────────────────────────────────────
 
+  /** Sanción de banca en un toque: directa al infractor, colectiva al resto. */
+  const applyBenchDirect = (player: Player, team: 'home' | 'away', card: 'yellow' | 'red') => {
+    const roster = team === 'home' ? homePlayers : awayPlayers
+    const teamHasBenchYellow = cardHistory.some(c => c.team === team && c.isBench && c.cardType === 'yellow')
+
+    const asUI = (p: Player) => ({
+      id: p.id,
+      name: isStaff(p) ? getStaffName(p.role as string) : `#${p.number}`,
+      role: isStaff(p) ? getStaffLabel(p.role as string) : 'Suplente',
+      number: getDisplayNumber(p)
+    })
+
+    // La colectiva alcanza a los integrantes fijos del banquillo, salvo que el
+    // equipo ya esté pintado: desde ahí sólo hay directa.
+    const targets = teamHasBenchYellow
+      ? []
+      : roster.filter(p => isStaff(p) && p.id !== player.id).map(asUI)
+
+    props.addBenchSanction(team, card, asUI(player), targets)
+    props.resetAndPausePossession()
+
+    const num = getDisplayNumber(player)
+    if (teamHasBenchYellow) {
+      toast.warning(`Banca ya pintada: ${card === 'yellow' ? 'amarilla' : 'roja'} directa a ${num}`, { duration: 3000 })
+    } else {
+      toast.warning(`${card === 'yellow' ? 'Amarilla' : 'Roja'} directa a ${num} · banca pintada (${targets.length})`, { duration: 4000 })
+    }
+    setBenchArm(null)
+  }
+
   const openSheet = (player: Player, team: 'home' | 'away') => {
+    // Con tarjeta armada, el toque es la sanción: no se abre la hoja
+    if (benchArm) {
+      if (benchArm.team !== team) {
+        toast.warning('La tarjeta está armada para el otro equipo.')
+        return
+      }
+      if (isPlayerExpelled(player, team, cardHistory, sanctions)) {
+        toast.error(`#${getDisplayNumber(player)} ya está expulsado.`)
+        return
+      }
+      applyBenchDirect(player, team, benchArm.card)
+      return
+    }
     if (matchEnded) {
       toast.error("El partido finalizo. Presiona REANUDAR para hacer cambios.")
       return
@@ -392,36 +440,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     setSelected(null)
   }
 
-  // ─── Sancion de banca ──────────────────────────────────────────────────────
-
-  const openBench = (team: 'home' | 'away', card: 'yellow' | 'red', preselect?: Player) => {
-    if (matchEnded) {
-      toast.error("El partido finalizo. Presiona REANUDAR para hacer cambios.")
-      return
-    }
-    const players = team === 'home' ? homePlayers : awayPlayers
-    const teamHasBenchYellow = cardHistory.some(c => c.team === team && c.isBench && c.cardType === 'yellow')
-
-    const uiList: BenchStaffUI[] = players
-      .filter(p => isBenchOnly(p) || !isBenchOnly(p))
-      .map(p => {
-        const staff = isStaff(p)
-        return {
-          id: p.id,
-          name: staff ? getStaffName(p.role as string) : `#${p.number}`,
-          role: staff ? getStaffLabel(p.role as string) : 'Suplente',
-          number: getDisplayNumber(p),
-          selected: teamHasBenchYellow ? false : staff,
-          isDirectInfractor: preselect ? p.id === preselect.id : false
-        }
-      })
-
-    setBenchStaffList(uiList)
-    setBenchModalTeam(team)
-    setBenchModalCard(card)
-    setBenchModalOpen(true)
-    setSelected(null)
-  }
+  // La sancion de banca se aplica con applyBenchDirect: tarjeta armada y un
+  // toque sobre el infractor. El modal de reparto ya no hace falta.
 
   // ─── Fin / reanudacion ─────────────────────────────────────────────────────
 
@@ -459,15 +479,23 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   // Automatizacion de chicharra
   const prevClockRunning = useRef(state.isMainClockRunning)
   const prevMainClock = useRef(state.mainClock)
+  const prevPossLRun = useRef(state.isPossessionLeftRunning)
+  const prevPossRRun = useRef(state.isPossessionRightRunning)
   const prevPossL = useRef(state.possessionClockLeft)
   const prevPossR = useRef(state.possessionClockRight)
   const prevHomeFouls = useRef(state.homeFouls)
   const prevAwayFouls = useRef(state.awayFouls)
 
   useEffect(() => {
+    // Arrancar un reloj de 45 enciende el reloj principal por acoplamiento.
+    // Eso no es una puesta en juego, asi que no lleva chicharra.
+    const possJustStarted =
+      (!prevPossLRun.current && state.isPossessionLeftRunning) ||
+      (!prevPossRRun.current && state.isPossessionRightRunning)
+
     if (!prevClockRunning.current && state.isMainClockRunning) {
       if (skipNextBuzzer.current) skipNextBuzzer.current = false
-      else buzz(500)
+      else if (!possJustStarted) buzz(500)
     }
     if (prevMainClock.current > 0 && state.mainClock === 0) buzz(2000)
     if ((prevPossL.current > 0 && state.possessionClockLeft === 0) ||
@@ -495,6 +523,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     prevHomeFouls.current = state.homeFouls
     prevAwayFouls.current = state.awayFouls
 
+    prevPossLRun.current = state.isPossessionLeftRunning
+    prevPossRRun.current = state.isPossessionRightRunning
     prevClockRunning.current = state.isMainClockRunning
     prevMainClock.current = state.mainClock
     prevPossL.current = state.possessionClockLeft
@@ -512,7 +542,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       const action = (e as CustomEvent).detail as string
       if (action === 'undo') {
         setSelected(null); setCancelling(null); setRenaming(null)
-        setAddTo(null); setSubbing(null); setRefOpen(false)
+        setAddTo(null); setSubbing(null); setRefOpen(false); setBenchArm(null)
       } else if (action === 'intermission' && !matchEnded) {
         setShowIntermissionSelector(true)
       }
@@ -598,19 +628,43 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
             {display}
           </span>
         ) : (
-          <svg viewBox="0 0 40 44" className="w-full h-full" aria-hidden>
-            {/* Casco del portero o cabeza */}
-            {style === 'jugador' && goalie
-              ? <rect x="12" y="3" width="16" height="13" rx="5" fill={c2} stroke="#fff" strokeWidth="1.2" />
-              : <circle cx="20" cy="10" r="7" fill={c2} stroke="#fff" strokeWidth="1.2" />}
-            {/* Torso */}
-            <path d="M6 40c0-8 6-14 14-14s14 6 14 14z" fill={c1} stroke="#fff" strokeWidth="1.2" />
-            {/* Patines */}
-            {style === 'jugador' && (
-              <path d="M10 41h8M22 41h8" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+          <svg viewBox="0 0 40 46" className="w-full h-full" aria-hidden>
+            {style === 'funco' ? (
+              <>
+                {/* Silueta de una sola pieza: cabeza y cuerpo comparten
+                    contorno, sin el hueco que dejaban dos formas sueltas. */}
+                <path
+                  d="M20 3c4.4 0 8 3.6 8 8 0 2.6-1.2 4.9-3.1 6.4
+                     C29.6 19.3 33 24.2 33 30v11H7V30c0-5.8 3.4-10.7 8.1-12.6
+                     C13.2 15.9 12 13.6 12 11c0-4.4 3.6-8 8-8z"
+                  fill={c1} stroke="#fff" strokeWidth="1.4" strokeLinejoin="round" />
+                {/* Cabeza en tono secundario, dentro del mismo contorno */}
+                <circle cx="20" cy="11" r="6.4" fill={c2} opacity="0.92" />
+              </>
+            ) : (
+              <>
+                {/* Patinador: torso inclinado hacia adelante, casco, patines
+                    y stick. Silueta claramente distinta del funco. */}
+                <path
+                  d="M23 4c4 0 7.2 3.2 7.2 7.2 0 2.1-.9 4-2.4 5.3
+                     C31.6 18.6 34 23 33 28.5l-2.6 12.5H9.5l3.4-13.6
+                     c1-4.1 4-7.3 7.9-8.4C19.1 17.6 17.6 15 17.6 12
+                     c0-4.1 2.9-7.4 5.4-8z"
+                  fill={c1} stroke="#fff" strokeWidth="1.4" strokeLinejoin="round" />
+                {/* Casco: rectángulo redondeado para el portero, cabeza para el resto */}
+                {goalie
+                  ? <rect x="16.4" y="4.6" width="13.5" height="12.4" rx="5" fill={c2} stroke="#fff" strokeWidth="1" />
+                  : <circle cx="23.2" cy="11" r="5.9" fill={c2} opacity="0.92" />}
+                {/* Patines */}
+                <path d="M8 43h10M22 43h10" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+                <path d="M8.5 41.5h9.5M22.5 41.5h9.5" stroke={c2} strokeWidth="1.6" strokeLinecap="round" opacity=".8" />
+                {/* Stick */}
+                <path d="M6 22l-3 16" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" opacity=".85" />
+                <path d="M3 38h6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" opacity=".85" />
+              </>
             )}
-            <text x="20" y="38" textAnchor="middle" fontSize="14" fontWeight="900"
-              fill="#fff" stroke="#000" strokeWidth="0.6" paintOrder="stroke">{display}</text>
+            <text x="20" y={style === 'funco' ? 34 : 33} textAnchor="middle" fontSize="13" fontWeight="900"
+              fill="#fff" stroke="#000" strokeWidth="0.7" paintOrder="stroke">{display}</text>
           </svg>
         )}
         {goalie && (
@@ -640,17 +694,35 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       (p.isDisabled || isPlayerAvailable(p, team, cardHistory, sanctions)))
 
     return (
-      <div className={`w-[22%] min-w-[68px] sm:min-w-[110px] p-1 sm:p-2 flex flex-col ${team === 'home' ? 'bg-blue-950/20 border-r border-blue-500/30' : 'bg-amber-950/20 border-l border-amber-500/30'}`}>
+      <div className={`w-[22%] min-w-[68px] sm:min-w-[110px] p-1 sm:p-2 flex flex-col transition-colors ${
+        benchArm?.team === team
+          ? (benchArm.card === 'yellow' ? 'bg-yellow-500/15 ring-2 ring-inset ring-yellow-500/60' : 'bg-red-600/15 ring-2 ring-inset ring-red-500/60')
+          : team === 'home' ? 'bg-blue-950/20 border-r border-blue-500/30' : 'bg-amber-950/20 border-l border-amber-500/30'}`}>
         <span className={`text-[9px] font-black tracking-widest mb-2 pb-1 w-full text-center border-b ${accent === 'blue' ? 'text-blue-400 border-blue-500/50' : 'text-amber-400 border-amber-500/50'}`}>
           BANCA
         </span>
         <div className="flex flex-wrap justify-center gap-2 overflow-y-auto content-start flex-1">
           {list.map(p => <Token key={p.id} p={p} team={team} onCourt={false} />)}
         </div>
-        <div className="grid grid-cols-2 gap-1 mt-2">
-          <Button onClick={() => openBench(team, 'yellow')} disabled={matchEnded} size="sm" className="h-7 px-0 text-[9px] font-black bg-yellow-500 hover:bg-yellow-400 text-black">AM. BANCA</Button>
-          <Button onClick={() => openBench(team, 'red')} disabled={matchEnded} size="sm" className="h-7 px-0 text-[9px] font-black bg-red-600 hover:bg-red-500 text-white">RJ. BANCA</Button>
-        </div>
+        {benchArm?.team === team ? (
+          <div className="mt-2 rounded-lg border-2 border-dashed p-1.5 text-center animate-pulse"
+            style={{ borderColor: benchArm.card === 'yellow' ? '#facc15' : '#dc2626' }}>
+            <span className="block text-[9px] font-black uppercase leading-tight"
+              style={{ color: benchArm.card === 'yellow' ? '#facc15' : '#f87171' }}>
+              {benchArm.card === 'yellow' ? 'Amarilla' : 'Roja'} armada
+            </span>
+            <span className="block text-[8px] text-zinc-400 leading-tight mb-1">Toca al infractor</span>
+            <Button onClick={() => setBenchArm(null)} size="sm"
+              className="h-6 w-full px-0 text-[9px] font-black bg-zinc-800 hover:bg-zinc-700">CANCELAR</Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-1 mt-2">
+            <Button onClick={() => setBenchArm({ team, card: 'yellow' })} disabled={matchEnded} size="sm"
+              className="h-7 px-0 text-[9px] font-black bg-yellow-500 hover:bg-yellow-400 text-black">AM. BANCA</Button>
+            <Button onClick={() => setBenchArm({ team, card: 'red' })} disabled={matchEnded} size="sm"
+              className="h-7 px-0 text-[9px] font-black bg-red-600 hover:bg-red-500 text-white">RJ. BANCA</Button>
+          </div>
+        )}
 
         {/* El tiempo de banca lo pide la banca: va donde esta la banca */}
         {(() => {
@@ -691,6 +763,44 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         {Array.from({ length: Math.min(az, 3) }).map((_, i) => (
           <span key={`b${i}`} className="w-2.5 h-3.5 bg-blue-500 border border-blue-200 rounded-[1px] rotate-12 shadow" />
         ))}
+      </div>
+    )
+  }
+
+  /**
+   * Reloj de 45 al costado del reloj principal. Los controles quedan chicos a
+   * proposito: la accion frecuente —cambio de posesion— se hace tocando el lado
+   * de la pista. Estos botones son para el caso raro: pausar o corregir.
+   */
+  const PossessionSide = ({ side }: { side: 'home' | 'away' }) => {
+    const isHome = side === 'home'
+    const clock = isHome ? state.possessionClockLeft : state.possessionClockRight
+    const running = isHome ? state.isPossessionLeftRunning : state.isPossessionRightRunning
+    const name = isHome ? homeTeamName : awayTeamName
+    return (
+      <div className={`flex items-center gap-1 ${isHome ? 'flex-row' : 'flex-row-reverse'}`}>
+        <div className="flex flex-col gap-1">
+          <Button size="sm" disabled={matchEnded}
+            onClick={() => isHome ? props.togglePossessionLeft() : props.togglePossessionRight()}
+            className={`h-7 w-8 p-0 ${running ? 'bg-red-600 hover:bg-red-500' : 'bg-green-700 hover:bg-green-600'}`}>
+            {running ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+          </Button>
+          <Button size="sm" disabled={matchEnded}
+            onClick={() => isHome ? props.resetPossessionLeft() : props.resetPossessionRight()}
+            className="h-7 w-8 p-0 bg-zinc-800 hover:bg-zinc-700">
+            <RotateCcw className="w-3 h-3" />
+          </Button>
+        </div>
+        <div className={isHome ? 'text-left' : 'text-right'}>
+          <span className={`block text-[9px] font-black uppercase tracking-widest truncate max-w-[90px] ${isHome ? 'text-blue-400' : 'text-amber-400'}`}>
+            {name}
+          </span>
+          <span className={`block text-3xl sm:text-4xl font-black tabular-nums leading-none ${
+            clock <= 10 && running ? 'text-red-500 animate-pulse' : 'text-green-400'}`}
+            style={{ fontFamily: 'var(--font-led)' }}>
+            {formatTime(clock)}
+          </span>
+        </div>
       </div>
     )
   }
@@ -784,23 +894,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   return (
     <div className="h-full bg-zinc-950 p-2 sm:p-3 overflow-y-auto flex flex-col gap-3">
 
-      <BenchModal
-        open={benchModalOpen}
-        onClose={() => setBenchModalOpen(false)}
-        team={benchModalTeam}
-        cardType={benchModalCard}
-        homeTeamName={homeTeamName}
-        awayTeamName={awayTeamName}
-        staffList={benchStaffList}
-        onStaffListChange={setBenchStaffList}
-        cardHistory={cardHistory}
-        onApply={(team, card, direct, collective) => {
-          if (!matchEnded) {
-            props.addBenchSanction(team, card, direct, collective)
-            props.resetAndPausePossession()
-          }
-        }}
-      />
 
       <AudioModal open={showAudio} onClose={() => setShowAudio(false)} onChange={setAudioCfg} />
 
@@ -837,6 +930,9 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           {state.isMainClockRunning ? <Pause className="w-7 h-7" /> : <div className="flex items-center"><Play className="w-6 h-6" /><VolumeX className="w-4 h-4 ml-1 opacity-70" /></div>}
         </Button>
 
+        {/* 45 del local, pegado al reloj principal */}
+        <PossessionSide side="home" />
+
         <div className="flex flex-col items-center px-4">
           <span className={`text-[10px] font-black tracking-widest ${
             state.activeTimeout ? 'text-cyan-400' : state.isIntermission ? 'text-amber-400' : 'text-zinc-500'}`}>
@@ -852,6 +948,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
             <div className={`w-2 h-2 rounded-full ${state.isMainClockRunning ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
           </div>
         </div>
+
+        <PossessionSide side="away" />
 
         <Button
           onClick={() => { skipNextBuzzer.current = false; props.toggleMainClock() }}
@@ -980,19 +1078,25 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           </span>
         </div>
       ) : (
-      <div className={`w-full aspect-[1.4/1] sm:aspect-[2/1] lg:aspect-[2.6/1] min-h-[260px] sm:min-h-[300px] flex rounded-2xl overflow-hidden border-2 sm:border-4 border-zinc-700 shadow-2xl ${isFlipped ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={`w-full aspect-[1.25/1] sm:aspect-[1.8/1] lg:aspect-[2.2/1] min-h-[300px] sm:min-h-[380px] flex rounded-2xl overflow-hidden border-2 sm:border-4 border-zinc-700 shadow-2xl ${isFlipped ? 'flex-row-reverse' : 'flex-row'}`}>
         <BenchZone team="home" />
 
         <div className="flex-1 bg-slate-900 relative border-x-2 border-white/40 rounded-[40px] sm:rounded-[70px] overflow-hidden">
           {powerPlay.home && <div className={`absolute ${isFlipped ? 'right-2' : 'left-2'} top-2 bg-green-500 text-white text-[9px] sm:text-[10px] font-black px-2 py-1 rounded shadow z-20 animate-pulse`}>POWER PLAY</div>}
           {powerPlay.away && <div className={`absolute ${isFlipped ? 'left-2' : 'right-2'} top-2 bg-green-500 text-white text-[9px] sm:text-[10px] font-black px-2 py-1 rounded shadow z-20 animate-pulse`}>POWER PLAY</div>}
 
-          <div className="absolute top-1 sm:top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
-            <div className="bg-black/70 border border-zinc-700 rounded-lg px-2 sm:px-3 py-0.5 sm:py-1">
+          {/* Diferencial de patinadores: abajo al centro, dentro de la pista */}
+          <div className="absolute bottom-1 sm:bottom-2 left-1/2 -translate-x-1/2 z-30">
+            <div className={`bg-black/70 border rounded-lg px-2 sm:px-3 py-0.5 sm:py-1 ${
+              powerPlay.home || powerPlay.away ? 'border-green-500' : 'border-zinc-700'}`}>
               <span className="text-white font-black text-sm sm:text-lg tabular-nums">
                 {isFlipped ? awayLineup.count : homeLineup.count} <span className="text-zinc-500 text-xs">vs</span> {isFlipped ? homeLineup.count : awayLineup.count}
               </span>
             </div>
+          </div>
+
+          {/* Árbitro: solo, al centro arriba */}
+          <div className="absolute top-1 sm:top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2">
             {/* El árbitro cobra la falta al EQUIPO, no a un jugador */}
             <button onClick={() => { if (stopped) { toast.info(`Juego detenido (${stoppedLabel}): no se cobran faltas`); return } setRefOpen(true) }}
               disabled={matchEnded}
@@ -1007,14 +1111,41 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
             </button>
           </div>
 
+          {/* Zonas de posesión: tocar una mitad le da la bocha a ese equipo.
+              Es UN gesto para lo que se hace cuarenta veces por partido —
+              reponer los 45 y arrancarlos— en vez de dos botones. Van bajo las
+              fichas (z-0), así que tocar un jugador sigue abriendo su hoja. */}
+          {!matchEnded && ([
+            { team: 'home' as const, pos: isFlipped ? 'right-0' : 'left-0' },
+            { team: 'away' as const, pos: isFlipped ? 'left-0' : 'right-0' }
+          ]).map(zone => {
+            const running = zone.team === 'home' ? state.isPossessionLeftRunning : state.isPossessionRightRunning
+            return (
+              <button key={zone.team}
+                onClick={() => {
+                  if (zone.team === 'home') { props.resetPossessionLeft(); props.togglePossessionLeft() }
+                  else { props.resetPossessionRight(); props.togglePossessionRight() }
+                  toast.success(`Posesión ${zone.team === 'home' ? homeTeamName : awayTeamName}`, { duration: 1200 })
+                }}
+                title={`Tocar: posesión de ${zone.team === 'home' ? homeTeamName : awayTeamName}`}
+                className={`absolute top-0 bottom-0 w-1/2 z-0 transition-colors ${zone.pos} ${
+                  running ? 'bg-green-500/[0.07]' : 'hover:bg-white/[0.04]'}`}>
+                <span className={`absolute bottom-8 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase tracking-widest ${
+                  running ? 'text-green-400/70' : 'text-white/20'}`}>
+                  Posesión
+                </span>
+              </button>
+            )
+          })}
+
           {/* Linea central y circulo */}
-          <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white/25 -translate-x-1/2" />
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[16%] aspect-square border-2 border-white/25 rounded-full" />
+          <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white/25 -translate-x-1/2 pointer-events-none z-[1]" />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[16%] aspect-square border-2 border-white/25 rounded-full pointer-events-none z-[1]" />
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/40 rounded-full" />
 
           {/* Areas: parten en la linea de porteria, que esta adelantada */}
-          <div className="absolute left-[7.5%] top-1/2 -translate-y-1/2 w-[22%] h-[58%] border-2 border-white/25 rounded-r-lg" />
-          <div className="absolute right-[7.5%] top-1/2 -translate-y-1/2 w-[22%] h-[58%] border-2 border-white/25 rounded-l-lg" />
+          <div className="absolute left-[7.5%] top-1/2 -translate-y-1/2 w-[22%] h-[58%] border-2 border-white/25 rounded-r-lg pointer-events-none z-[1]" />
+          <div className="absolute right-[7.5%] top-1/2 -translate-y-1/2 w-[22%] h-[58%] border-2 border-white/25 rounded-l-lg pointer-events-none z-[1]" />
 
           {/* Arcos adelantados ~3 m del fondo: queda el pasillo por detras */}
           {(['left', 'right'] as const).map(side => (
@@ -1066,78 +1197,37 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       )}
 
-      {/* ── RELOJES DE 45: juntos al centro ──────────────────────────────────
-           Van pegados uno al otro a proposito. Una sola mano cubre los dos,
-           que es como se opera de verdad la mesa. Repartidos en los paneles
-           de equipo quedaban a medio metro de distancia en pantalla ancha. */}
-      <div className="flex justify-center">
-        <div className={`flex items-stretch gap-2 sm:gap-3 ${isFlipped ? 'flex-row-reverse' : 'flex-row'}`}>
-          {([
-            { team: 'home' as const, name: homeTeamName, clock: state.possessionClockLeft, running: state.isPossessionLeftRunning,
-              toggle: props.togglePossessionLeft, reset: props.resetPossessionLeft, accent: 'text-blue-400', border: 'border-blue-800' },
-            { team: 'away' as const, name: awayTeamName, clock: state.possessionClockRight, running: state.isPossessionRightRunning,
-              toggle: props.togglePossessionRight, reset: props.resetPossessionRight, accent: 'text-amber-400', border: 'border-amber-800' }
-          ]).map(side => (
-            <div key={side.team} className={`bg-zinc-950 border-2 ${side.border} rounded-xl px-3 sm:px-4 py-2 flex items-center gap-2 sm:gap-3`}>
-              <div className="text-center min-w-[92px] sm:min-w-[130px]">
-                <span className={`block text-[9px] sm:text-[10px] font-black uppercase tracking-widest truncate ${side.accent}`}>
-                  {side.name}
-                </span>
-                <span className={`block text-3xl sm:text-5xl font-black tabular-nums leading-none ${
-                  side.clock <= 10 && side.running ? 'text-red-500 animate-pulse' : 'text-green-400'}`}
-                  style={{ fontFamily: 'var(--font-led)' }}>
-                  {formatTime(side.clock)}
-                </span>
-              </div>
-              <div className="flex flex-col gap-1">
-                <Button size="sm" disabled={matchEnded} onClick={side.toggle}
-                  className={`h-9 w-12 sm:h-10 sm:w-14 p-0 ${side.running ? 'bg-red-600 hover:bg-red-500' : 'bg-green-700 hover:bg-green-600'}`}>
-                  {side.running ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </Button>
-                <Button size="sm" disabled={matchEnded} onClick={side.reset}
-                  className="h-9 w-12 sm:h-10 sm:w-14 p-0 bg-zinc-800 hover:bg-zinc-700">
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── MESA DE CONTROL: cumplimiento de azules y rojas ─────────────────── */}
+      {/* ── MESA DE CONTROL: solo azules (la roja expulsa) ─────────────────── */}
       <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
         <div className="bg-zinc-900 py-1 text-center border-b border-zinc-800">
-          <span className="text-[10px] font-black text-zinc-400 tracking-[0.2em] uppercase">Mesa de control — cumplimiento de azules y rojas</span>
+          <span className="text-[10px] font-black text-zinc-400 tracking-[0.2em] uppercase">Mesa de control — cumplimiento de azules</span>
         </div>
         <div className={`flex min-h-[64px] relative ${isFlipped ? 'flex-row-reverse' : 'flex-row'}`}>
           <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-red-600 -translate-x-1/2 z-10" />
           {([
-            { blues: blueHome, reds: redHome, tone: 'bg-blue-950/20', chip: 'bg-blue-600 border-blue-400' },
-            { blues: blueAway, reds: redAway, tone: 'bg-amber-950/20', chip: 'bg-amber-600 border-amber-400' }
+            { blues: blueHome, tone: 'bg-blue-950/20', chip: 'bg-blue-600 border-blue-400' },
+            { blues: blueAway, tone: 'bg-amber-950/20', chip: 'bg-amber-600 border-amber-400' }
           ]).map((side, idx) => (
             <div key={idx} className={`flex-1 flex flex-wrap items-center justify-center gap-3 p-2 ${side.tone}`}>
               {side.blues.map(s => (
                 <button key={s.id} onClick={() => askCancel(s.id, s.playerNumber, 'azul')}
-                  className="flex flex-col items-center z-20 group" title="Tocar para anular esta sanción">
-                  <div className="relative">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-black border-2 group-hover:ring-2 group-hover:ring-white/60 ${side.chip}`}>{s.playerNumber}</div>
+                  className="flex items-center gap-2 z-20 group bg-black/50 border border-zinc-700 hover:border-white/60 rounded-lg px-2 py-1"
+                  title="Tocar para anular esta sanción">
+                  <div className="relative shrink-0">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-black border-2 ${side.chip}`}>{s.playerNumber}</div>
                     <CardTally team={idx === 0 ? 'home' : 'away'} number={s.playerNumber} />
                   </div>
-                  <span className="text-[9px] font-mono font-bold mt-0.5 text-blue-300">{formatTime(s.remainingTime)}</span>
+                  {/* Cuenta regresiva grande: el operador no tiene que girar la
+                      cabeza al televisor para saber cuánto le queda al sancionado */}
+                  <span className={`font-black tabular-nums leading-none text-2xl sm:text-3xl ${
+                    s.remainingTime <= 15 ? 'text-red-400 animate-pulse' : 'text-blue-300'}`}
+                    style={{ fontFamily: 'var(--font-led)' }}>
+                    {formatTime(s.remainingTime)}
+                  </span>
                 </button>
               ))}
-              {side.reds.map(s => (
-                <button key={s.id} onClick={() => askCancel(s.id, s.playerNumber, 'roja')}
-                  className="flex flex-col items-center z-20 bg-red-950/50 px-2 py-1 rounded border border-red-800 group" title="Tocar para anular esta sanción">
-                  <div className="relative">
-                    <div className="w-8 h-8 rounded bg-red-600 border-2 border-white flex items-center justify-center text-white text-xs font-black group-hover:ring-2 group-hover:ring-white/60">{s.playerNumber}</div>
-                    <CardTally team={idx === 0 ? 'home' : 'away'} number={s.playerNumber} />
-                  </div>
-                  <span className="text-[9px] font-mono font-bold mt-0.5 text-red-400">{formatTime(s.remainingTime)}</span>
-                </button>
-              ))}
-              {side.blues.length === 0 && side.reds.length === 0 && (
-                <span className="text-[10px] text-zinc-600 font-bold italic uppercase">Silla vacia</span>
+              {side.blues.length === 0 && (
+                <span className="text-[10px] text-zinc-600 font-bold italic uppercase">Silla vacía</span>
               )}
             </div>
           ))}
@@ -1217,8 +1307,21 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               <Button onClick={() => { const m = parseInt(customIntermissionMinutes); if (m > 0) { props.setMainClockTime(m); setCustomIntermissionMinutes(''); toast.success(`Periodo fijado en ${m} min`) } }}
                 disabled={matchEnded} className="h-10 px-2 text-[10px] font-bold bg-zinc-700 hover:bg-zinc-600">FIJAR</Button>
             </div>
-            <Button onClick={() => { props.resetMainClock(); toast.info('Reloj reiniciado') }} disabled={matchEnded}
-              className="h-10 text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700"><RotateCcw className="w-3 h-3 mr-1" /> RESET RELOJ</Button>
+            {/* Reset del reloj: dos pasos. Un toque accidental durante el
+                partido no puede borrar el tiempo de juego. */}
+            {resetArmed ? (
+              <Button onClick={() => { props.resetMainClock(); setResetArmed(false); toast.info('Reloj reiniciado') }}
+                disabled={matchEnded}
+                className="h-10 text-[10px] font-black bg-red-600 hover:bg-red-500 animate-pulse">
+                CONFIRMAR RESET
+              </Button>
+            ) : (
+              <Button onClick={() => { setResetArmed(true); setTimeout(() => setResetArmed(false), 4000) }}
+                disabled={matchEnded}
+                className="h-10 text-[10px] font-bold bg-zinc-900 border border-zinc-700 hover:bg-zinc-800 text-zinc-400">
+                <Lock className="w-3 h-3 mr-1" /> RESET RELOJ
+              </Button>
+            )}
             <Button onClick={() => setAddTo('home')} disabled={matchEnded}
               className="h-10 text-[10px] font-bold bg-blue-900 hover:bg-blue-800"><UserPlus className="w-3 h-3 mr-1" /> + JUGADOR {homeTeamName.slice(0, 8)}</Button>
             <Button onClick={() => setAddTo('away')} disabled={matchEnded}
@@ -1320,8 +1423,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                 ) : (
                   <>
                     <div className="grid grid-cols-2 gap-2">
-                      <Button onClick={() => openBench(selected.team, 'yellow', selected.player)} className="h-14 font-black bg-yellow-500 hover:bg-yellow-400 text-black">AMARILLA BANCA</Button>
-                      <Button onClick={() => openBench(selected.team, 'red', selected.player)} className="h-14 font-black bg-red-600 hover:bg-red-500">ROJA BANCA</Button>
+                      <Button onClick={() => { applyBenchDirect(selected.player, selected.team, 'yellow'); setSelected(null) }} className="h-14 font-black bg-yellow-500 hover:bg-yellow-400 text-black">AMARILLA BANCA</Button>
+                      <Button onClick={() => { applyBenchDirect(selected.player, selected.team, 'red'); setSelected(null) }} className="h-14 font-black bg-red-600 hover:bg-red-500">ROJA BANCA</Button>
                     </div>
                     <p className="text-[10px] text-zinc-600 text-center font-bold">EN BANCA · abre el reparto de colectivas</p>
                   </>

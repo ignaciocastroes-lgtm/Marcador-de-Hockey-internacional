@@ -1,4 +1,4 @@
-# ARDI Hockey Patín 3.22 — "Pista Viva"
+# ARDI Hockey Patín 3.26 — "Pista Viva"
 
 ## Modo PISTA: la ficha es la mesa de mando
 Tocar un jugador abre su hoja de acciones. El menú de tarjetas lo decide la
@@ -413,3 +413,107 @@ se aplican SOBRE el color elegido.
 **La pista dinámica sale de la vista clásica.** El modo PISTA la superó: allí es
 mesa de mando, no vista de sólo lectura. Mantener las dos era tener dos
 implementaciones de lo mismo.
+
+## 3.23 — Posesión por toque, mesa de castigo y arreglos
+
+**El cambio de posesión es un solo gesto.** Tocar una mitad de la pista le da la
+bocha a ese equipo: repone los 45 y los arranca, y detiene los del rival. Era la
+acción más repetida del partido y costaba dos botones. Las zonas van bajo las
+fichas, así que tocar un jugador sigue abriendo su hoja.
+
+**Los relojes de 45 flanquean el reloj principal**, uno a cada lado, con controles
+chicos para el caso raro —pausar o corregir—. Se eliminó la barra suelta que
+ocupaba alto, y **la pista creció** de 2.6/1 a 2.2/1 en escritorio, con 380 px de
+alto mínimo.
+
+**Arrancar un 45 ya no suena.** Arrancar la posesión enciende el reloj principal
+por acoplamiento, y eso disparaba la chicharra de puesta en juego. Ahora se detecta
+el origen y no suena. Corregido en las dos vistas.
+
+**La zona de castigo es sólo de azules.** Las rojas expulsan, no cumplen tiempo en
+la silla. Y el dibujo se reemplazó por la **cuenta regresiva grande** con tipografía
+LED, que pasa a rojo pulsante bajo los 15 segundos: el operador ya no tiene que
+girar la cabeza al televisor.
+
+**El árbitro queda solo al centro arriba** y el diferencial de patinadores baja al
+centro abajo, dentro de la pista, con borde verde cuando hay superioridad.
+
+**Reset del reloj con dos pasos.** Un toque arma y otro confirma, y se desarma solo
+a los 4 segundos. Un roce accidental ya no puede borrar el tiempo de juego.
+
+**Botón de teclas rápidas en la barra del page.** El modal de 14 acciones existía
+pero no había cómo abrirlo desde ahí.
+
+**Pantalla completa en Chrome móvil.** Los lanzadores usaban `fixed inset-0`, que
+en Android se dimensiona contra el viewport grande y deja una franja sin cubrir al
+retraerse la barra de direcciones. Ahora usan `100dvh`, que sigue al viewport
+dinámico. En Windows ya funcionaba, por eso no se veía.
+
+## 3.24 — Equipos por serie y plantel vinculado
+
+**`Team` gana `serie` y `roster`.** El mismo club en Sub-13 y en Adulta son dos
+registros distintos: tienen planteles y camisetas distintas. Ambos campos son
+opcionales, así que **los equipos guardados antes de esta versión no se pierden**:
+al no traer serie, se muestran en todas hasta que el operador los reguarde.
+
+**El diálogo Express se reordenó por dependencia.** Primero la serie, después los
+equipos, porque la serie es la que filtra.
+- Selector con las **series reales** (`lib/series`), con la rama dentro: elegir
+  Sub-13 fija automáticamente rama femenina. Antes eran dos campos independientes
+  que permitían combinaciones que no existen, con una lista inventada que incluía
+  Sub-9, Sub-21 y "Liga de Honor".
+- Los equipos guardados se filtran por la serie elegida y muestran su número de
+  camisetas.
+- **Elegir un equipo carga su plantel**: nombre, escudo y camisetas de esa serie.
+  Si el equipo no tiene plantel guardado, se cargan las del plantel del club para
+  esa serie.
+- Botón GUARDAR junto a cada equipo: almacena nombre, escudo, serie y camisetas.
+  Actualiza si ya existe ese club en esa serie, en vez de duplicar.
+- Las tarjetas de camisetas muestran a qué serie pertenecen.
+
+**El flujo con planilla completa usa la misma lista de series.** Tenía su propia
+lista inventada, distinta de la del Express.
+
+## 3.25 — Un solo editor de lanzadores
+
+**El conflicto era de arquitectura, no de interfaz.** La animación de gol se
+editaba desde dos modales que escribían en llaves distintas: el panel de pantallas
+en `ardi-live-logos` (`goalDuration`, `jerseyDesign`, `homeJ1`…) y el de lanzadores
+en `ardi-overlays` (`goal.duration`, `goal.text`…). Ganaba el último que guardaba,
+y el operador no tenía forma de saber cuál era.
+
+**`ardi-overlays` es ahora la única fuente de verdad del lanzador de gol.** Absorbe
+el diseño de camiseta y los cuatro colores. La tarjeta "Animación de gol" se
+eliminó del panel de pantallas: hay un solo lugar donde se edita.
+
+**Migración incluida.** La primera carga sin configuración de lanzadores toma lo
+que ya estuviera en `ardi-live-logos` —diseño, duración y colores— así que nadie
+pierde lo que había elegido.
+
+**Tamaño, posición y previsualización** para los tres lanzadores:
+- Tamaño del 60% al 140%.
+- Posición vertical: arriba, centro o abajo.
+- Previsualización en proporción 16:9, la real del tablero, con el contenido
+  a escala y en su posición. Se ve el resultado sin proyectar.
+
+Todo se guarda por lanzador y llega en vivo a las ventanas abiertas.
+
+## 3.26 — Fichas rediseñadas y sanción de banca en un toque
+
+**Las fichas.** La cabeza y el cuerpo eran dos formas sueltas con nueve píxeles de
+hueco entre medio, y el patinador era el mismo dibujo del funco con dos rayas.
+- **Funco**: silueta de una sola pieza, cabeza y cuerpo compartiendo contorno.
+- **Patinador**: torso inclinado hacia adelante, patines y stick. Silueta
+  claramente distinta. El portero lleva casco integral en vez de cabeza redonda.
+
+**La sanción de banca pasa de tres pasos a uno.** Antes: abrir el modal, elegir al
+infractor, marcar uno por uno a quiénes alcanza el castigo, aplicar.
+- Ahora se **arma** la tarjeta desde la banca (AM. BANCA o RJ. BANCA), la zona se
+  resalta con el color de la tarjeta, y **un toque sobre el infractor la aplica**.
+- El pintado del resto ocurre solo: el reglamento dice que la amonestación al
+  banquillo alcanza a todos sus integrantes, así que preguntarlo uno por uno era
+  pedirle al operador que decidiera algo que la norma ya decidió.
+- CANCELAR visible mientras está armada, y Esc también la desarma.
+- Si la banca ya está pintada, avisa que sólo aplica la directa.
+
+`BenchModal` queda sin uso y se retiró de la vista.

@@ -354,3 +354,20 @@
 @media (prefers-reduced-motion: reduce) {
   .fx-neon, .fx-fluor { text-shadow: 0 0 8px var(--fx-color); }
 }
+
+
+/* ── Pantalla completa en Chrome móvil ─────────────────────────────────────
+   En el escritorio `fixed inset-0` cubre la ventana entera. En Chrome de
+   Android la barra de direcciones se retrae y expande, y los elementos fijos
+   se dimensionan contra el viewport GRANDE: queda una franja sin cubrir por
+   abajo. `dvh` es la unidad que sigue al viewport dinámico. */
+
+.overlay-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;      /* respaldo para navegadores sin dvh */
+  height: 100dvh;
+  max-height: 100dvh;
+  overscroll-behavior: contain;
+}

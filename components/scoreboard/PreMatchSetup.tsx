@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { ExpressRosterModal, type ExpressEntry } from '@/components/scoreboard/ExpressRosterModal'
+import { SERIES_ORDERED, serieLabel, findSerie } from '@/lib/series'
+import { squadFor } from '@/lib/club-roster'
 import { Play, Clock, Settings, X, Users, Upload, Trash2, Save, AlertTriangle, CheckCircle2, PenTool, Shield, User, Download, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -107,6 +109,7 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
   const [expressCustomDuration, setExpressCustomDuration] = useState('')
   
   // 🛡️ NUEVO: Selección de Categoría y Rama para Express
+  const [expressSerieId, setExpressSerieId]       = useState('')
   const [expressSeries, setExpressSeries]         = useState('Amistoso')
   const [expressGender, setExpressGender]         = useState('MASCULINA')
 
@@ -239,6 +242,30 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
   }, [state.matchConfig.signatures])
 
   // ─── Confirmación Express ─────────────────────────────────────────────────
+  /**
+   * Equipos de la serie elegida. Los guardados ANTES de la 3.24 no traen serie:
+   * se muestran siempre, para no hacerlos desaparecer del selector de nadie.
+   */
+  const teamsForSerie = savedTeams.filter(t =>
+    !t.serie || !expressSerieId || expressSerieId === 'amistoso' || t.serie === expressSerieId
+  )
+
+  /** Guarda el equipo CON su serie y sus camisetas: son de esa categoria. */
+  const saveExpressTeam = (side: 'home' | 'away') => {
+    const name = (side === 'home' ? expressHomeName : expressAwayName).trim().toUpperCase()
+    if (!name) { toast.warning('Escribe el nombre del equipo primero.'); return }
+    const entries = side === 'home' ? expressHomeEntries : expressAwayEntries
+    const logo = side === 'home' ? expressHomeLogo : expressAwayLogo
+    const serie = expressSerieId && expressSerieId !== 'amistoso' ? expressSerieId : undefined
+    const previo = savedTeams.find(t => t.name === name && t.serie === serie)
+    saveTeam({
+      id: previo?.id || `team-${Date.now()}`,
+      name, logo: logo || null, serie,
+      roster: entries.length ? entries : undefined
+    })
+    toast.success(previo ? `${name} actualizado` : `${name} guardado`)
+  }
+
   const handleExpressConfirm = () => {
     if (!expressHomeName.trim() || !expressAwayName.trim()) {
       toast.warning('Debes ingresar el nombre de ambos equipos.')
@@ -381,9 +408,11 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
               <Select value={configSeriesName} onValueChange={setConfigSeriesName}>
                 <SelectTrigger className="bg-zinc-800 border-zinc-600 mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-zinc-800 border-zinc-600 max-h-60">
-                  {['SUB 9','SUB 10','SUB 11','SUB 13','SUB 15','SUB 17','SUB 19','SUB 21','SUB 23','Adulta','Liga de Honor','Personalizable'].map(s => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  {/* Mismas series que el modo Express: una sola fuente */}
+                  {SERIES_ORDERED.map(se => (
+                    <SelectItem key={se.id} value={serieLabel(se).toUpperCase()}>{serieLabel(se)}</SelectItem>
                   ))}
+                  <SelectItem value="AMISTOSO">Amistoso</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -697,21 +726,71 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
           <DialogHeader><DialogTitle className="text-amber-400 font-black text-xl">INICIO EXPRESS — Partido Amistoso</DialogTitle></DialogHeader>
           <div className="space-y-4 p-2">
             
+            {/* ── SERIE: define la rama y filtra los equipos guardados ────── */}
+            <div className="pt-1">
+              <Label className="text-zinc-400 text-xs font-bold">Serie</Label>
+              <Select value={expressSerieId} onValueChange={id => {
+                setExpressSerieId(id)
+                if (id === 'amistoso') { setExpressSeries('Amistoso'); setExpressGender('MIXTA'); return }
+                const se = findSerie(id)
+                if (se) {
+                  setExpressSeries(serieLabel(se).toUpperCase())
+                  setExpressGender(se.gender === 'femenino' ? 'FEMENINA' : se.gender === 'masculino' ? 'MASCULINA' : 'MIXTA')
+                }
+              }}>
+                <SelectTrigger className="bg-zinc-800 border-zinc-600 mt-1 h-10 font-bold"><SelectValue placeholder="Elige la serie..." /></SelectTrigger>
+                <SelectContent className="bg-zinc-800 border-zinc-600 max-h-72">
+                  <SelectItem value="amistoso">Amistoso (sin serie)</SelectItem>
+                  {SERIES_ORDERED.map(se => (
+                    <SelectItem key={se.id} value={se.id}>{serieLabel(se)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-zinc-500 leading-snug mt-1">
+                La rama va dentro de la serie. Elegirla filtra los equipos guardados
+                y carga las camisetas de esa categoria.
+              </p>
+            </div>
+
             <div>
               <Label className="text-zinc-400 text-xs">Equipo LOCAL</Label>
               <div className="flex gap-2 mt-1">
                 {savedTeams.length > 0 && (
                   <Select onValueChange={(val) => {
-                    const t = savedTeams.find(x => x.id === val);
-                    if(t) { setExpressHomeName(t.name); setExpressHomeLogo(t.logo); }
+                    const t = savedTeams.find(x => x.id === val)
+                    if (!t) return
+                    setExpressHomeName(t.name)
+                    setExpressHomeLogo(t.logo)
+                    // El plantel viene con el equipo: numeros de ESA serie
+                    if (t.roster && t.roster.length) {
+                      setExpressHomeEntries(t.roster)
+                      toast.success(`${t.name}: ${t.roster.length} camisetas cargadas`)
+                    } else if (expressSerieId && expressSerieId !== 'amistoso') {
+                      const squad = squadFor(expressSerieId)
+                      if (squad.length) {
+                        setExpressHomeEntries(squad.map(p => ({ number: p.number, isGoalie: !!p.isGoalie })))
+                        toast.success(`${squad.length} camisetas de la serie`)
+                      }
+                    }
                   }}>
                     <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-600"><SelectValue placeholder="Guardados..." /></SelectTrigger>
-                    <SelectContent className="bg-zinc-800 border-zinc-600">
-                      {savedTeams.map(t => <SelectItem key={`exp-h-${t.id}`} value={t.id}>{t.name}</SelectItem>)}
+                    <SelectContent className="bg-zinc-800 border-zinc-600 max-h-60">
+                      {teamsForSerie.map(t => (
+                        <SelectItem key={`exp-h-${t.id}`} value={t.id}>
+                          {t.name}{t.roster?.length ? ` (${t.roster.length})` : ''}
+                        </SelectItem>
+                      ))}
+                      {teamsForSerie.length === 0 && (
+                        <div className="px-2 py-3 text-[11px] text-zinc-500">Sin equipos guardados en esta serie</div>
+                      )}
                     </SelectContent>
                   </Select>
                 )}
                 <Input value={expressHomeName} onChange={e => { setExpressHomeName(e.target.value); setExpressHomeLogo(null); }} placeholder="Ej: DEPORTES TEMUCO" className="bg-zinc-800 border-zinc-600 flex-1" />
+                <Button onClick={() => saveExpressTeam('home')} size="sm" variant="outline"
+                  className="border-zinc-600 h-10 px-2 text-[10px] font-bold shrink-0" title="Guardar equipo con su serie y camisetas">
+                  GUARDAR
+                </Button>
               </div>
             </div>
 
@@ -720,41 +799,40 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
               <div className="flex gap-2 mt-1">
                 {savedTeams.length > 0 && (
                   <Select onValueChange={(val) => {
-                    const t = savedTeams.find(x => x.id === val);
-                    if(t) { setExpressAwayName(t.name); setExpressAwayLogo(t.logo); }
+                    const t = savedTeams.find(x => x.id === val)
+                    if (!t) return
+                    setExpressAwayName(t.name)
+                    setExpressAwayLogo(t.logo)
+                    // El plantel viene con el equipo: numeros de ESA serie
+                    if (t.roster && t.roster.length) {
+                      setExpressAwayEntries(t.roster)
+                      toast.success(`${t.name}: ${t.roster.length} camisetas cargadas`)
+                    } else if (expressSerieId && expressSerieId !== 'amistoso') {
+                      const squad = squadFor(expressSerieId)
+                      if (squad.length) {
+                        setExpressAwayEntries(squad.map(p => ({ number: p.number, isGoalie: !!p.isGoalie })))
+                        toast.success(`${squad.length} camisetas de la serie`)
+                      }
+                    }
                   }}>
                     <SelectTrigger className="w-[140px] bg-zinc-800 border-zinc-600"><SelectValue placeholder="Guardados..." /></SelectTrigger>
-                    <SelectContent className="bg-zinc-800 border-zinc-600">
-                      {savedTeams.map(t => <SelectItem key={`exp-a-${t.id}`} value={t.id}>{t.name}</SelectItem>)}
+                    <SelectContent className="bg-zinc-800 border-zinc-600 max-h-60">
+                      {teamsForSerie.map(t => (
+                        <SelectItem key={`exp-a-${t.id}`} value={t.id}>
+                          {t.name}{t.roster?.length ? ` (${t.roster.length})` : ''}
+                        </SelectItem>
+                      ))}
+                      {teamsForSerie.length === 0 && (
+                        <div className="px-2 py-3 text-[11px] text-zinc-500">Sin equipos guardados en esta serie</div>
+                      )}
                     </SelectContent>
                   </Select>
                 )}
                 <Input value={expressAwayName} onChange={e => { setExpressAwayName(e.target.value); setExpressAwayLogo(null); }} placeholder="Ej: CLUB CONDOR" className="bg-zinc-800 border-zinc-600 flex-1" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-700">
-              <div>
-                <Label className="text-zinc-400 text-xs">Serie / Categoría</Label>
-                <Select value={expressSeries} onValueChange={setExpressSeries}>
-                  <SelectTrigger className="bg-zinc-800 border-zinc-600 mt-1 h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-zinc-800 border-zinc-600 max-h-60">
-                    {['Amistoso', 'SUB 9', 'SUB 10', 'SUB 11', 'SUB 13', 'SUB 15', 'SUB 17', 'SUB 19', 'SUB 21', 'SUB 23', 'Adulta', 'Liga de Honor', 'Personalizable'].map(s => (
-                      <SelectItem key={`exp-s-${s}`} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="text-zinc-400 text-xs">Rama</Label>
-                <Select value={expressGender} onValueChange={setExpressGender}>
-                  <SelectTrigger className="bg-zinc-800 border-zinc-600 mt-1 h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent className="bg-zinc-800 border-zinc-600">
-                    <SelectItem value="MASCULINA">Masculina</SelectItem>
-                    <SelectItem value="FEMENINA">Femenina</SelectItem>
-                    <SelectItem value="MIXTA">Mixta</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Button onClick={() => saveExpressTeam('away')} size="sm" variant="outline"
+                  className="border-zinc-600 h-10 px-2 text-[10px] font-bold shrink-0" title="Guardar equipo con su serie y camisetas">
+                  GUARDAR
+                </Button>
               </div>
             </div>
 
@@ -801,6 +879,11 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
                       ? 'Tocar para cargar'
                       : `${b.entries.length} camisetas · ${b.entries.filter(e => e.isGoalie).length || 1} portero`}
                   </span>
+                  {expressSerieId && expressSerieId !== 'amistoso' && (
+                    <span className="block text-[9px] text-zinc-600 uppercase font-bold">
+                      {serieLabel(findSerie(expressSerieId)!)}
+                    </span>
+                  )}
                 </button>
               ))}
               <p className="col-span-2 text-[10px] text-zinc-500 leading-snug">

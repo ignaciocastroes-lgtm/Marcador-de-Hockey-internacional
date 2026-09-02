@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { Monitor, Gamepad2, Maximize, Minimize, ExternalLink, Tv, LayoutDashboard, Settings2, X, Shield, Box, Circle, Type, Users, Layers } from 'lucide-react'
+import { Monitor, Gamepad2, Maximize, Minimize, ExternalLink, Tv, LayoutDashboard, Settings2, X, Shield, Box, Circle, Type, Users, Layers, Keyboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -318,6 +318,10 @@ export default function HockeyControlPanel() {
             <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(3)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P3 (Vis)</Button>
             <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(4)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P4 (T.L)</Button>
             <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(5)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P5 (T.V)</Button>
+            <Button size="sm" onClick={() => setShowHotkeys(true)}
+              className="h-8 font-black text-xs px-2 bg-zinc-800 hover:bg-zinc-700 ml-1" title="Teclas rápidas y mando Bluetooth">
+              <Keyboard className="w-4 h-4" />
+            </Button>
             <Button size="sm" onClick={() => venue.launchAllBoards([1, 2, 3, 4, 5])} className="h-8 font-black text-xs px-2 bg-amber-600 hover:bg-amber-500 text-black ml-1" title="Reparte los tableros por los monitores conectados">LANZAR TODO</Button>
           </div>
 

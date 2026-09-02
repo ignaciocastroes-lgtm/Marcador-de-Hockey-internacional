@@ -18,7 +18,7 @@ import { FINISHES, METAL_PRESETS, FLUOR_PRESETS, finishClass, finishStyle, type 
 // Ningun control se perdio; el inventario esta en PANEL_INVENTORY mas abajo.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type PanelId = 'identidad' | 'tipografia' | 'gol' | 'vistas' | null
+export type PanelId = 'identidad' | 'tipografia' | 'vistas' | null
 
 export interface ScreensPanelProps {
   liveLogos: Record<string, string>
@@ -42,7 +42,6 @@ export const PANEL_INVENTORY = [
   'homeUrl', 'awayUrl', 'shape', 'displayMode', 'effect3D', 'effectAnimated',
   'ledFont', 'fontWeight', 'letterSpacing',
   'boardBgColor', 'boardTextColor', 'boardAccentColor', 'possessionColor', 'penaltiesColor',
-  'jerseyDesign', 'goalDuration', 'homeJ1', 'homeJ2', 'awayJ1', 'awayJ2',
   'finishDigits', 'finishNames'
 ] as const
 
@@ -133,10 +132,6 @@ export function ScreensPanel(props: ScreensPanelProps) {
       <Card id="tipografia" title="Tipografía y colores" desc="Fuente, grosor, separación y paleta del tablero"
         tone="border-sky-800/60 hover:border-sky-600"
         icon={<Type className="w-6 h-6 text-sky-400 shrink-0" />} />
-
-      <Card id="gol" title="Animación de gol" desc="Diseño de camiseta, colores y duración"
-        tone="border-green-800/60 hover:border-green-600"
-        icon={<Circle className="w-6 h-6 text-green-400 shrink-0" />} />
 
       <Card id="vistas" title="Vistas y proyectores" desc="Qué panel se ve y lanzar cada pantalla"
         tone="border-blue-800/60 hover:border-blue-600"
@@ -293,39 +288,6 @@ export function ScreensPanel(props: ScreensPanelProps) {
           )}
         </div>
 
-      </Panel>
-
-      {/* ── 3. ANIMACIÓN DE GOL ─────────────────────────────────────────── */}
-      <Panel id="gol" title="Animación de gol" icon={<Circle className="w-5 h-5 text-green-400" />}>
-        <div className="grid grid-cols-2 gap-3">
-          <Picker k="jerseyDesign" label="Diseño de camiseta" options={[
-            ['solid', 'Color sólido'], ['striped', 'Rayada'], ['halved', 'Mitad y mitad']
-          ]} />
-          <Picker k="goalDuration" label="Duración" options={[
-            ['5', '5 segundos'], ['8', '8 segundos']
-          ]} />
-        </div>
-
-        <div className="bg-zinc-900 rounded-xl p-3 border border-zinc-800 space-y-3">
-          <div>
-            <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Local — fondo y número</Label>
-            <div className="grid grid-cols-2 gap-3 mt-1">
-              <Color k="homeJ1" label="Fondo" />
-              <Color k="homeJ2" label="Número" />
-            </div>
-          </div>
-          <div>
-            <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Visita — fondo y número</Label>
-            <div className="grid grid-cols-2 gap-3 mt-1">
-              <Color k="awayJ1" label="Fondo" />
-              <Color k="awayJ2" label="Número" />
-            </div>
-          </div>
-        </div>
-
-        <p className="text-[10px] text-zinc-600 leading-snug">
-          En qué tableros aparece la animación se elige en Lanzadores de proyección.
-        </p>
       </Panel>
 
       {/* ── 4. VISTAS Y PROYECTORES ─────────────────────────────────────── */}

@@ -18,13 +18,15 @@ interface Props {
   clockLabel?: string
   clockValue?: string
   sections?: StatsOverlayConfig
+  scale?: number
+  align?: 'top' | 'center' | 'bottom'
 }
 
 const CARD_COLOR = { yellow: '#facc15', blue: '#3b82f6', red: '#dc2626' } as const
 
 export function SummaryOverlay({
   state, scope, homeTeamName, awayTeamName, homeLogo, awayLogo,
-  accent, textColor, numberStyle, clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats
+  accent, textColor, numberStyle, clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center'
 }: Props) {
   const s = buildSummary(state, scope)
   const titulo = scope === 'primer_tiempo' ? 'RESUMEN 1ER TIEMPO' : 'FICHA DEL PARTIDO'
@@ -88,7 +90,12 @@ export function SummaryOverlay({
   )
 
   return (
-    <div className="fixed inset-0 z-[2800] flex flex-col bg-black px-[90px] py-[60px] bc-in">
+    <div className="overlay-fullscreen z-[2800] flex flex-col bg-black px-[90px] py-[60px] bc-in"
+      style={{
+        justifyContent: align === 'top' ? 'flex-start' : align === 'bottom' ? 'flex-end' : 'center',
+        transform: `scale(${scale})`,
+        transformOrigin: align === 'top' ? 'top center' : align === 'bottom' ? 'bottom center' : 'center'
+      }}>
 
       {/* ── CABECERA ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-center gap-[36px] shrink-0 bc-content-in">
