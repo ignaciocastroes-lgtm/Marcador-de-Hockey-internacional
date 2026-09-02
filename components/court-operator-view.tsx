@@ -1120,8 +1120,11 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
             return (
               <button key={zone.team}
                 onClick={() => {
-                  if (zone.team === 'home') { props.resetPossessionLeft(); props.togglePossessionLeft() }
-                  else { props.resetPossessionRight(); props.togglePossessionRight() }
+                  // resetPossession* ya es la accion completa: repone a 45, arranca
+                  // ese lado, detiene el otro y enciende el reloj principal.
+                  // Llamar despues al alternador lo apagaba en el mismo toque.
+                  if (zone.team === 'home') props.resetPossessionLeft()
+                  else props.resetPossessionRight()
                   toast.success(`Posesión ${zone.team === 'home' ? homeTeamName : awayTeamName}`, { duration: 1200 })
                 }}
                 title={`Tocar: posesión de ${zone.team === 'home' ? homeTeamName : awayTeamName}`}

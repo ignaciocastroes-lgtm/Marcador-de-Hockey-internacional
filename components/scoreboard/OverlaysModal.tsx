@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Goal, Trophy, BarChart3, RotateCcw, Check, Layers, Eye } from 'lucide-react'
+import { GoalOverlay } from '@/components/scoreboard/GoalOverlay'
+import { SummaryOverlay } from '@/components/scoreboard/SummaryOverlay'
+import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
+import { DEMO_STATE, DEMO_HOME, DEMO_AWAY } from '@/lib/overlay-demo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -127,56 +131,37 @@ export function OverlaysModal({ open, onClose }: Props) {
           <span className="flex items-center gap-1.5 text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1">
             <Eye className="w-3 h-3" /> Previsualización
           </span>
-          <div className="w-full aspect-video bg-black rounded-lg border border-zinc-700 relative overflow-hidden flex justify-center"
-            style={{ alignItems: (c.align || 'center') === 'top' ? 'flex-start' : (c.align || 'center') === 'bottom' ? 'flex-end' : 'center' }}>
-            <div className="p-3" style={{ transform: `scale(${c.scale || 1})`, transformOrigin: 'center' }}>
+          <div className="w-full aspect-video bg-black rounded-lg border border-zinc-700 relative overflow-hidden">
+            {/* Los componentes REALES a escala, no una maqueta: lo que se ve
+                aquí es literalmente lo que sale por el proyector. */}
+            <div className="absolute inset-0 origin-top-left pointer-events-none"
+              style={{ width: '1920px', height: '1080px', transform: 'scale(var(--prev-scale))' }}
+              ref={el => {
+                if (!el?.parentElement) return
+                const w = el.parentElement.clientWidth
+                el.style.setProperty('--prev-scale', String(w / 1920))
+              }}>
               {t === 'goal' && (
-                <div className="flex flex-col items-center gap-1">
-                  <span className="font-black text-2xl" style={{ color: cfg.goal.textColor }}>{cfg.goal.text}</span>
-                  {cfg.goal.showPlayerNumber && (
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center font-black text-lg"
-                      style={{ background: cfg.goal.homeJ1, color: cfg.goal.homeJ2 }}>7</span>
-                  )}
-                  {cfg.goal.showScore && (
-                    <span className="font-black text-xl tabular-nums" style={{ color: cfg.goal.scoreColor }}>2 - 1</span>
-                  )}
-                </div>
+                <GoalOverlay embedded goal={{ id: 'demo', team: 'home', playerNumber: '7' }}
+                  cfg={cfg.goal} phase="in"
+                  homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
+                  homeScore={2} awayScore={1} homeLogo="" awayLogo="" fontFamily="var(--font-led)" />
               )}
               {t === 'final' && (
-                /* Misma estructura que la pantalla real: cabecera, escudos
-                   atenuando al perdedor, resultado grande y parciales. */
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-[6px] font-black tracking-[0.3em] text-red-500">FIN DEL PARTIDO</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <div className="flex flex-col items-center">
-                      <div className="w-6 h-6 rounded-full bg-zinc-700" />
-                      <span className="text-[7px] font-black text-green-400 mt-0.5">LOCAL</span>
-                      <span className="text-[5px] font-black tracking-widest text-green-400">{cfg.final.winnerText}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="font-black text-2xl text-white tabular-nums">3</span>
-                      <span className="font-black text-sm text-zinc-600">–</span>
-                      <span className="font-black text-2xl text-white/50 tabular-nums">1</span>
-                    </div>
-                    <div className="flex flex-col items-center opacity-45">
-                      <div className="w-4 h-4 rounded-full bg-zinc-700" />
-                      <span className="text-[6px] font-black text-white mt-0.5">VISITA</span>
-                    </div>
-                  </div>
-                  <span className="text-[5px] text-zinc-500 tabular-nums mt-0.5">1T 2–1 · 2T 1–0</span>
-                </div>
+                <WinnerOverlay embedded state={DEMO_STATE}
+                  homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
+                  accent="#dc2626" textColor="#ffffff" winColor="#22c55e"
+                  numberStyle={{ fontFamily: 'var(--font-led)', fontWeight: 900 }}
+                  winnerText={cfg.final.winnerText} drawText={cfg.final.drawText}
+                  scale={cfg.final.scale} align={cfg.final.align} />
               )}
               {t === 'stats' && (
-                <div className="flex items-center gap-4">
-                  <span className="font-black text-2xl text-white tabular-nums">2</span>
-                  <div className="text-center">
-                    <span className="block text-[7px] font-bold text-zinc-500 tracking-widest">POSESIÓN</span>
-                    <div className="w-24 h-1.5 rounded-full overflow-hidden flex bg-white/10">
-                      <div className="w-[62%] bg-red-500" /><div className="w-[38%] bg-white/40" />
-                    </div>
-                  </div>
-                  <span className="font-black text-2xl text-white tabular-nums">1</span>
-                </div>
+                <SummaryOverlay embedded state={DEMO_STATE} scope="primer_tiempo"
+                  homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
+                  accent="#dc2626" textColor="#ffffff"
+                  numberStyle={{ fontFamily: 'var(--font-led)', fontWeight: 900 }}
+                  clockLabel="DESCANSO" clockValue="04:32"
+                  sections={cfg.stats} scale={cfg.stats.scale} align={cfg.stats.align} />
               )}
             </div>
           </div>

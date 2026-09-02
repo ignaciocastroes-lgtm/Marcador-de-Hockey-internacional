@@ -1,4 +1,4 @@
-# ARDI Hockey Patín 3.32 — "Pista Viva"
+# ARDI Hockey Patín 3.33 — "Pista Viva"
 
 ## Modo PISTA: la ficha es la mesa de mando
 Tocar un jugador abre su hoja de acciones. El menú de tarjetas lo decide la
@@ -638,3 +638,23 @@ un lugar.
 - Atajos DEL CLUB (plantel de esa serie) y POR DEFECTO (1 y 10 porteros, 2 al 9).
 - **GUARDAR** deja el equipo para las próximas fechas; **USAR** lo carga en este
   partido con sus camisetas. Dos acciones distintas que antes estaban mezcladas.
+
+## 3.33 — Toque de posesión arreglado y previsualización real
+
+**BUG: tocar la pista no arrancaba los 45.** El handler llamaba a
+`resetPossession*` y después a `togglePossession*`. Pero `resetPossession*` ya es
+la acción completa —repone a 45, arranca ese lado, detiene el otro y enciende el
+reloj principal— así que el alternador que venía detrás lo apagaba en el mismo
+toque. Quedaba el reloj de juego corriendo y la posesión parada.
+
+Ahora el toque llama sólo a `resetPossession*`, que es la acción determinista que
+corresponde: dar la bocha no es alternar nada.
+
+**La previsualización muestra lo que realmente se proyecta.** Los tres lanzadores
+se dibujan con los **componentes reales** montados con `embedded` y escalados
+desde el lienzo de 1920 al ancho del recuadro. Ya no es una maqueta parecida:
+es literalmente lo mismo que sale por el proyector, con la configuración en vivo.
+
+`lib/overlay-demo.ts` aporta un partido de ejemplo con datos representativos
+—goles con minuto, tarjetas de los dos colores, faltas y posesión desbalanceada—
+para ver la pantalla llena, que es cuando se rompe un diseño, y no vacía.
