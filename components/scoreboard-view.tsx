@@ -1,5 +1,9 @@
 "use client"
 
+import { GoalOverlay } from '@/components/scoreboard/GoalOverlay'
+
+import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
+
 import { finishClass, finishStyle, resolveFinish, type Finish } from '@/lib/finishes'
 
 import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
@@ -856,91 +860,18 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         {/* 🛡️ CAPA MAGICA DE ANIMACIÓN DE GOL (PANTALLA COMPLETA 100%) */}
         {/* Solo se proyecta en el marcador Global (P1), dejando los cronómetros P2 y P3 limpios */}
         {goalEvent && !editMode && ov.goal.enabled && showsOn(ov.goal.boards, bId) && (
-          <div style={{ alignItems: 'center', justifyContent: ov.goal.align === 'top' ? 'flex-start' : ov.goal.align === 'bottom' ? 'flex-end' : 'center' }}
-            className={`overlay-fullscreen z-[3000] flex flex-col items-center bg-black overflow-hidden ${goalPhase === 'out' ? 'bc-out' : 'bc-in'}`}>
-             
-             {/* BACKGROUND PARALLAX SHIELD WATERMARK */}
-             {ov.goal.showWatermark && <div className="absolute inset-0 z-0 flex items-center justify-center opacity-20 animate-parallax-pan pointer-events-none mix-blend-screen">
-                <img src={goalEvent.team === 'home' ? (liveLogos.homeUrl || state.homeTeam?.logo || GENERIC_SHIELDS[0]) : (liveLogos.awayUrl || state.awayTeam?.logo || GENERIC_SHIELDS[1])} className="w-[120%] h-[120%] object-contain blur-[8px]" alt="Watermark" />
-             </div>}
-
-             {/* Glow Radial del Equipo */}
-             {ov.goal.useTeamColor && <div className="absolute inset-0 z-0 opacity-60" style={{ background: `radial-gradient(circle at center, ${goalEvent.team === 'home' ? ov.goal.homeJ1 : ov.goal.awayJ1} 0%, transparent 80%)` }} />}
-             
-             {/* Texto GOL */}
-             <div className={`text-[300px] font-black tracking-widest z-10 animate-goal-flash drop-shadow-[0_0_80px_rgba(255,255,255,0.6)] leading-none mt-[-40px] ${goalPhase === 'out' ? 'bc-content-out' : 'bc-content-in'}`} style={{ fontFamily: currentFontFamily, color: ov.goal.textColor }}>
-               {ov.goal.text}
-             </div>
-             
-             {/* MARCADOR ACTUAL (Píldora Flotante) */}
-             <div className="flex items-center gap-[40px] z-10 mb-[60px] bg-black/60 px-[60px] py-[20px] rounded-full border-4 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-md">
-                <span className="text-[70px] font-bold text-white uppercase tracking-widest" style={{ fontFamily: currentFontFamily }}>{homeTeamName}</span>
-                <div className="text-[100px] font-black text-yellow-400" style={{ fontFamily: currentFontFamily }}>{state.homeScore}</div>
-                <span className="text-[60px] font-black text-zinc-500">-</span>
-                <div className="text-[100px] font-black text-yellow-400" style={{ fontFamily: currentFontFamily }}>{state.awayScore}</div>
-                <span className="text-[70px] font-bold text-white uppercase tracking-widest" style={{ fontFamily: currentFontFamily }}>{awayTeamName}</span>
-             </div>
-
-             <div className="flex flex-row items-center justify-center gap-[200px] w-full z-10">
-                {/* ESCUDO DEL EQUIPO GIGANTE (LIMPIO, SIN FONDO NEGRO) */}
-                <div className="animate-in slide-in-from-left-[100px] duration-700 w-[450px] h-[450px] flex items-center justify-center">
-                   <img src={goalEvent.team === 'home' ? (liveLogos.homeUrl || state.homeTeam?.logo || GENERIC_SHIELDS[0]) : (liveLogos.awayUrl || state.awayTeam?.logo || GENERIC_SHIELDS[1])} alt="Crest" className="w-full h-full object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.8)]" />
-                </div>
-
-                {/* CAMISETA DEPORTIVA SVG REALISTA */}
-                <div className="relative w-[450px] h-[450px] flex items-center justify-center animate-sway-3d animate-in slide-in-from-right-[100px] duration-700">
-                  <svg viewBox="0 0 512 512" className="absolute inset-0 w-full h-full drop-shadow-[0_40px_50px_rgba(0,0,0,0.9)]">
-                    <defs>
-                      <pattern id="striped-home" width="60" height="60" patternUnits="userSpaceOnUse">
-                        <rect width="30" height="60" fill={ov.goal.homeJ1} />
-                        <rect x="30" width="30" height="60" fill={ov.goal.homeJ2} />
-                      </pattern>
-                      <linearGradient id="halved-home" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="50%" stopColor={ov.goal.homeJ1} />
-                        <stop offset="50%" stopColor={ov.goal.homeJ2} />
-                      </linearGradient>
-                      
-                      <pattern id="striped-away" width="60" height="60" patternUnits="userSpaceOnUse">
-                        <rect width="30" height="60" fill={ov.goal.awayJ1} />
-                        <rect x="30" width="30" height="60" fill={ov.goal.awayJ2} />
-                      </pattern>
-                      <linearGradient id="halved-away" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="50%" stopColor={ov.goal.awayJ1} />
-                        <stop offset="50%" stopColor={ov.goal.awayJ2} />
-                      </linearGradient>
-                    </defs>
-
-                    {/* Cuerpo y Mangas */}
-                    <path 
-                      d="M375,76.5c-20-13-50-20-80-20c-13,0-26,5-39,15c-13-10-26-15-39-15c-30,0-60,7-80,20c-40,26-80,86-105,124 c-7,10,0,25,12,30l45,18c12,5,25-2,30-14l12-32v240c0,15,15,25,30,20c30-10,70-15,105-15s75,5,105,15c15,5,30-5,30-20v-240l12,32 c5,12,18,19,30,14l45-18c12-5,19-20,12-30C455,162.5,415,102.5,375,76.5z" 
-                      fill={getJerseyFill(goalEvent.team, ov.goal.jerseyDesign || 'solid')}
-                    />
-                    {/* Borde exterior */}
-                    <path 
-                      d="M375,76.5c-20-13-50-20-80-20c-13,0-26,5-39,15c-13-10-26-15-39-15c-30,0-60,7-80,20c-40,26-80,86-105,124 c-7,10,0,25,12,30l45,18c12,5,25-2,30-14l12-32v240c0,15,15,25,30,20c30-10,70-15,105-15s75,5,105,15c15,5,30-5,30-20v-240l12,32 c5,12,18,19,30,14l45-18c12-5,19-20,12-30C455,162.5,415,102.5,375,76.5z" 
-                      stroke="rgba(255,255,255,0.2)" strokeWidth="4" fill="none"
-                    />
-                    {/* Pliegues (Sombras) */}
-                    <path d="M165,115c0,0,20,150-10,320" stroke="rgba(0,0,0,0.25)" strokeWidth="15" fill="none" strokeLinecap="round" />
-                    <path d="M347,115c0,0-20,150,10,320" stroke="rgba(0,0,0,0.25)" strokeWidth="15" fill="none" strokeLinecap="round" />
-                    {/* Brillos */}
-                    <path d="M256,120c0,0,10,120,0,320" stroke="rgba(255,255,255,0.15)" strokeWidth="20" fill="none" strokeLinecap="round" />
-                    <path d="M110,140c10,40,15,80,0,120" stroke="rgba(255,255,255,0.1)" strokeWidth="10" fill="none" strokeLinecap="round" />
-                    <path d="M402,140c-10,40-15,80,0,120" stroke="rgba(255,255,255,0.1)" strokeWidth="10" fill="none" strokeLinecap="round" />
-                    {/* Cuello en V */}
-                    <path d="M217,71.5 l39,60 l39,-60 c-15,10 -30,15 -39,15 c-9,0 -24,-5 -39,-15 z" fill={goalEvent.team === 'home' ? ov.goal.homeJ2 : ov.goal.awayJ2} />
-                    {/* Puños */}
-                    <path d="M35,218.5 l45,18 l10,-26 l-45,-18 z" fill={goalEvent.team === 'home' ? ov.goal.homeJ2 : ov.goal.awayJ2} />
-                    <path d="M477,218.5 l-45,18 l-10,-26 l45,-18 z" fill={goalEvent.team === 'home' ? ov.goal.homeJ2 : ov.goal.awayJ2} />
-                  </svg>
-
-                  {/* NÚMERO DEL JUGADOR */}
-                  <span className="relative z-10 font-black pt-[60px] tracking-tighter" style={{ fontSize: goalEvent.playerNumber.length > 3 ? '100px' : '180px', color: goalEvent.team === 'home' ? ov.goal.homeJ2 : ov.goal.awayJ2, fontFamily: currentFontFamily, WebkitTextStroke: '6px rgba(255,255,255,0.9)', textShadow: '0 15px 30px rgba(0,0,0,0.6)' }}>
-                    {goalEvent.playerNumber && goalEvent.playerNumber !== 'EQUIPO' ? goalEvent.playerNumber : ''}
-                  </span>
-                </div>
-             </div>
-          </div>
+          <GoalOverlay
+            goal={goalEvent}
+            cfg={ov.goal}
+            phase={goalPhase}
+            homeTeamName={homeTeamName}
+            awayTeamName={awayTeamName}
+            homeScore={state.homeScore}
+            awayScore={state.awayScore}
+            homeLogo={liveLogos.homeUrl || state.homeTeam?.logo || ''}
+            awayLogo={liveLogos.awayUrl || state.awayTeam?.logo || ''}
+            fontFamily={currentFontFamily}
+          />
         )}
 
         {editMode && (
@@ -1188,46 +1119,22 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         )}
 
         {state.isMatchEnded && !editMode && !showFinalSummary && finalOn && (
-          <div className="overlay-fullscreen z-[2900] bc-in rounded-[30px] flex flex-col items-center justify-center" style={{ backgroundColor: liveLogos.boardBgColor ? `${liveLogos.boardBgColor}F2` : 'rgba(0,0,0,0.95)' }}>
-            <div className="animate-pulse font-black tracking-[0.2em] mb-[40px] text-[80px]" style={{ color: liveLogos.penaltiesColor || '#eab308' }}>
-              FIN DEL PARTIDO
-            </div>
-            <div className="font-bold tracking-[0.3em] uppercase text-center border-b-[6px] border-zinc-800 pb-[30px] mb-[100px] text-[60px]" style={{ color: liveLogos.boardTextColor || 'rgba(255,255,255,0.8)' }}>
-              {state.matchConfig.seriesName} - RAMA {state.matchConfig.gender}
-            </div>
-
-            {state.winner === 'draw' ? (
-              <div className="flex items-center justify-center w-full gap-[150px]">
-                <div className="flex flex-col items-center w-[600px]">
-                  <TeamLogo team="home" size={350} liveUrl={liveLogos.homeUrl || defaultHomeLogo() || ''} stateUrl={state.homeTeam?.logo} shape={liveLogos.shape} is3D={liveLogos.effect3D} isAnim={liveLogos.effectAnimated} />
-                  <span className="font-bold tracking-widest text-center text-[70px] overflow-hidden whitespace-nowrap text-ellipsis w-full mt-4" style={{ color: liveLogos.boardTextColor || '#ffffff' }}>{homeTeamName}</span>
-                </div>
-                <span className="text-zinc-500 font-black tracking-[0.2em] text-[100px]">{ov.final.drawText}</span>
-                <div className="flex flex-col items-center w-[600px]">
-                  <TeamLogo team="away" size={350} liveUrl={liveLogos.awayUrl} stateUrl={state.awayTeam?.logo} shape={liveLogos.shape} is3D={liveLogos.effect3D} isAnim={liveLogos.effectAnimated} />
-                  <span className="font-bold tracking-widest text-center text-[70px] overflow-hidden whitespace-nowrap text-ellipsis w-full mt-4" style={{ color: liveLogos.boardTextColor || '#ffffff' }}>{awayTeamName}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="animate-in zoom-in duration-500 flex flex-col items-center w-full">
-                <span className="font-bold mb-[60px] tracking-[0.3em] text-[70px]" style={{ color: liveLogos.possessionColor || '#22c55e' }}>¡GANADOR!</span>
-                {state.winner === 'home' && <TeamLogo team="home" size={400} liveUrl={liveLogos.homeUrl || defaultHomeLogo() || ''} stateUrl={state.homeTeam?.logo} shape={liveLogos.shape} is3D={liveLogos.effect3D} isAnim={liveLogos.effectAnimated} />}
-                {state.winner === 'away' && <TeamLogo team="away" size={400} liveUrl={liveLogos.awayUrl} stateUrl={state.awayTeam?.logo} shape={liveLogos.shape} is3D={liveLogos.effect3D} isAnim={liveLogos.effectAnimated} />}
-                <span className="font-black tracking-wider text-center drop-shadow-[0_10px_8px_rgba(0,0,0,0.5)] text-[140px] px-[40px] w-full overflow-hidden whitespace-nowrap text-ellipsis mt-8" style={{ color: liveLogos.boardTextColor || '#ffffff' }}>
-                  {state.winner === 'home' ? homeTeamName : awayTeamName}
-                </span>
-              </div>
-            )}
-
-            {!isPreview && onSaveAndReset && (
-              <button
-                onClick={onSaveAndReset}
-                className="mt-[120px] bg-blue-600 text-white font-bold transition-all shadow-[0_0_40px_rgba(37,99,235,0.5)] hover:shadow-[0_0_80px_rgba(37,99,235,0.8)] rounded-[20px] px-[80px] py-[30px] text-[40px] z-50 cursor-pointer"
-              >
-                GUARDAR RESULTADO Y REINICIAR
-              </button>
-            )}
-          </div>
+          <WinnerOverlay
+            state={state}
+            homeTeamName={homeTeamName}
+            awayTeamName={awayTeamName}
+            homeLogo={liveLogos.homeUrl || defaultHomeLogo() || state.homeTeam?.logo}
+            awayLogo={liveLogos.awayUrl || state.awayTeam?.logo}
+            accent={liveLogos.boardAccentColor || '#dc2626'}
+            textColor={liveLogos.boardTextColor || '#ffffff'}
+            winColor={liveLogos.possessionColor || '#22c55e'}
+            numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
+            winnerText={ov.final.winnerText}
+            drawText={ov.final.drawText}
+            scale={ov.final.scale}
+            align={ov.final.align}
+            onSaveAndReset={!isPreview ? onSaveAndReset : undefined}
+          />
         )}
 
       </div>

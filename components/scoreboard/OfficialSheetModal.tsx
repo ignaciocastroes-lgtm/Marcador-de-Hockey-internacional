@@ -188,7 +188,13 @@ export function OfficialSheetModal({
     csv += 'RESULTADO FINAL\n'
     csv += `${q(homeTeamName)},${state.homeScore}\n${q(awayTeamName)},${state.awayScore}\n`
     if (tieBreak) csv += `Definicion por penales,${state.homePenalties} - ${state.awayPenalties}\n`
-    if (state.winner) csv += `Ganador,${q(state.winner === 'draw' ? 'EMPATE' : state.winner === 'home' ? homeTeamName : awayTeamName)}\n`
+    if (state.winner !== undefined) {
+      const g = state.winner === 'draw' ? 'EMPATE'
+        : state.winner === 'home' ? homeTeamName
+        : state.winner === 'away' ? awayTeamName
+        : 'NO DEFINIDO'
+      csv += `Ganador,${q(g)}\n`
+    }
     csv += '\n'
 
     // Grillas de jugadores CSV (Con texto plano "1T 25:00")

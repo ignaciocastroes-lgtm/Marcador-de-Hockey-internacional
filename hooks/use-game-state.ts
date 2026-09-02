@@ -1330,18 +1330,33 @@ export function useGameState() {
     setState(prev => {
       const now = new Date().toISOString()
       
-      let winner: 'home' | 'away' | 'draw' = 'draw'
-      
+      /**
+       * El empate SOLO existe si el partido termina en tiempo reglamentario.
+       * Si llegó a alargue o a penales tiene que salir con ganador: la tanda
+       * se lanza hasta que uno gana, y el alargue se juega para desempatar.
+       * Si aquí el marcador sigue igualado en esas instancias, el partido no
+       * está definido y no corresponde declarar empate.
+       */
+      const fueADesempate = prev.period === 'alargue' || prev.period === 'penales'
+        || prev.homePenalties > 0 || prev.awayPenalties > 0
+
+      let winner: 'home' | 'away' | 'draw' | null = 'draw'
+
       if (prev.homeScore > prev.awayScore) {
         winner = 'home'
       } else if (prev.awayScore > prev.homeScore) {
         winner = 'away'
-      } else {
-        if (prev.homePenalties > prev.awayPenalties) {
-          winner = 'home'
-        } else if (prev.awayPenalties > prev.homePenalties) {
-          winner = 'away'
-        }
+      } else if (prev.homePenalties > prev.awayPenalties) {
+        winner = 'home'
+      } else if (prev.awayPenalties > prev.homePenalties) {
+        winner = 'away'
+      } else if (fueADesempate) {
+        // Igualados tras ir al desempate: indefinido, no empate
+        winner = null
+      }
+
+      if (winner === null) {
+        toast.warning('El partido fue a desempate y sigue igualado: no hay empate en alargue ni en penales. Continúa hasta que uno gane.', { duration: 7000 })
       }
 
       let resultMsg = `${prev.homeScore} - ${prev.awayScore}`

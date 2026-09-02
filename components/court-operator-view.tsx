@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import {
   Play, Pause, RotateCcw, Plus, Minus, Bell, Timer, Coffee, Goal, Square,
   ArrowRightLeft, ChevronRight, FileText, AlertTriangle, AlertCircle, Users,
-  VolumeX, LogOut, LogIn, X, History, HeartPulse, Shield, Hash, Star, SlidersHorizontal, Trash2, UserPlus, Maximize, Lock
+  VolumeX, LogOut, LogIn, X, History, HeartPulse, Shield, Hash, Star, SlidersHorizontal, Trash2, UserPlus, Maximize, Lock, Palette
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -149,6 +149,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   // Árbitro: las faltas son del EQUIPO, no de un jugador
   const [refOpen, setRefOpen] = useState(false)
   const [resetArmed, setResetArmed] = useState(false)
+  const [showLook, setShowLook] = useState(false)
 
   /**
    * Tarjeta de banca armada. El flujo es: elegir la tarjeta, tocar al infractor
@@ -341,11 +342,18 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       number: getDisplayNumber(p)
     })
 
-    // La colectiva alcanza a los integrantes fijos del banquillo, salvo que el
-    // equipo ya esté pintado: desde ahí sólo hay directa.
+    // La amonestación alcanza a TODO el banquillo, no sólo al cuerpo técnico:
+    // cuerpo técnico y suplentes por igual. Quienes están en pista no son banca.
+    // Si el equipo ya está pintado, sólo corre la directa.
+    const onCourt = team === 'home' ? homeCourtIds : awayCourtIds
     const targets = teamHasBenchYellow
       ? []
-      : roster.filter(p => isStaff(p) && p.id !== player.id).map(asUI)
+      : roster
+          .filter(p =>
+            p.id !== player.id &&
+            !onCourt.includes(p.id) &&
+            !isPlayerExpelled(p, team, cardHistory, sanctions))
+          .map(asUI)
 
     props.addBenchSanction(team, card, asUI(player), targets)
     props.resetAndPausePossession()
@@ -779,18 +787,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     const name = isHome ? homeTeamName : awayTeamName
     return (
       <div className={`flex items-center gap-1 ${isHome ? 'flex-row' : 'flex-row-reverse'}`}>
-        <div className="flex flex-col gap-1">
-          <Button size="sm" disabled={matchEnded}
-            onClick={() => isHome ? props.togglePossessionLeft() : props.togglePossessionRight()}
-            className={`h-7 w-8 p-0 ${running ? 'bg-red-600 hover:bg-red-500' : 'bg-green-700 hover:bg-green-600'}`}>
-            {running ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-          </Button>
-          <Button size="sm" disabled={matchEnded}
-            onClick={() => isHome ? props.resetPossessionLeft() : props.resetPossessionRight()}
-            className="h-7 w-8 p-0 bg-zinc-800 hover:bg-zinc-700">
-            <RotateCcw className="w-3 h-3" />
-          </Button>
-        </div>
+        {/* Sin botones: la posesión se toma tocando el lado de la pista */}
         <div className={isHome ? 'text-left' : 'text-right'}>
           <span className={`block text-[9px] font-black uppercase tracking-widest truncate max-w-[90px] ${isHome ? 'text-blue-400' : 'text-amber-400'}`}>
             {name}
@@ -1242,34 +1239,10 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       {/* ── ADMINISTRACION ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pb-4">
-        <div className="col-span-2 lg:col-span-1 flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 overflow-x-auto">
-          <span className="text-[9px] text-zinc-500 font-black uppercase shrink-0">Fichas</span>
-          <div className="flex gap-1 shrink-0">
-            {TOKEN_STYLES.map(t => (
-              <button key={t.id} onClick={() => patchLook({ ...look, tokenStyle: t.id })} title={t.hint}
-                className={`px-2 h-7 rounded text-[9px] font-black transition-colors ${
-                  look.tokenStyle === t.id ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <span className="w-px h-6 bg-zinc-700 shrink-0" />
-          {(['home', 'away'] as const).map(side => {
-            const kits = look[side]
-            const k = activeKit(kits)
-            return (
-              <button key={side}
-                onClick={() => patchLook({ ...look, [side]: { ...kits, active: kits.active === 'primary' ? 'alternate' : 'primary' } })}
-                title={`${side === 'home' ? homeTeamName : awayTeamName} — ${k.name}. Tocar para cambiar de equipación.`}
-                className="flex items-center gap-1 px-1.5 h-7 rounded bg-zinc-800 hover:bg-zinc-700 shrink-0">
-                <span className="w-3.5 h-3.5 rounded-sm border border-white/40" style={{ background: k.shirt }} />
-                <span className="w-3.5 h-3.5 rounded-sm border border-white/40" style={{ background: k.pants }} />
-                <span className="w-2.5 h-2.5 rounded-full border border-white/40" style={{ background: k.badge }} />
-                <span className="text-[8px] font-black text-zinc-400 uppercase">{k.name.slice(0, 3)}</span>
-              </button>
-            )
-          })}
-        </div>
+        <Button onClick={() => setShowLook(true)}
+          className="h-10 font-bold text-xs bg-zinc-800 hover:bg-zinc-700">
+          <Palette className="w-4 h-4 mr-1" /> APARIENCIA
+        </Button>
 
         {matchEnded ? (
           <Button onClick={resumeMatch} disabled={planillaLocked} className="h-10 font-bold text-xs bg-green-600 hover:bg-green-500 disabled:opacity-40"><Play className="w-4 h-4 mr-1" /> REANUDAR</Button>
@@ -1496,6 +1469,67 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       </Dialog>
 
       {/* ── DIALOGOS DE CONTROL ────────────────────────────────────────────── */}
+
+      {/* ── APARIENCIA DE LA PISTA ──────────────────────────────────────────
+           Estaba en la barra inferior compitiendo por ancho con FIN, PLANILLA,
+           HISTORIAL y NUEVO. Se configura una vez por temporada, no cada
+           partido, así que no tiene por qué ocupar espacio permanente. */}
+      <Dialog open={showLook} onOpenChange={setShowLook}>
+        <DialogContent className="bg-zinc-900 border-2 border-zinc-700 text-white max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-black">
+              <Palette className="w-5 h-5 text-blue-400" /> Apariencia de la pista
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1.5">Estilo de ficha</span>
+              <div className="grid grid-cols-3 gap-2">
+                {TOKEN_STYLES.map(t => (
+                  <button key={t.id} onClick={() => patchLook({ ...look, tokenStyle: t.id })} title={t.hint}
+                    className={`h-16 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                      look.tokenStyle === t.id ? 'border-blue-500 bg-blue-950/40' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}>
+                    <span className="text-sm font-black">{t.label}</span>
+                    <span className="text-[8px] text-zinc-500 px-1 text-center leading-tight">{t.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-zinc-800 pt-3">
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1.5">Equipaciones</span>
+              {(['home', 'away'] as const).map(side => {
+                const kits = look[side]
+                const k = activeKit(kits)
+                return (
+                  <div key={side} className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg p-2 mb-2">
+                    <span className={`text-xs font-black uppercase truncate flex-1 ${side === 'home' ? 'text-blue-400' : 'text-amber-400'}`}>
+                      {side === 'home' ? homeTeamName : awayTeamName}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="w-5 h-5 rounded border border-white/40" style={{ background: k.shirt }} title="Polera" />
+                      <span className="w-5 h-5 rounded border border-white/40" style={{ background: k.pants }} title="Pantalón" />
+                      <span className="w-4 h-4 rounded-full border border-white/40" style={{ background: k.badge }} title="Insignia" />
+                    </div>
+                    <Button size="sm"
+                      onClick={() => patchLook({ ...look, [side]: { ...kits, active: kits.active === 'primary' ? 'alternate' : 'primary' } })}
+                      className="h-8 px-2 text-[10px] font-black bg-zinc-800 hover:bg-zinc-700 shrink-0">
+                      {k.name.toUpperCase()}
+                    </Button>
+                  </div>
+                )
+              })}
+              <p className="text-[10px] text-zinc-600 leading-snug">
+                Cada equipo tiene titular y alternativa: se cambia cuando los colores
+                chocan con el rival.
+              </p>
+            </div>
+
+            <Button onClick={() => setShowLook(false)} className="w-full h-11 font-black bg-green-700 hover:bg-green-600">LISTO</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── ÁRBITRO: la falta es del equipo ─────────────────────────────────── */}
       <Dialog open={refOpen} onOpenChange={setRefOpen}>

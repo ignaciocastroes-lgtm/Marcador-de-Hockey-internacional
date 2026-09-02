@@ -741,18 +741,17 @@ export function OperatorView(props: OperatorViewProps) {
                         </div>
                       </div>
 
-                      {/* ⌨️ ATAJOS DE TECLADO */}
-                      <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 space-y-3">
-                        <Label className="text-amber-400 text-xs font-black uppercase tracking-widest flex items-center"><Keyboard className="w-4 h-4 mr-2"/> Atajos de Teclado</Label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                           <HotkeyInput label="Play/Pausa (Sonido)" actionKey="mainSound" hotkeys={hotkeys} saveHotkeys={saveHotkeys} />
-                           <HotkeyInput label="Play/Pausa (Mudo)" actionKey="mainMute" hotkeys={hotkeys} saveHotkeys={saveHotkeys} />
-                           <HotkeyInput label="Play/Pausa 45s Local" actionKey="homePosToggle" hotkeys={hotkeys} saveHotkeys={saveHotkeys} />
-                           <HotkeyInput label="Reset 45s Local" actionKey="homePosReset" hotkeys={hotkeys} saveHotkeys={saveHotkeys} />
-                           <HotkeyInput label="Play/Pausa 45s Visita" actionKey="awayPosToggle" hotkeys={hotkeys} saveHotkeys={saveHotkeys} />
-                           <HotkeyInput label="Reset 45s Visita" actionKey="awayPosReset" hotkeys={hotkeys} saveHotkeys={saveHotkeys} />
-                        </div>
-                      </div>
+                      {/* Los atajos se configuran en la barra superior del page:
+                          una sola definicion para toda la estacion de trabajo. */}
+                      <button onClick={() => window.dispatchEvent(new Event('ardi-open-hotkeys'))}
+                        className="w-full bg-zinc-950 p-3 rounded-lg border border-zinc-800 hover:border-blue-600 text-left transition-colors">
+                        <span className="text-amber-400 text-xs font-black uppercase tracking-widest flex items-center">
+                          <Keyboard className="w-4 h-4 mr-2"/> Atajos de teclado y mando
+                        </span>
+                        <span className="block text-[10px] text-zinc-500 mt-1">
+                          14 acciones configurables, iguales en las tres vistas. Tocar para abrir.
+                        </span>
+                      </button>
 
                       {/* REGLAS DE PARTIDO */}
                       <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 space-y-3">

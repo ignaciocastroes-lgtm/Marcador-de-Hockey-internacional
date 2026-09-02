@@ -73,10 +73,14 @@ function buildStandings(records: MatchRecord[]): TeamRow[] {
     a.gf += m.awayScore; a.gc += m.homeScore
 
     // El ganador guardado ya contempla la definicion por penales
-    const winner = m.winner ?? (m.homeScore > m.awayScore ? 'home' : m.awayScore > m.homeScore ? 'away' : 'draw')
+    // Si el partido quedo sin definir, no reparte puntos: no es un empate.
+    const winner = m.winner === undefined
+      ? (m.homeScore > m.awayScore ? 'home' : m.awayScore > m.homeScore ? 'away' : 'draw')
+      : m.winner
     if (winner === 'home') { h.pg++; h.pts += 3; a.pp++ }
     else if (winner === 'away') { a.pg++; a.pts += 3; h.pp++ }
-    else { h.pe++; a.pe++; h.pts++; a.pts++ }
+    else if (winner === 'draw') { h.pe++; a.pe++; h.pts++; a.pts++ }
+    // winner === null: partido sin definir, no suma puntos a nadie
 
     ;(m.sanctions || []).forEach(s => {
       const target = s.team === 'home' ? h : a
@@ -157,7 +161,11 @@ export function MatchHistoryModal({
     csv += 'Fecha,Serie,Rama,Local,Goles Local,Goles Visita,Visita,Penales,Ganador\n'
     filtered.forEach(m => {
       const tie = m.homeScore === m.awayScore && ((m.homePenalties || 0) > 0 || (m.awayPenalties || 0) > 0)
-      const winnerName = m.winner === 'draw' || !m.winner ? 'EMPATE' : m.winner === 'home' ? m.homeTeam : m.awayTeam
+      // null significa que fue a desempate y quedo igualado: no es empate.
+      const winnerName = m.winner === 'draw' ? 'EMPATE'
+        : m.winner === 'home' ? m.homeTeam
+        : m.winner === 'away' ? m.awayTeam
+        : 'NO DEFINIDO'
       csv += [
         fmtDate(m.date), q(m.series), q(m.gender), q(m.homeTeam),
         m.homeScore, m.awayScore, q(m.awayTeam),

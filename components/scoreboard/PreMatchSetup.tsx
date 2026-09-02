@@ -755,7 +755,7 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
             <div>
               <Label className="text-zinc-400 text-xs">Equipo LOCAL</Label>
               <div className="flex gap-2 mt-1">
-                {savedTeams.length > 0 && (
+                {(
                   <Select onValueChange={(val) => {
                     const t = savedTeams.find(x => x.id === val)
                     if (!t) return
@@ -781,7 +781,11 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
                         </SelectItem>
                       ))}
                       {teamsForSerie.length === 0 && (
-                        <div className="px-2 py-3 text-[11px] text-zinc-500">Sin equipos guardados en esta serie</div>
+                        <div className="px-2 py-3 text-[11px] text-zinc-500 leading-snug">
+                          {savedTeams.length === 0
+                            ? 'Todavía no hay equipos guardados. Escribe el nombre, carga las camisetas y pulsa GUARDAR.'
+                            : 'Ninguno guardado en esta serie.'}
+                        </div>
                       )}
                     </SelectContent>
                   </Select>
@@ -797,7 +801,7 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
             <div>
               <Label className="text-zinc-400 text-xs">Equipo VISITA</Label>
               <div className="flex gap-2 mt-1">
-                {savedTeams.length > 0 && (
+                {(
                   <Select onValueChange={(val) => {
                     const t = savedTeams.find(x => x.id === val)
                     if (!t) return
@@ -823,7 +827,11 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
                         </SelectItem>
                       ))}
                       {teamsForSerie.length === 0 && (
-                        <div className="px-2 py-3 text-[11px] text-zinc-500">Sin equipos guardados en esta serie</div>
+                        <div className="px-2 py-3 text-[11px] text-zinc-500 leading-snug">
+                          {savedTeams.length === 0
+                            ? 'Todavía no hay equipos guardados. Escribe el nombre, carga las camisetas y pulsa GUARDAR.'
+                            : 'Ninguno guardado en esta serie.'}
+                        </div>
                       )}
                     </SelectContent>
                   </Select>

@@ -20,13 +20,15 @@ interface Props {
   sections?: StatsOverlayConfig
   scale?: number
   align?: 'top' | 'center' | 'bottom'
+  /** true = vive dentro de una caja (previsualización) en vez del viewport. */
+  embedded?: boolean
 }
 
 const CARD_COLOR = { yellow: '#facc15', blue: '#3b82f6', red: '#dc2626' } as const
 
 export function SummaryOverlay({
   state, scope, homeTeamName, awayTeamName, homeLogo, awayLogo,
-  accent, textColor, numberStyle, clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center'
+  accent, textColor, numberStyle, clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center', embedded = false
 }: Props) {
   const s = buildSummary(state, scope)
   const titulo = scope === 'primer_tiempo' ? 'RESUMEN 1ER TIEMPO' : 'FICHA DEL PARTIDO'
@@ -90,7 +92,7 @@ export function SummaryOverlay({
   )
 
   return (
-    <div className="overlay-fullscreen z-[2800] flex flex-col bg-black px-[90px] py-[60px] bc-in"
+    <div className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[2800] flex flex-col bg-black px-[90px] py-[60px] bc-in`}
       style={{
         justifyContent: align === 'top' ? 'flex-start' : align === 'bottom' ? 'flex-end' : 'center',
         transform: `scale(${scale})`,

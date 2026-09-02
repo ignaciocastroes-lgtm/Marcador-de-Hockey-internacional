@@ -1,4 +1,4 @@
-# ARDI Hockey Patín 3.26 — "Pista Viva"
+# ARDI Hockey Patín 3.31 — "Pista Viva"
 
 ## Modo PISTA: la ficha es la mesa de mando
 Tocar un jugador abre su hoja de acciones. El menú de tarjetas lo decide la
@@ -517,3 +517,101 @@ infractor, marcar uno por uno a quiénes alcanza el castigo, aplicar.
 - Si la banca ya está pintada, avisa que sólo aplica la directa.
 
 `BenchModal` queda sin uso y se retiró de la vista.
+
+## 3.27 — Pintado completo, atajos únicos y equipos guardados visibles
+
+**BUG: el pintado sólo alcanzaba al cuerpo técnico.** El filtro era
+`isStaff(p)`, así que DT y auxiliares quedaban pintados pero los suplentes no.
+La amonestación al banquillo alcanza a TODOS sus integrantes. Ahora se pinta a
+todo el que esté en la banca —suplentes incluidos—, excluyendo a quienes están
+en pista y a los ya expulsados.
+
+**Los atajos quedan en un solo lugar de verdad.** El listado de 6 atajos seguía
+dibujado dentro del modal de ajustes de la vista clásica, aunque ya no escuchaba
+teclas: se veía como si mandara, y no mandaba. Reemplazado por un acceso al modal
+global de 14 acciones.
+
+**Los relojes de 45 pierden sus botones laterales.** La posesión se toma tocando
+el lado de la pista; los botones eran redundantes y ocupaban ancho junto al reloj.
+
+**Los equipos guardados aparecen siempre en Express.** El selector se dibujaba
+sólo `si savedTeams.length > 0`, así que sin equipos guardados no aparecía y no
+había forma de descubrir que la función existía. Ahora se muestra siempre y
+explica qué hacer cuando está vacío.
+
+## 3.28 — La pantalla de fin de partido, rehecha
+
+**Lo que le faltaba: el resultado.** La anterior mostraba el escudo y el nombre
+del ganador y nada más. Ni marcador, ni penales, ni el equipo perdedor. Era la
+pantalla que la gente fotografía y no decía cómo terminó el partido.
+
+**Y no escalaba.** Los tamaños estaban en píxeles fijos pensados para el lienzo
+de 1920 del tablero, pero desde que los lanzadores cubren el viewport esos
+números dejaron de escalar: en una ventana chica el texto de 140 px se desbordaba.
+Ahora todo va en unidades relativas al alto (`vh`), así que se ve igual en el
+proyector, en el televisor y en la previsualización.
+
+`components/scoreboard/WinnerOverlay.tsx`:
+- Cabecera con serie y rama.
+- **Los dos equipos, con el perdedor presente pero atenuado al 45%**: sin el
+  rival no se entiende contra quién se ganó.
+- Escudo del ganador al 26% del alto con halo en su color, el del perdedor al 15%.
+- **Resultado grande**, con el marcador del perdedor atenuado.
+- Línea de penales cuando la definición fue por tanda.
+- Parciales por periodo.
+- Goleadores de los dos equipos al pie.
+- Variante de empate: sin atenuar a nadie, con el texto de empate al centro.
+- Respeta tamaño y posición del modal de lanzadores, y la tipografía y acabado
+  del marcador.
+
+La previsualización del modal pasa a reflejar esa estructura real en vez de la
+maqueta que tenía.
+
+## 3.29 — No hay empate en alargue ni en penales
+
+Corrección de reglamento. El empate **sólo existe si el partido termina en tiempo
+reglamentario**: si fue a alargue o a penales, tiene que salir con ganador — la
+tanda se lanza hasta que uno gana y el alargue se juega para desempatar.
+
+`endMatch` declaraba EMPATE cuando marcador y penales quedaban igualados, sin
+mirar en qué instancia estaba el partido.
+
+- Ahora, si el partido fue a desempate y sigue igualado, `winner` queda en `null`:
+  **no definido**, que es distinto de empatado. El sistema avisa al operador que
+  la tanda continúa.
+- La pantalla de fin muestra PARTIDO EN DEFINICIÓN, sin coronar ni atenuar a
+  nadie, en vez de anunciar un empate que el reglamento no admite.
+- La tabla de posiciones **no reparte punto a cada uno** en ese caso: un partido
+  sin definir no es un empate y no puntúa.
+- El acta exporta NO DEFINIDO en vez de EMPATE.
+
+Los partidos que sí terminan igualados en tiempo reglamentario siguen siendo
+empate normal, con su punto para cada equipo.
+
+## 3.30 — Apariencia de la pista al modal
+Los controles de estilo de ficha y equipaciones estaban en la barra inferior de la
+vista Pista, compitiendo por ancho con FIN, PLANILLA, HISTORIAL y NUEVO. Se
+configuran una vez por temporada, no cada partido, así que no tenían por qué
+ocupar espacio permanente.
+
+Botón APARIENCIA que abre un modal con los tres estilos de ficha —cada uno con su
+descripción, que antes vivía sólo en el tooltip— y las equipaciones de los dos
+equipos con sus tres colores a la vista y el cambio titular/alternativa.
+
+## 3.31 — Terreno preparado para el editor de lanzadores
+**Sin ningún cambio visual.** Los tres lanzadores se ven exactamente igual que en
+la 3.30: cuando no se les pasa `embedded`, usan las mismas clases de antes.
+
+**`GoalOverlay` extraído a componente.** Eran 84 líneas dentro de
+`scoreboard-view` tomando una decena de valores del ámbito del archivo — escudos
+genéricos, tipografía, configuración, marcador. Ahora recibe todo por props.
+`scoreboard-view` baja de 1.226 a 1.142 líneas.
+
+**Los tres aceptan `embedded`.** Ese era el bloqueo real: en proyección el overlay
+se ancla al viewport con posición fija, así que metido dentro del recuadro de una
+previsualización se escapaba y cubría la pantalla completa. Con `embedded` se
+queda dentro de su caja.
+
+Con esto, montar la previsualización fiel y el modo edición con arrastre pasa a
+ser trabajo sobre componentes ya aislados, sin volver a tocar el archivo de
+proyección.

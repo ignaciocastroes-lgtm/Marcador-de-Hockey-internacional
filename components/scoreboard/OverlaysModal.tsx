@@ -143,9 +143,27 @@ export function OverlaysModal({ open, onClose }: Props) {
                 </div>
               )}
               {t === 'final' && (
+                /* Misma estructura que la pantalla real: cabecera, escudos
+                   atenuando al perdedor, resultado grande y parciales. */
                 <div className="flex flex-col items-center gap-1">
-                  <span className="font-black text-xl text-yellow-400">{cfg.final.winnerText}</span>
-                  <span className="font-black text-2xl text-white tabular-nums">3 - 1</span>
+                  <span className="text-[6px] font-black tracking-[0.3em] text-red-500">FIN DEL PARTIDO</span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex flex-col items-center">
+                      <div className="w-6 h-6 rounded-full bg-zinc-700" />
+                      <span className="text-[7px] font-black text-green-400 mt-0.5">LOCAL</span>
+                      <span className="text-[5px] font-black tracking-widest text-green-400">{cfg.final.winnerText}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="font-black text-2xl text-white tabular-nums">3</span>
+                      <span className="font-black text-sm text-zinc-600">–</span>
+                      <span className="font-black text-2xl text-white/50 tabular-nums">1</span>
+                    </div>
+                    <div className="flex flex-col items-center opacity-45">
+                      <div className="w-4 h-4 rounded-full bg-zinc-700" />
+                      <span className="text-[6px] font-black text-white mt-0.5">VISITA</span>
+                    </div>
+                  </div>
+                  <span className="text-[5px] text-zinc-500 tabular-nums mt-0.5">1T 2–1 · 2T 1–0</span>
                 </div>
               )}
               {t === 'stats' && (
