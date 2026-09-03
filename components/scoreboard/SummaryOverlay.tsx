@@ -4,6 +4,8 @@ import type { GameState } from '@/hooks/use-game-state'
 import { buildSummary, fmtDuration } from '@/lib/match-summary'
 import type { StatsOverlayConfig } from '@/lib/overlay-config'
 import { DEFAULT_OVERLAYS } from '@/lib/overlay-config'
+import { OverlayDraggable } from '@/components/scoreboard/OverlayDraggable'
+import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
 interface Props {
   state: GameState
@@ -22,14 +24,25 @@ interface Props {
   align?: 'top' | 'center' | 'bottom'
   /** true = vive dentro de una caja (previsualización) en vez del viewport. */
   embedded?: boolean
+  layout?: LayoutMap
+  editMode?: boolean
+  canvasScale?: number
+  onLayoutChange?: (id: string, pos: ElementPos) => void
 }
 
 const CARD_COLOR = { yellow: '#facc15', blue: '#3b82f6', red: '#dc2626' } as const
 
 export function SummaryOverlay({
   state, scope, homeTeamName, awayTeamName, homeLogo, awayLogo,
-  accent, textColor, numberStyle, clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center', embedded = false
+  accent, textColor, numberStyle, clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center', embedded = false,
+  layout = DEFAULT_LAYOUT.stats, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
+  const D = ({ id, className, children }: { id: string; className?: string; children: React.ReactNode }) => (
+    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={canvasScale}
+      onChange={(k, v) => onLayoutChange?.(k, v)} className={className}>
+      {children}
+    </OverlayDraggable>
+  )
   const s = buildSummary(state, scope)
   const titulo = scope === 'primer_tiempo' ? 'RESUMEN 1ER TIEMPO' : 'FICHA DEL PARTIDO'
   const dim = (o: number) => ({ color: textColor, opacity: o })
@@ -92,15 +105,17 @@ export function SummaryOverlay({
   )
 
   return (
-    <div className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[2800] flex flex-col bg-black px-[90px] py-[60px] bc-in`}
-      style={{
-        justifyContent: align === 'top' ? 'flex-start' : align === 'bottom' ? 'flex-end' : 'center',
-        transform: `scale(${scale})`,
-        transformOrigin: align === 'top' ? 'top center' : align === 'bottom' ? 'bottom center' : 'center'
-      }}>
+    <div className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[2800] bg-black bc-in overflow-hidden`}>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="relative" style={{
+          width: CANVAS_W, height: CANVAS_H,
+          transform: embedded
+            ? `scale(${canvasScale * scale})`
+            : `scale(calc(min(calc(100vw / 1920), calc(100dvh / 1080)) * ${scale}))`
+        }}>
 
       {/* ── CABECERA ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-center gap-[36px] shrink-0 bc-content-in">
+      <D id="header" className="w-[1400px] flex items-center justify-center gap-[36px] bc-content-in">
         <span className="font-black tracking-[0.32em] text-[40px]" style={{ color: accent }}>{titulo}</span>
         {clockValue && (
           <div className="flex items-center gap-[18px] border-[4px] rounded-[16px] px-[28px] py-[4px]"
@@ -109,10 +124,10 @@ export function SummaryOverlay({
             <span className="leading-none tabular-nums" style={{ ...numberStyle, fontSize: '60px' }}>{clockValue}</span>
           </div>
         )}
-      </div>
+      </D>
 
       {/* ── MARCADOR: escudo, nombre y goles en una sola linea base ──────── */}
-      <div className="flex items-center justify-between gap-[40px] mt-[46px] shrink-0 bc-content-in">
+      <D id="score" className="w-[1700px] flex items-center justify-between gap-[40px] bc-content-in">
         <div className="flex items-center gap-[26px] flex-1 min-w-0">
           {homeLogo && <img src={homeLogo} alt="" className="h-[128px] w-[128px] object-contain shrink-0" />}
           <span className="font-black text-[58px] leading-none truncate" style={{ color: textColor }}>{homeTeamName}</span>
@@ -128,7 +143,7 @@ export function SummaryOverlay({
           <span className="font-black text-[58px] leading-none truncate text-right" style={{ color: textColor }}>{awayTeamName}</span>
           {awayLogo && <img src={awayLogo} alt="" className="h-[128px] w-[128px] object-contain shrink-0" />}
         </div>
-      </div>
+      </D>
 
       {/* Parciales por periodo y definicion por penales */}
       {(sections.showByPeriod || s.hasPenalties) && (
@@ -147,7 +162,7 @@ export function SummaryOverlay({
       )}
 
       {/* ── COMPARATIVAS: etiqueta al centro, valores enfrentados ─────────── */}
-      <div className="flex-1 flex flex-col justify-center gap-[42px] mt-[36px] bc-content-in">
+      <D id="compare" className="w-[1700px] flex flex-col justify-center gap-[42px] bc-content-in">
         {sections.showPossession && (
           <StatRow
             label="POSESIÓN"
@@ -167,11 +182,10 @@ export function SummaryOverlay({
             <span className="flex-1 text-left font-mono text-[24px]" style={dim(0.4)}>{fmtDuration(s.away.possession)}</span>
           </div>
         )}
-      </div>
+      </D>
 
       {/* ── PIE: goleadores y tarjetas, alineados a la misma base ─────────── */}
-      <div className="flex items-start justify-between gap-[60px] shrink-0 pt-[34px] bc-content-in"
-        style={{ borderTop: `2px solid ${textColor}1f` }}>
+      <D id="scorers" className="w-[1700px] flex items-start justify-between gap-[60px] pt-[34px] bc-content-in">
         <div className="flex-1 min-w-0 flex flex-col gap-[16px]">
           {sections.showGoalMinutes && (
             <>
@@ -190,6 +204,8 @@ export function SummaryOverlay({
             </>
           )}
           {sections.showCards && s.away.cards.length > 0 && <Cards data={s.away} align="right" />}
+        </div>
+      </D>
         </div>
       </div>
     </div>

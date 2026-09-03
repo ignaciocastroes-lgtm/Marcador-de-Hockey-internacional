@@ -1,6 +1,7 @@
 "use client"
 
 import { GoalOverlay } from '@/components/scoreboard/GoalOverlay'
+import { loadLayouts, OVERLAY_LAYOUT_EVENT, type AllLayouts } from '@/lib/overlay-layout'
 
 import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
 
@@ -13,7 +14,7 @@ import { loadOverlays, showsOn, OVERLAYS_EVENT, DEFAULT_OVERLAYS, type OverlaysC
 
 import React, { useEffect, useState, useRef } from 'react'
 import Image from 'next/image'
-import { Settings, X, Save, RotateCcw, Move, ZoomIn, ZoomOut, Plus, Minus, Trash2, Eye } from 'lucide-react'
+import { Settings, X, Save, RotateCcw, Move, ZoomIn, ZoomOut, Plus, Minus, Trash2, Eye, FlipHorizontal } from 'lucide-react'
 import type { GameState } from '@/hooks/use-game-state'
 
 interface ScoreboardViewProps {
@@ -28,6 +29,24 @@ function formatTime(seconds: number): string {
   const secs = seconds % 60
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
 }
+
+/**
+ * Elementos que son el reflejo del otro respecto del centro del tablero.
+ * En modo espejo, mover uno mueve al otro a la posicion simetrica: es la unica
+ * forma practica de dejarlos alineados de verdad. La ESCALA no se refleja, para
+ * poder agrandar un escudo sin tocar el del rival.
+ */
+const MIRROR_PAIRS: Record<string, string> = {
+  homeLogo: 'awayLogo', awayLogo: 'homeLogo',
+  homeName: 'awayName', awayName: 'homeName',
+  homeScore: 'awayScore', awayScore: 'homeScore',
+  homePossession: 'awayPossession', awayPossession: 'homePossession',
+  homeLights: 'awayLights', awayLights: 'homeLights',
+  homePenalties: 'awayPenalties', awayPenalties: 'homePenalties',
+  homeFouls: 'awayFouls', awayFouls: 'homeFouls',
+  homeSanctions: 'awaySanctions', awaySanctions: 'homeSanctions'
+}
+const MIRROR_AXIS = 960
 
 const GENERIC_SHIELDS = [
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E",
@@ -356,6 +375,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   const [previewZoom, setPreviewZoom] = useState(0.35) 
 
   const [editMode, setEditMode] = useState(false)
+  const [mirrorMode, setMirrorMode] = useState(true)
   const [positions, setPositions] = useState(getDefaultsForBoard(getInitialBoardId(boardId)))
   const [draggingId, setDraggingId] = useState<keyof typeof DEFAULTS_P1 | null>(null)
 
@@ -387,6 +407,17 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   // 🛡️ REGLA: CACHÉ LOCAL (useRef) + SELLO DE TIEMPO PARA BLOQUEAR GOLES FANTASMA
   const [goalEvent, setGoalEvent] = useState<{ id: string; team: 'home' | 'away'; playerNumber: string } | undefined>(undefined);
   const [ov, setOv] = useState<OverlaysConfig>(DEFAULT_OVERLAYS)
+  const [ovLayout, setOvLayout] = useState<AllLayouts>(() => loadLayouts())
+  useEffect(() => {
+    const load = () => setOvLayout(loadLayouts())
+    load()
+    window.addEventListener('storage', load)
+    window.addEventListener(OVERLAY_LAYOUT_EVENT, load)
+    return () => {
+      window.removeEventListener('storage', load)
+      window.removeEventListener(OVERLAY_LAYOUT_EVENT, load)
+    }
+  }, [])
   useEffect(() => {
     const load = () => setOv(loadOverlays())
     load()
@@ -591,10 +622,19 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
     const dy = (e.clientY - dragStart.current.y) / finalScale
 
     setPositions(prev => {
-      const next = {
-        ...prev,
-        [draggingId]: { ...prev[draggingId], x: elemStart.current.x + dx, y: elemStart.current.y + dy }
+      const nx = elemStart.current.x + dx
+      const ny = elemStart.current.y + dy
+      const next = { ...prev, [draggingId]: { ...prev[draggingId], x: nx, y: ny } }
+
+      // Modo espejo: el elemento gemelo va a la posicion simetrica respecto del
+      // centro. Solo la posicion: la escala queda libre para cada uno.
+      const twin = mirrorMode ? MIRROR_PAIRS[draggingId] : undefined
+      const p = prev as Record<string, { x: number; y: number; s: number; v: boolean }>
+      const n = next as Record<string, { x: number; y: number; s: number; v: boolean }>
+      if (twin && p[twin]) {
+        n[twin] = { ...p[twin], x: 2 * MIRROR_AXIS - nx, y: ny }
       }
+
       layoutChannelRef.current?.postMessage({ type: 'LAYOUT_UPDATE', positions: next })
       return next
     })
@@ -649,6 +689,17 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   // operador configure un partido nuevo.
   const [showBreakSummary, setShowBreakSummary] = useState(false)
   const [showFinalSummary, setShowFinalSummary] = useState(false)
+
+  // La ficha final puede quedar proyectada un buen rato: la hora tiene que
+  // seguir siendo la de ahora, no la del instante en que se dibujo.
+  const [wallClock, setWallClock] = useState('')
+  useEffect(() => {
+    if (!showFinalSummary) return
+    const tick = () => setWallClock(new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }))
+    tick()
+    const i = setInterval(tick, 20000)
+    return () => clearInterval(i)
+  }, [showFinalSummary])
 
   const statsOn = ov.stats.enabled && showsOn(ov.stats.boards, bId)
   const finalOn = ov.final.enabled && showsOn(ov.final.boards, bId)
@@ -862,6 +913,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         {goalEvent && !editMode && ov.goal.enabled && showsOn(ov.goal.boards, bId) && (
           <GoalOverlay
             goal={goalEvent}
+            layout={ovLayout.goal}
             cfg={ov.goal}
             phase={goalPhase}
             homeTeamName={homeTeamName}
@@ -874,9 +926,26 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
           />
         )}
 
+        {/* Guias de alineacion: el eje de simetria y la linea media. Sin una
+            referencia visible, "centrado" es a ojo. */}
+        {editMode && (
+          <>
+            <div className="absolute top-0 bottom-0 z-[450] pointer-events-none"
+              style={{ left: MIRROR_AXIS, width: 2, background: 'rgba(250,204,21,.55)' }} />
+            <div className="absolute left-0 right-0 z-[450] pointer-events-none"
+              style={{ top: 540, height: 2, background: 'rgba(250,204,21,.25)' }} />
+          </>
+        )}
+
         {editMode && (
           <div className="absolute top-[30px] left-1/2 -translate-x-1/2 z-[500] bg-yellow-500 text-black px-[40px] py-[20px] rounded-full font-black text-[35px] flex items-center gap-[40px] shadow-2xl border-4 border-yellow-300">
             <span className="flex items-center gap-4"><Move className="w-10 h-10" /> P{bId}: MODO DISEÑO</span>
+            <button onClick={() => setMirrorMode(v => !v)}
+              title="Mover el elemento gemelo a la posición simétrica. El tamaño queda libre."
+              className={`px-[30px] py-[15px] rounded-full text-[25px] flex items-center gap-2 ${
+                mirrorMode ? 'bg-black text-yellow-400' : 'bg-black/30 text-black/60'}`}>
+              <FlipHorizontal className="w-8 h-8" /> ESPEJO {mirrorMode ? 'ON' : 'OFF'}
+            </button>
             <button onClick={saveCustomLayout} className="bg-black text-white px-[30px] py-[15px] rounded-full hover:bg-zinc-800 text-[25px] flex items-center gap-2">
               <Save className="w-8 h-8" /> GUARDAR
             </button>
@@ -1110,9 +1179,10 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
             accent={liveLogos.boardAccentColor || '#dc2626'}
             textColor={liveLogos.boardTextColor || '#ffffff'}
             numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
-            clockLabel={showFinalSummary ? undefined : 'DESCANSO'}
-            clockValue={showFinalSummary ? undefined : formatTime(state.mainClock)}
+            clockLabel={showFinalSummary ? 'HORA' : 'DESCANSO'}
+            clockValue={showFinalSummary ? wallClock : formatTime(state.mainClock)}
             sections={ov.stats}
+            layout={ovLayout.stats}
             scale={ov.stats.scale}
             align={ov.stats.align}
           />
@@ -1131,6 +1201,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
             numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
             winnerText={ov.final.winnerText}
             drawText={ov.final.drawText}
+            layout={ovLayout.final}
             scale={ov.final.scale}
             align={ov.final.align}
             onSaveAndReset={!isPreview ? onSaveAndReset : undefined}

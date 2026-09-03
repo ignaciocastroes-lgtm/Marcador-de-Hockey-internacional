@@ -7,6 +7,11 @@ import { GoalOverlay } from '@/components/scoreboard/GoalOverlay'
 import { SummaryOverlay } from '@/components/scoreboard/SummaryOverlay'
 import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
 import { DEMO_STATE, DEMO_HOME, DEMO_AWAY } from '@/lib/overlay-demo'
+import {
+  loadLayouts, saveLayouts, resetLauncher, CANVAS_W,
+  type AllLayouts, type LauncherId, type ElementPos
+} from '@/lib/overlay-layout'
+import { Move, Save, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,6 +32,15 @@ type Tab = 'goal' | 'final' | 'stats'
 export function OverlaysModal({ open, onClose }: Props) {
   const [cfg, setCfg] = useState<OverlaysConfig>(DEFAULT_OVERLAYS)
   const [tab, setTab] = useState<Tab>('goal')
+  const [layouts, setLayouts] = useState<AllLayouts>(loadLayouts())
+  const [editMode, setEditMode] = useState(false)
+  const [prevW, setPrevW] = useState(640)
+  const [prevTeam, setPrevTeam] = useState<'home' | 'away'>('home')
+
+  useEffect(() => { if (open) { setLayouts(loadLayouts()); setEditMode(false) } }, [open])
+
+  const setPos = (launcher: LauncherId, id: string, pos: ElementPos) =>
+    setLayouts(prev => ({ ...prev, [launcher]: { ...prev[launcher], [id]: pos } }))
 
   useEffect(() => { if (open) setCfg(loadOverlays()) }, [open])
 
@@ -128,27 +142,44 @@ export function OverlaysModal({ open, onClose }: Props) {
 
         {/* Previsualización: proporción real del tablero, 16:9 */}
         <div>
-          <span className="flex items-center gap-1.5 text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1">
-            <Eye className="w-3 h-3" /> Previsualización
-          </span>
-          <div className="w-full aspect-video bg-black rounded-lg border border-zinc-700 relative overflow-hidden">
+          <div className="flex items-center justify-between mb-1">
+            <span className="flex items-center gap-1.5 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+              <Eye className="w-3 h-3" /> Previsualización
+            </span>
+            {t === 'goal' && (
+              /* Las camisetas son distintas por equipo: hay que poder ver las dos */
+              <div className="flex gap-1">
+                {(['home', 'away'] as const).map(side => (
+                  <button key={side} onClick={() => setPrevTeam(side)}
+                    className={`px-2 h-6 rounded text-[9px] font-black transition-colors ${
+                      prevTeam === side
+                        ? (side === 'home' ? 'bg-blue-600 text-white' : 'bg-amber-600 text-black')
+                        : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                    {side === 'home' ? 'GOL LOCAL' : 'GOL VISITA'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div ref={el => { if (el && el.clientWidth && el.clientWidth !== prevW) setPrevW(el.clientWidth) }}
+            className={`w-full aspect-video bg-black rounded-lg relative overflow-hidden border-2 ${
+              editMode ? 'border-blue-500' : 'border-zinc-700'}`}>
             {/* Los componentes REALES a escala, no una maqueta: lo que se ve
                 aquí es literalmente lo que sale por el proyector. */}
-            <div className="absolute inset-0 origin-top-left pointer-events-none"
-              style={{ width: '1920px', height: '1080px', transform: 'scale(var(--prev-scale))' }}
-              ref={el => {
-                if (!el?.parentElement) return
-                const w = el.parentElement.clientWidth
-                el.style.setProperty('--prev-scale', String(w / 1920))
-              }}>
+            <div className={`absolute inset-0 origin-top-left ${editMode ? "" : "pointer-events-none"}`}
+              style={{ width: '1920px', height: '1080px', transform: `scale(${prevW / CANVAS_W})` }}>
               {t === 'goal' && (
-                <GoalOverlay embedded goal={{ id: 'demo', team: 'home', playerNumber: '7' }}
+                <GoalOverlay embedded goal={{ id: 'demo', team: prevTeam, playerNumber: prevTeam === 'home' ? '7' : '11' }}
+                  layout={layouts.goal} editMode={editMode} canvasScale={prevW / CANVAS_W}
+                  onLayoutChange={(id, pos) => setPos('goal', id, pos)}
                   cfg={cfg.goal} phase="in"
                   homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
                   homeScore={2} awayScore={1} homeLogo="" awayLogo="" fontFamily="var(--font-led)" />
               )}
               {t === 'final' && (
                 <WinnerOverlay embedded state={DEMO_STATE}
+                  layout={layouts.final} editMode={editMode} canvasScale={prevW / CANVAS_W}
+                  onLayoutChange={(id, pos) => setPos('final', id, pos)}
                   homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
                   accent="#dc2626" textColor="#ffffff" winColor="#22c55e"
                   numberStyle={{ fontFamily: 'var(--font-led)', fontWeight: 900 }}
@@ -157,6 +188,8 @@ export function OverlaysModal({ open, onClose }: Props) {
               )}
               {t === 'stats' && (
                 <SummaryOverlay embedded state={DEMO_STATE} scope="primer_tiempo"
+                  layout={layouts.stats} editMode={editMode} canvasScale={prevW / CANVAS_W}
+                  onLayoutChange={(id, pos) => setPos('stats', id, pos)}
                   homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
                   accent="#dc2626" textColor="#ffffff"
                   numberStyle={{ fontFamily: 'var(--font-led)', fontWeight: 900 }}
@@ -165,6 +198,32 @@ export function OverlaysModal({ open, onClose }: Props) {
               )}
             </div>
           </div>
+
+          {/* Edicion de posiciones: mismo mecanismo que el modo edicion de los
+              tableros, sobre el lienzo de 1920x1080. */}
+          {(
+            <div className="grid grid-cols-3 gap-1 mt-2">
+              <Button onClick={() => setEditMode(v => !v)}
+                className={`h-9 text-[10px] font-black ${editMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+                <Move className="w-3.5 h-3.5 mr-1" /> {editMode ? 'EDITANDO' : 'MOVER'}
+              </Button>
+              <Button onClick={() => { saveLayouts(layouts); setEditMode(false); toast.success('Posiciones guardadas') }}
+                disabled={!editMode}
+                className="h-9 text-[10px] font-black bg-green-700 hover:bg-green-600 disabled:opacity-30">
+                <Save className="w-3.5 h-3.5 mr-1" /> GUARDAR
+              </Button>
+              <Button onClick={() => { const l = resetLauncher(layouts, t as LauncherId); setLayouts(l); saveLayouts(l); toast.info('Posiciones por defecto') }}
+                variant="outline" className="h-9 text-[10px] font-bold border-zinc-600">
+                <RotateCw className="w-3.5 h-3.5 mr-1" /> LIMPIAR
+              </Button>
+            </div>
+          )}
+          {editMode && (
+            <p className="text-[10px] text-zinc-500 leading-snug mt-1">
+              Arrastra cada elemento. Los botones sobre él ajustan tamaño y visibilidad.
+              Las posiciones son las mismas que usa el proyector.
+            </p>
+          )}
         </div>
       </div>
     )

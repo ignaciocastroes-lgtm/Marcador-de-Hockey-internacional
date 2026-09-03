@@ -2,6 +2,8 @@
 
 import type { GameState } from '@/hooks/use-game-state'
 import { buildSummary } from '@/lib/match-summary'
+import { OverlayDraggable } from '@/components/scoreboard/OverlayDraggable'
+import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
 /**
  * PANTALLA DE FIN DE PARTIDO
@@ -32,14 +34,25 @@ interface Props {
   align?: 'top' | 'center' | 'bottom'
   /** true = vive dentro de una caja (previsualizacion) en vez del viewport. */
   embedded?: boolean
+  layout?: LayoutMap
+  editMode?: boolean
+  canvasScale?: number
+  onLayoutChange?: (id: string, pos: ElementPos) => void
   onSaveAndReset?: () => void
 }
 
 export function WinnerOverlay({
   state, homeTeamName, awayTeamName, homeLogo, awayLogo,
   accent, textColor, winColor, numberStyle, winnerText, drawText,
-  scale = 1, align = 'center', embedded = false, onSaveAndReset
+  scale = 1, align = 'center', embedded = false, onSaveAndReset,
+  layout = DEFAULT_LAYOUT.final, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
+  const D = ({ id, className, children }: { id: string; className?: string; children: React.ReactNode }) => (
+    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={canvasScale}
+      onChange={(k, v) => onLayoutChange?.(k, v)} className={className}>
+      {children}
+    </OverlayDraggable>
+  )
   const s = buildSummary(state, 'completo')
 
   /**
@@ -81,15 +94,17 @@ export function WinnerOverlay({
   )
 
   return (
-    <div className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[2900] bc-in flex flex-col items-center bg-black px-[4vh] py-[3vh]`}
-      style={{
-        justifyContent: align === 'top' ? 'flex-start' : align === 'bottom' ? 'flex-end' : 'center',
-        transform: `scale(${scale})`,
-        transformOrigin: align === 'top' ? 'top center' : align === 'bottom' ? 'bottom center' : 'center'
-      }}>
+    <div className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[2900] bc-in bg-black overflow-hidden`}>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="relative flex flex-col items-center justify-center" style={{
+          width: CANVAS_W, height: CANVAS_H,
+          transform: embedded
+            ? `scale(${canvasScale * scale})`
+            : `scale(calc(min(calc(100vw / 1920), calc(100dvh / 1080)) * ${scale}))`
+        }}>
 
       {/* ── Cabecera ─────────────────────────────────────────────────────── */}
-      <div className="flex flex-col items-center gap-[0.6vh] shrink-0 bc-content-in">
+      <D id="header" className="flex flex-col items-center gap-[0.6vh] bc-content-in">
         <span className="font-black tracking-[0.34em] leading-none" style={{ color: accent, fontSize: '3vh' }}>
           {undecided ? 'PARTIDO EN DEFINICIÓN' : 'FIN DEL PARTIDO'}
         </span>
@@ -97,10 +112,10 @@ export function WinnerOverlay({
           {state.matchConfig.seriesName}
           {state.matchConfig.gender ? ` · ${state.matchConfig.gender}` : ''}
         </span>
-      </div>
+      </D>
 
       {/* ── Escudos y RESULTADO, que era lo que faltaba ──────────────────── */}
-      <div className="flex items-center justify-center w-full gap-[3vh] mt-[3.5vh] shrink-0 bc-content-in">
+      <D id="teams" className="w-[1700px] flex items-center justify-center gap-[3vh] bc-content-in">
         <Side name={homeTeamName} logo={homeLogo} score={state.homeScore} won={homeWon && !undecided} align="left" />
 
         <div className="flex flex-col items-center shrink-0">
@@ -137,24 +152,23 @@ export function WinnerOverlay({
         </div>
 
         <Side name={awayTeamName} logo={awayLogo} score={state.awayScore} won={!homeWon && !isDraw && !undecided} align="right" />
-      </div>
+      </D>
 
       {/* ── Parciales por periodo ────────────────────────────────────────── */}
       {s.byPeriod.length > 0 && (
-        <div className="flex items-center justify-center gap-[3vh] mt-[2.6vh] shrink-0 bc-content-in">
+        <D id="periods" className="flex items-center justify-center gap-[3vh] bc-content-in">
           {s.byPeriod.map(p => (
             <span key={p.label} className="font-bold tabular-nums leading-none"
               style={{ ...dim(0.45), fontSize: '2vh' }}>
               {p.label} {p.home}–{p.away}
             </span>
           ))}
-        </div>
+        </D>
       )}
 
       {/* ── Goleadores, para que el acta quede a la vista ────────────────── */}
       {(s.home.scorers.length > 0 || s.away.scorers.length > 0) && (
-        <div className="flex items-start justify-center w-full gap-[6vh] mt-[3vh] pt-[2vh] shrink-0 bc-content-in"
-          style={{ borderTop: `2px solid ${textColor}1f` }}>
+        <D id="scorers" className="w-[1700px] flex items-start justify-center gap-[6vh] pt-[2vh] bc-content-in">
           {[s.home, s.away].map((d, i) => (
             <div key={i} className={`flex-1 min-w-0 flex flex-col gap-[0.5vh] ${i === 0 ? 'items-start' : 'items-end'}`}>
               <span className="font-bold tracking-[0.26em] leading-none" style={{ ...dim(0.4), fontSize: '1.5vh' }}>
@@ -173,7 +187,7 @@ export function WinnerOverlay({
               </div>
             </div>
           ))}
-        </div>
+        </D>
       )}
 
       {onSaveAndReset && (
@@ -187,6 +201,8 @@ export function WinnerOverlay({
           GUARDAR RESULTADO Y REINICIAR
         </button>
       )}
+        </div>
+      </div>
     </div>
   )
 }

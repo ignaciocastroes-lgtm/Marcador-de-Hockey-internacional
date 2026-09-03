@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Users, Trash2, Check, Search, Shield, Plus, X } from 'lucide-react'
+import { Users, Trash2, Check, Search, Shield, Plus, X, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -12,15 +12,16 @@ import { squadFor } from '@/lib/club-roster'
 import { DEFAULT_ENTRIES, MAX_ENTRIES, MAX_GOALIES, type ExpressEntry } from '@/components/scoreboard/ExpressRosterModal'
 
 /**
- * EQUIPOS GUARDADOS — una sola verdad
+ * EQUIPOS GUARDADOS
  *
- * Antes esto vivía repartido: el selector de equipo en un desplegable, la serie
- * en otro, y las camisetas en un modal aparte. Tres lugares para describir UNA
- * cosa: qué equipo, de qué serie, con qué números.
+ * Un club tiene UN plantel por serie. Antes se guardaba un registro por
+ * combinacion club+serie, lo que obligaba a repetir el escudo en cada uno y a
+ * elegir la serie dos veces: una en el partido y otra aqui.
  *
- * Aquí van juntos, porque juntos son. Un equipo guardado ES un club en una serie
- * con un juego de camisetas: separarlos obligaba al operador a mantener la
- * correspondencia en la cabeza.
+ * Ahora el club se guarda una vez, con las diez series creadas por defecto, y
+ * aqui solo se edita el plantel de la serie que ya se eligio para el partido.
+ * El escudo se configura en el gestor de pantallas, que es donde vive la
+ * identidad visual.
  */
 
 interface Props {
@@ -30,9 +31,21 @@ interface Props {
   savedTeams: Team[]
   saveTeam: (t: Team) => void
   deleteTeam: (id: string) => void
-  /** Serie del partido en curso; filtra y se hereda al guardar. */
+  /** Serie del partido en curso. Es la que se edita: no se vuelve a preguntar. */
   serieId: string
-  onPick: (name: string, logo: string | null, entries: ExpressEntry[]) => void
+  onPick: (name: string, entries: ExpressEntry[]) => void
+}
+
+/** Plantel inicial de cada serie al crear un club. */
+const rostersPorDefecto = (): Record<string, ExpressEntry[]> => {
+  const out: Record<string, ExpressEntry[]> = {}
+  SERIES_ORDERED.forEach(se => {
+    const club = squadFor(se.id)
+    out[se.id] = club.length
+      ? club.map(p => ({ number: p.number, isGoalie: !!p.isGoalie }))
+      : DEFAULT_ENTRIES.map(e => ({ ...e }))
+  })
+  return out
 }
 
 export function SavedTeamsModal({
@@ -41,25 +54,26 @@ export function SavedTeamsModal({
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<Team | null>(null)
   const [name, setName] = useState('')
-  const [logo, setLogo] = useState('')
-  const [serie, setSerie] = useState('')
   const [entries, setEntries] = useState<ExpressEntry[]>([])
   const [draft, setDraft] = useState('')
 
-  useEffect(() => {
-    if (open) { setSearch(''); setEditing(null); startNew() }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  const serie = serieId && serieId !== 'amistoso' ? serieId : ''
+  const serieName = serie ? serieLabel(findSerie(serie)!) : 'Amistoso'
+
+  useEffect(() => { if (open) { setSearch(''); startNew() } }, [open]) // eslint-disable-line
 
   const startNew = () => {
-    setEditing(null); setName(''); setLogo('')
-    setSerie(serieId && serieId !== 'amistoso' ? serieId : '')
-    setEntries([]); setDraft('')
+    setEditing(null); setName('')
+    setEntries(serie ? (rostersPorDefecto()[serie] || []) : DEFAULT_ENTRIES.map(e => ({ ...e })))
+    setDraft('')
   }
 
+  /** Al abrir un club se muestra su plantel DE ESTA SERIE. */
   const load = (t: Team) => {
-    setEditing(t); setName(t.name); setLogo(t.logo || '')
-    setSerie(t.serie || ''); setEntries(t.roster || []); setDraft('')
+    setEditing(t); setName(t.name)
+    const r = serie ? t.rosters?.[serie] : undefined
+    setEntries(r?.length ? r : (t.roster?.length ? t.roster : DEFAULT_ENTRIES.map(e => ({ ...e }))))
+    setDraft('')
   }
 
   const listed = savedTeams.filter(t => {
@@ -72,9 +86,7 @@ export function SavedTeamsModal({
     if (!nums.length) return
     const next = [...entries]
     nums.forEach(n => {
-      if (next.length < MAX_ENTRIES && !next.some(e => e.number === n)) {
-        next.push({ number: n, isGoalie: false })
-      }
+      if (next.length < MAX_ENTRIES && !next.some(e => e.number === n)) next.push({ number: n, isGoalie: false })
     })
     setEntries(next); setDraft('')
   }
@@ -88,25 +100,26 @@ export function SavedTeamsModal({
       return prev.map(e => e.number === num ? { ...e, isGoalie: !e.isGoalie } : e)
     })
 
+  /** Guarda el club entero; sólo cambia el plantel de la serie en curso. */
   const persist = () => {
     const n = name.trim().toUpperCase()
-    if (!n) { toast.warning('Escribe el nombre del equipo.'); return }
+    if (!n) { toast.warning('Escribe el nombre del club.'); return }
+    const base = editing?.rosters || rostersPorDefecto()
     const t: Team = {
       id: editing?.id || `team-${Date.now()}`,
       name: n,
-      logo: logo.trim() || null,
-      serie: serie || undefined,
-      roster: entries.length ? entries : undefined
+      logo: editing?.logo ?? null,
+      rosters: serie ? { ...base, [serie]: entries } : base
     }
     saveTeam(t)
-    toast.success(editing ? `${n} actualizado` : `${n} guardado`)
+    toast.success(editing ? `${n} actualizado` : `${n} creado con las ${SERIES_ORDERED.length} series`)
     setEditing(t)
   }
 
   const use = () => {
     const n = name.trim().toUpperCase()
-    if (!n) { toast.warning('Escribe o elige un equipo.'); return }
-    onPick(n, logo.trim() || null, entries)
+    if (!n) { toast.warning('Escribe o elige un club.'); return }
+    onPick(n, entries)
     onClose()
   }
 
@@ -118,27 +131,29 @@ export function SavedTeamsModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
             <Users className="w-5 h-5 text-blue-400" />
-            Equipos guardados · <span className={accent}>{side === 'home' ? 'LOCAL' : 'VISITA'}</span>
+            Clubes · <span className={accent}>{side === 'home' ? 'LOCAL' : 'VISITA'}</span>
           </DialogTitle>
-          <p className="text-[11px] text-zinc-500 leading-snug">
-            Un equipo guardado es un club en una serie con sus camisetas. Los tres
-            datos van juntos porque describen una sola cosa.
+          <p className="text-[11px] text-zinc-500 leading-snug flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 shrink-0" />
+            Editando el plantel de <b className="text-zinc-300">{serieName}</b>. Cada club guarda
+            un plantel por serie; el escudo se configura en el gestor de pantallas.
           </p>
         </DialogHeader>
 
         <div className="grid md:grid-cols-2 gap-4">
 
-          {/* ── Lista ─────────────────────────────────────────────────────── */}
+          {/* ── Clubes ────────────────────────────────────────────────────── */}
           <div className="space-y-2">
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-zinc-600 absolute left-2 top-1/2 -translate-y-1/2" />
-              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar equipo"
+              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar club"
                 className="h-9 pl-7 text-xs bg-zinc-950 border-zinc-700" />
             </div>
 
-            <div className="max-h-[300px] overflow-y-auto space-y-1.5">
+            <div className="max-h-[320px] overflow-y-auto space-y-1.5">
               {listed.map(t => {
-                const se = t.serie ? findSerie(t.serie) : undefined
+                const enSerie = serie ? t.rosters?.[serie]?.length : undefined
+                const total = t.rosters ? Object.values(t.rosters).filter(r => r.length).length : 0
                 return (
                   <div key={t.id}
                     className={`flex items-center gap-2 rounded-lg border p-2 cursor-pointer transition-colors ${
@@ -150,12 +165,12 @@ export function SavedTeamsModal({
                     <div className="flex-1 min-w-0">
                       <span className="block text-sm font-bold truncate">{t.name}</span>
                       <span className="block text-[10px] text-zinc-500">
-                        {se ? serieLabel(se) : 'Sin serie'}
-                        {t.roster?.length ? ` · ${t.roster.length} camisetas` : ' · sin camisetas'}
+                        {total} series
+                        {enSerie ? ` · ${enSerie} camisetas en ${serieName}` : ''}
                       </span>
                     </div>
-                    <button onClick={e => { e.stopPropagation(); deleteTeam(t.id); toast.success('Eliminado') }}
-                      className="text-red-500 hover:text-red-400 shrink-0" title="Eliminar">
+                    <button onClick={e => { e.stopPropagation(); deleteTeam(t.id); toast.success('Club eliminado') }}
+                      className="text-red-500 hover:text-red-400 shrink-0" title="Eliminar club">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -164,55 +179,32 @@ export function SavedTeamsModal({
               {listed.length === 0 && (
                 <p className="text-[11px] text-zinc-600 text-center py-8 leading-snug">
                   {savedTeams.length === 0
-                    ? 'Todavía no hay equipos guardados. Créalo con el formulario de al lado.'
+                    ? 'Todavía no hay clubes. Escribe el nombre al lado y guarda: se crean las diez series con su plantel por defecto.'
                     : 'Ninguno coincide con la búsqueda.'}
                 </p>
               )}
             </div>
 
             <Button onClick={startNew} variant="outline" className="w-full h-9 text-xs font-bold border-zinc-600">
-              <Plus className="w-4 h-4 mr-1.5" /> EQUIPO NUEVO
+              <Plus className="w-4 h-4 mr-1.5" /> CLUB NUEVO
             </Button>
           </div>
 
-          {/* ── Ficha ─────────────────────────────────────────────────────── */}
+          {/* ── Plantel de la serie en curso ──────────────────────────────── */}
           <div className="space-y-3">
             <div>
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Nombre</label>
+              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Nombre del club</label>
               <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ej: DEPORTES TEMUCO"
                 className="h-10 mt-1 bg-zinc-950 border-zinc-700 font-bold" />
             </div>
 
             <div>
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">URL del escudo</label>
-              <Input value={logo} onChange={e => setLogo(e.target.value)} placeholder="https://…"
-                className="h-9 mt-1 bg-zinc-950 border-zinc-700 text-xs" />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Serie</label>
-              <select value={serie} onChange={e => setSerie(e.target.value)}
-                className="w-full h-10 mt-1 bg-zinc-950 border border-zinc-700 rounded-md px-2 text-sm font-bold">
-                <option value="">Sin serie</option>
-                {SERIES_ORDERED.map(se => (
-                  <option key={se.id} value={se.id}>{serieLabel(se)}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-                  Camisetas {entries.length}/{MAX_ENTRIES}
+                  Camisetas · {serieName} · {entries.length}/{MAX_ENTRIES}
                 </label>
-                <div className="flex gap-1">
-                  {serie && squadFor(serie).length > 0 && (
-                    <button onClick={() => setEntries(squadFor(serie).map(p => ({ number: p.number, isGoalie: !!p.isGoalie })))}
-                      className="text-[9px] font-black text-blue-400 hover:text-blue-300">DEL CLUB</button>
-                  )}
-                  <button onClick={() => setEntries(DEFAULT_ENTRIES.map(e => ({ ...e })))}
-                    className="text-[9px] font-black text-zinc-500 hover:text-zinc-300">POR DEFECTO</button>
-                </div>
+                <button onClick={() => setEntries(DEFAULT_ENTRIES.map(e => ({ ...e })))}
+                  className="text-[9px] font-black text-zinc-500 hover:text-zinc-300">POR DEFECTO</button>
               </div>
 
               <div className="flex gap-1">
@@ -223,11 +215,10 @@ export function SavedTeamsModal({
                 <Button onClick={addNumbers} className="h-9 px-3 bg-green-700 hover:bg-green-600"><Plus className="w-4 h-4" /></Button>
               </div>
 
-              <div className="grid grid-cols-5 gap-1.5 mt-2 max-h-[130px] overflow-y-auto">
+              <div className="grid grid-cols-5 gap-1.5 mt-2 max-h-[150px] overflow-y-auto">
                 {entries.map(e => (
                   <div key={e.number} className="relative">
-                    <button onClick={() => toggleGoalie(e.number)}
-                      title="Tocar para marcar portero"
+                    <button onClick={() => toggleGoalie(e.number)} title="Tocar para marcar portero"
                       className={`w-full h-11 rounded-lg border-2 flex flex-col items-center justify-center ${
                         e.isGoalie ? 'border-green-400 bg-green-950/50' : 'border-zinc-700 bg-zinc-950 hover:border-zinc-500'}`}>
                       <span className="font-black text-sm leading-none">{e.number}</span>
@@ -243,16 +234,14 @@ export function SavedTeamsModal({
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
-              <Button onClick={persist} variant="outline" className="h-11 font-bold border-zinc-600 text-xs">
-                GUARDAR
-              </Button>
+              <Button onClick={persist} variant="outline" className="h-11 font-bold border-zinc-600 text-xs">GUARDAR</Button>
               <Button onClick={use} className="h-11 font-black bg-green-700 hover:bg-green-600 text-xs">
                 <Check className="w-4 h-4 mr-1.5" /> USAR
               </Button>
             </div>
             <p className="text-[10px] text-zinc-600 leading-snug">
-              GUARDAR lo deja en la lista para las próximas fechas. USAR lo carga en
-              este partido con sus camisetas.
+              GUARDAR deja el club para las próximas fechas, con esta serie actualizada.
+              USAR lo carga en este partido.
             </p>
           </div>
         </div>

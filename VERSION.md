@@ -1,4 +1,4 @@
-# ARDI Hockey Patín 3.33 — "Pista Viva"
+# ARDI Hockey Patín 3.38 — "Pista Viva"
 
 ## Modo PISTA: la ficha es la mesa de mando
 Tocar un jugador abre su hoja de acciones. El menú de tarjetas lo decide la
@@ -658,3 +658,117 @@ es literalmente lo mismo que sale por el proyector, con la configuración en viv
 `lib/overlay-demo.ts` aporta un partido de ejemplo con datos representativos
 —goles con minuto, tarjetas de los dos colores, faltas y posesión desbalanceada—
 para ver la pantalla llena, que es cuando se rompe un diseño, y no vacía.
+
+## 3.34 — El periodo avanza solo, y el círculo central saca del centro
+
+**BUG GRAVE: el primer tiempo se jugaba dos veces.** Ni `endIntermission` ni la
+expiración automática del descanso avanzaban el periodo: reponían el reloj y
+dejaban el partido en el mismo tiempo. Pasó en cancha.
+
+`siguientePeriodo()` es ahora el único lugar que decide qué viene: 1T → 2T →
+alargue si están empatados y el pacto lo permite → penales. Devuelve `null` cuando
+el partido debe terminar en vez de continuar. Se usa en las dos salidas del
+descanso, y el cambio de periodo queda registrado en el acta.
+
+**Los relojes de 45 se reponen** al terminar el tiempo de juego y al empezar un
+periodo nuevo, junto con las solicitudes de tiempo de banca. Arrastrar una
+posesión a medias al periodo siguiente no tiene sentido.
+
+**El círculo central es el botón de puesta en juego.** Se toca para iniciar o
+pausar el tiempo, sin chicharra — la da el árbitro. Es donde se saca del centro
+en la cancha, así que el gesto coincide con lo que pasa en la pista. Verde cuando
+está detenido, rojo cuando corre.
+
+**Los jugadores se separaron del círculo** para dejarlo libre, y quedan más
+parecidos a como se paran antes del saque.
+
+**Fuera el botón LADO**: el cambio de lado ya era automático por periodo, así que
+era un control que repetía algo que el sistema hacía solo. PANTALLA y AJUSTES
+bajan a la barra inferior, en el espacio que quedó.
+
+## 3.35 — Un club, un plantel por serie
+
+**El modelo estaba mal, y de ahí venía la redundancia.** Un equipo guardado era
+"club + una serie", así que Internacional Sub-13 e Internacional Adulta eran dos
+registros distintos: había que repetir el escudo en cada uno y elegir la serie
+dos veces, una en el partido y otra dentro del modal.
+
+Ahora un club se guarda **una vez, con un plantel por serie** (`Team.rosters`,
+clave = id de serie). El modal edita el plantel de la serie que ya se eligió para
+el partido, y no vuelve a preguntarla.
+
+**Al crear un club se generan las diez series** con su plantel por defecto: el del
+club si esa serie lo tiene cargado, o el genérico. Los cambios se guardan sobre la
+serie que se está editando, sin tocar las demás.
+
+**Fuera el campo de escudo**: la identidad visual vive en el gestor de pantallas,
+que es donde ya se configuraba. Estaba en dos lugares.
+
+**Migración verificada.** Los equipos guardados con `serie` + `roster` pasan a
+`rosters[serie]` al cargar. Probado con los tres casos: formato viejo con plantel,
+equipo sin serie, y equipo ya migrado. Ninguno se pierde.
+
+## 3.36 — Arrastre de los lanzadores
+
+`lib/overlay-layout.ts` + `OverlayDraggable`: el mismo mecanismo del modo edición
+de los tableros, aplicado a los lanzadores.
+
+- Posiciones sobre el **mismo lienzo de 1920×1080** que usa el tablero, así que
+  previsualización y proyección comparten exactamente los mismos números.
+- **`sanitize()`** contrasta lo guardado contra el código campo por campo.
+  Verificado: un layout viejo conserva lo que el operador movió, los elementos que
+  no tenía guardados toman su posición de fábrica, y **un elemento agregado en una
+  versión futura aparece en su sitio** en vez de no aparecer nunca.
+- MOVER activa la edición sobre la previsualización, GUARDAR persiste y LIMPIAR
+  devuelve ese lanzador a fábrica sin tocar los otros dos.
+- Cada elemento trae sobre sí sus controles de tamaño y visibilidad.
+- El arrastre divide el desplazamiento por la escala del lienzo: sin eso el
+  elemento se movía más rápido que el dedo dentro de una previsualización chica.
+- La proyección lee las posiciones y se actualiza en vivo por evento, igual que
+  el resto de la configuración.
+
+Aplicado por ahora al **lanzador de gol** (texto y marcador). La ficha final y el
+resumen ya tienen sus posiciones por defecto declaradas y siguen el mismo patrón.
+
+## 3.37 — Los tres lanzadores editables, y gol local o visita
+
+**Previsualización del gol por equipo.** Botones GOL LOCAL y GOL VISITA sobre la
+previsualización: las camisetas y el resplandor son distintos por equipo, así que
+había que poder ver los dos sin esperar a que alguien marcara en cancha.
+
+**El arrastre llega a los tres.** La ficha final y el resumen pasan a lienzo de
+1920×1080 con sus bloques arrastrables:
+- Ficha final: cabecera, escudos con el resultado, parciales, goleadores.
+- Resumen: cabecera, marcador, comparativas, goleadores.
+- Animación de gol: texto y marcador.
+
+MOVER, GUARDAR y LIMPIAR funcionan en las tres pestañas, y LIMPIAR devuelve sólo
+el lanzador que se está editando. La proyección lee las posiciones de los tres y
+se actualiza en vivo.
+
+Las tres pantallas usan ahora el mismo lienzo que el tablero, así que las
+coordenadas son comparables entre sí y entre previsualización y proyector.
+
+## 3.38 — Modo espejo, guías de alineación y hora del partido
+
+**Modo espejo en el diseño de tableros.** Mover un elemento mueve a su gemelo a la
+posición simétrica respecto del centro. Ocho pares: escudos, nombres, marcadores,
+posesión, semáforos, penales, faltas y sanciones.
+
+La **escala NO se refleja**: se puede agrandar un escudo sin tocar el del rival,
+que era justo lo que hacía falta. El espejo sirve para alinear; el tamaño queda
+libre.
+
+Se puede apagar con el botón ESPEJO de la barra de diseño, para casos en que los
+dos lados deban quedar deliberadamente distintos.
+
+**Guías de alineación** en modo edición: el eje de simetría en amarillo y la línea
+media horizontal. Sin una referencia visible, "centrado" es a ojo.
+
+**El contador del entretiempo sigue vivo** en la pantalla de estadísticas, con el
+reloj de descanso corriendo en la cabecera.
+
+**Al terminar el partido, la ficha muestra la hora real** en vez del reloj de
+juego. Y se actualiza sola cada veinte segundos: la pantalla puede quedar
+proyectada un buen rato y la hora tiene que ser la de ahora, no la del instante
+en que se dibujó.

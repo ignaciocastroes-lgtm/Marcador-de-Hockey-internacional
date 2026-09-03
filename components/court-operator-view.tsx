@@ -802,9 +802,11 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     )
   }
 
+  // Separados del circulo central: ahi va el boton de puesta en juego, y
+  // ademas es como se paran de verdad antes del saque.
   const FIELD_POS = [
-    { top: '22%', left: '30%' }, { top: '78%', left: '30%' },
-    { top: '38%', left: '44%' }, { top: '62%', left: '44%' }
+    { top: '18%', left: '28%' }, { top: '82%', left: '28%' },
+    { top: '32%', left: '39%' }, { top: '68%', left: '39%' }
   ]
 
   const homeTimeoutsUsed = state.homeTimeoutsUsed || 0
@@ -995,17 +997,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               <Timer className="w-4 h-4 mr-1" /> DESCANSO
             </Button>
           )}
-          <div className="grid grid-cols-3 gap-1 w-full">
-            <Button onClick={() => setIsFlipped(!isFlipped)} className="h-8 text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700">
-              <ArrowRightLeft className="w-3 h-3 mr-1" /> LADO
-            </Button>
-            <Button onClick={toggleFullscreen} className="h-8 text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700">
-              <Maximize className="w-3 h-3 mr-1" /> PANTALLA
-            </Button>
-            <Button onClick={() => setShowDrawer(v => !v)} className={`h-8 text-[10px] font-bold ${showDrawer ? 'bg-blue-600 hover:bg-blue-500' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
-              <SlidersHorizontal className="w-3 h-3 mr-1" /> AJUSTES
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -1140,7 +1131,20 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
           {/* Linea central y circulo */}
           <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white/25 -translate-x-1/2 pointer-events-none z-[1]" />
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[16%] aspect-square border-2 border-white/25 rounded-full pointer-events-none z-[1]" />
+          {/* El circulo central ES el boton de puesta en juego, como en la
+              cancha: ahi se saca del centro. Sin chicharra, que la da el arbitro. */}
+          <button
+            onClick={() => { skipNextBuzzer.current = true; props.toggleMainClock() }}
+            disabled={matchEnded}
+            title="Sacar del centro — inicia o pausa el tiempo, sin chicharra"
+            className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[16%] aspect-square rounded-full z-[2] border-2 flex items-center justify-center transition-colors ${
+              state.isMainClockRunning
+                ? 'border-red-500/70 bg-red-600/10 hover:bg-red-600/20'
+                : 'border-green-500/70 bg-green-600/10 hover:bg-green-600/20'}`}>
+            {state.isMainClockRunning
+              ? <Pause className="w-[38%] h-[38%] text-red-400" />
+              : <Play className="w-[38%] h-[38%] text-green-400" />}
+          </button>
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/40 rounded-full" />
 
           {/* Areas: parten en la linea de porteria, que esta adelantada */}
@@ -1241,7 +1245,14 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       </div>
 
       {/* ── ADMINISTRACION ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pb-4">
+        <Button onClick={toggleFullscreen} className="h-10 font-bold text-xs bg-zinc-800 hover:bg-zinc-700">
+          <Maximize className="w-4 h-4 mr-1" /> PANTALLA
+        </Button>
+        <Button onClick={() => setShowDrawer(v => !v)}
+          className={`h-10 font-bold text-xs ${showDrawer ? 'bg-blue-600 hover:bg-blue-500' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+          <SlidersHorizontal className="w-4 h-4 mr-1" /> AJUSTES
+        </Button>
         <Button onClick={() => setShowLook(true)}
           className="h-10 font-bold text-xs bg-zinc-800 hover:bg-zinc-700">
           <Palette className="w-4 h-4 mr-1" /> APARIENCIA

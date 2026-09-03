@@ -858,12 +858,10 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
         saveTeam={saveTeam}
         deleteTeam={deleteTeam}
         serieId={expressSerieId}
-        onPick={(name, logo, entries) => {
-          if (teamsModalFor === 'away') {
-            setExpressAwayName(name); setExpressAwayLogo(logo); setExpressAwayEntries(entries)
-          } else {
-            setExpressHomeName(name); setExpressHomeLogo(logo); setExpressHomeEntries(entries)
-          }
+        onPick={(name, entries) => {
+          // El escudo no viene de aqui: se configura en el gestor de pantallas
+          if (teamsModalFor === 'away') { setExpressAwayName(name); setExpressAwayEntries(entries) }
+          else { setExpressHomeName(name); setExpressHomeEntries(entries) }
         }}
       />
 

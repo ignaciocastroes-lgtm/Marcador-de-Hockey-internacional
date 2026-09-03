@@ -1,6 +1,8 @@
 "use client"
 
 import type { GoalOverlayConfig, LayoutConfig } from '@/lib/overlay-config'
+import { OverlayDraggable } from '@/components/scoreboard/OverlayDraggable'
+import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
 /**
  * ANIMACION DE GOL
@@ -36,12 +38,24 @@ interface Props {
   fontFamily: string
   /** true = vive dentro de una caja (previsualizacion) en vez del viewport. */
   embedded?: boolean
+  /** Posiciones de los elementos sobre el lienzo de 1920x1080. */
+  layout?: LayoutMap
+  editMode?: boolean
+  canvasScale?: number
+  onLayoutChange?: (id: string, pos: ElementPos) => void
 }
 
 export function GoalOverlay({
   goal, cfg, phase, homeTeamName, awayTeamName,
-  homeScore, awayScore, homeLogo, awayLogo, fontFamily, embedded = false
+  homeScore, awayScore, homeLogo, awayLogo, fontFamily, embedded = false,
+  layout = DEFAULT_LAYOUT.goal, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
+  const D = ({ id, className, children }: { id: string; className?: string; children: React.ReactNode }) => (
+    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={canvasScale}
+      onChange={(k, v) => onLayoutChange?.(k, v)} className={className}>
+      {children}
+    </OverlayDraggable>
+  )
   const getJerseyFill = (team: 'home' | 'away', design: string) => {
     if (design === 'striped') return `url(#striped-${team})`
     if (design === 'halved') return `url(#halved-${team})`
@@ -55,6 +69,16 @@ export function GoalOverlay({
         justifyContent: cfg.align === 'top' ? 'flex-start' : cfg.align === 'bottom' ? 'flex-end' : 'center'
       }}
       className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[3000] flex flex-col items-center bg-black overflow-hidden ${phase === 'out' ? 'bc-out' : 'bc-in'}`}>
+      <div className="absolute inset-0 flex items-center justify-center">
+        {/* El lienzo de 1920x1080 se ajusta al espacio disponible. En
+            proyeccion es el viewport y lo resuelve CSS; en previsualizacion
+            lo calcula el modal, que conoce el ancho de su caja. */}
+        <div className="relative" style={{
+          width: CANVAS_W, height: CANVAS_H,
+          transform: embedded
+            ? `scale(${canvasScale})`
+            : 'scale(min(calc(100vw / 1920), calc(100dvh / 1080)))'
+        }}>
              
              {/* BACKGROUND PARALLAX SHIELD WATERMARK */}
              {cfg.showWatermark && <div className="absolute inset-0 z-0 flex items-center justify-center opacity-20 animate-parallax-pan pointer-events-none mix-blend-screen">
@@ -65,18 +89,22 @@ export function GoalOverlay({
              {cfg.useTeamColor && <div className="absolute inset-0 z-0 opacity-60" style={{ background: `radial-gradient(circle at center, ${goal.team === 'home' ? cfg.homeJ1 : cfg.awayJ1} 0%, transparent 80%)` }} />}
              
              {/* Texto GOL */}
+             <D id="text">
              <div className={`text-[300px] font-black tracking-widest z-10 animate-goal-flash drop-shadow-[0_0_80px_rgba(255,255,255,0.6)] leading-none mt-[-40px] ${phase === 'out' ? 'bc-content-out' : 'bc-content-in'}`} style={{ fontFamily: fontFamily, color: cfg.textColor }}>
                {cfg.text}
              </div>
+             </D>
              
              {/* MARCADOR ACTUAL (Píldora Flotante) */}
-             <div className="flex items-center gap-[40px] z-10 mb-[60px] bg-black/60 px-[60px] py-[20px] rounded-full border-4 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-md">
+             <D id="score">
+             <div className="flex items-center gap-[40px] z-10 bg-black/60 px-[60px] py-[20px] rounded-full border-4 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-md">
                 <span className="text-[70px] font-bold text-white uppercase tracking-widest" style={{ fontFamily: fontFamily }}>{homeTeamName}</span>
                 <div className="text-[100px] font-black text-yellow-400" style={{ fontFamily: fontFamily }}>{homeScore}</div>
                 <span className="text-[60px] font-black text-zinc-500">-</span>
                 <div className="text-[100px] font-black text-yellow-400" style={{ fontFamily: fontFamily }}>{awayScore}</div>
                 <span className="text-[70px] font-bold text-white uppercase tracking-widest" style={{ fontFamily: fontFamily }}>{awayTeamName}</span>
              </div>
+             </D>
 
              <div className="flex flex-row items-center justify-center gap-[200px] w-full z-10">
                 {/* ESCUDO DEL EQUIPO GIGANTE (LIMPIO, SIN FONDO NEGRO) */}
@@ -137,6 +165,8 @@ export function GoalOverlay({
                   </span>
                 </div>
              </div>
-          </div>
+        </div>
+      </div>
+    </div>
   )
 }

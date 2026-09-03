@@ -15,14 +15,16 @@ export interface Team {
   name: string
   logo: string | null
   /**
-   * Serie a la que pertenece este registro (id de lib/series).
-   * El mismo club en Sub-13 y en Adulta son DOS equipos guardados distintos,
-   * porque tienen planteles y camisetas distintas.
-   * Opcional: los equipos guardados antes de la 3.24 no lo traen y se muestran
-   * en todas las series hasta que el operador los reguarde.
+   * Un club tiene UN plantel por serie, no un registro por serie.
+   * Antes eran dos equipos guardados distintos —"Inter Sub-13" e "Inter Adulta"—
+   * lo que obligaba a repetir el escudo y a elegir la serie dos veces.
+   * Clave: id de serie (lib/series). Valor: sus camisetas.
    */
+  rosters?: Record<string, Array<{ number: string; isGoalie: boolean }>>
+
+  /** @deprecated 3.24. Se migran a `rosters` al cargar. */
   serie?: string
-  /** Camisetas de ese equipo en esa serie. */
+  /** @deprecated 3.24. Se migra a `rosters[serie]` al cargar. */
   roster?: Array<{ number: string; isGoalie: boolean }>
 }
 
@@ -229,6 +231,28 @@ const TIMEOUT_WARNING = 15
 // carga como archivo local desde el modal de sonido.
 export const BUZZER_OPTIONS = { reggaeton: '', hockey: '', buzzer: '' }
 
+/**
+ * Que periodo sigue. El descanso NO es un periodo: es la pausa entre dos, asi
+ * que al terminarlo hay que avanzar. Sin esto se volvia a jugar el mismo tiempo.
+ * Devuelve null cuando el partido deberia terminar en vez de continuar.
+ */
+function siguientePeriodo(prev: GameState): Period | null {
+  const empatados = prev.homeScore === prev.awayScore
+  switch (prev.period) {
+    case '1er_tiempo':
+      return '2do_tiempo'
+    case '2do_tiempo':
+      if (empatados && prev.matchConfig.allowOvertime) return 'alargue'
+      if (empatados && prev.matchConfig.allowPenalties) return 'penales'
+      return null
+    case 'alargue':
+      if (empatados && prev.matchConfig.allowPenalties) return 'penales'
+      return null
+    default:
+      return null
+  }
+}
+
 const initialReferees: RefereeData = {
   principal: '', segundo: '', auxiliar: '', cronometrista: '', encargadoPista: ''
 }
@@ -318,7 +342,12 @@ export function useGameState() {
   const isReceiver = pathname?.includes('/scoreboard') ?? false
 
   useEffect(() => {
-    setSavedTeams(lsGet<Team[]>(TEAMS_STORAGE_KEY, []))
+    // Migracion 3.24 -> 3.35: los equipos guardados con serie+roster sueltos
+    // pasan a tener su plantel dentro de `rosters`. Nadie pierde nada.
+    setSavedTeams(lsGet<Team[]>(TEAMS_STORAGE_KEY, []).map(t => {
+      if (t.rosters || !t.serie || !t.roster) return t
+      return { ...t, rosters: { [t.serie]: t.roster } }
+    }))
     setMatchHistory(lsGet<MatchRecord[]>(HISTORY_STORAGE_KEY, []))
     const savedBuzzer = localStorage.getItem(BUZZER_STORAGE_KEY)
     if (savedBuzzer) setBuzzerSound(savedBuzzer)
@@ -434,9 +463,15 @@ export function useGameState() {
 
         if (accurate <= 0) {
           playBuzzer()
+          // Termina el tiempo de juego: los 45 se reponen y se detienen. No
+          // tiene sentido arrastrar una posesion a medias al periodo siguiente.
           return {
             ...prev, mainClock: 0, isMainClockRunning: false, isIntermission: false,
-            sanctions: finalSanctions
+            sanctions: finalSanctions,
+            possessionClockLeft: POSSESSION_DURATION,
+            possessionClockRight: POSSESSION_DURATION,
+            isPossessionLeftRunning: false,
+            isPossessionRightRunning: false
           }
         }
         
@@ -485,7 +520,20 @@ export function useGameState() {
         if (!prev.isIntermission || accurate === prev.mainClock) return prev
         if (accurate <= 0) {
           playBuzzer()
-          return { ...prev, mainClock: prev.initialClockTime, isIntermission: false, isMainClockRunning: false }
+          const sig = siguientePeriodo(prev)
+          return {
+            ...prev,
+            mainClock: prev.initialClockTime,
+            isIntermission: false,
+            isMainClockRunning: false,
+            period: sig ?? prev.period,
+            possessionClockLeft: POSSESSION_DURATION,
+            possessionClockRight: POSSESSION_DURATION,
+            isPossessionLeftRunning: false,
+            isPossessionRightRunning: false,
+            homeTimeoutRequested: false,
+            awayTimeoutRequested: false
+          }
         }
         return { ...prev, mainClock: accurate }
       })
@@ -616,7 +664,28 @@ export function useGameState() {
   }, [playBuzzer])
 
   const endIntermission = useCallback(() => {
-    setState(prev => ({ ...prev, isIntermission: false, mainClock: prev.initialClockTime, isMainClockRunning: false }))
+    setState(prev => {
+      const sig = siguientePeriodo(prev)
+      return {
+        ...prev,
+        isIntermission: false,
+        isMainClockRunning: false,
+        mainClock: prev.initialClockTime,
+        period: sig ?? prev.period,
+        // Periodo nuevo: relojes de 45 y solicitudes de banca a cero
+        possessionClockLeft: POSSESSION_DURATION,
+        possessionClockRight: POSSESSION_DURATION,
+        isPossessionLeftRunning: false,
+        isPossessionRightRunning: false,
+        homeTimeoutRequested: false,
+        awayTimeoutRequested: false,
+        matchLog: sig ? [...prev.matchLog, {
+          id: uid(), timestamp: new Date().toISOString(), gameTime: prev.initialClockTime,
+          period: sig, eventType: 'periodo' as const, team: null, actor: '',
+          details: `Comienza ${sig.replace('_', ' ')}`
+        }] : prev.matchLog
+      }
+    })
   }, [])
 
   const toggleMainClock = useCallback(() => setState(prev => {
