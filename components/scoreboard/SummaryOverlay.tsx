@@ -1,10 +1,13 @@
 "use client"
 
+import { useRef } from 'react'
+
 import type { GameState } from '@/hooks/use-game-state'
 import { buildSummary, fmtDuration } from '@/lib/match-summary'
 import type { StatsOverlayConfig } from '@/lib/overlay-config'
 import { DEFAULT_OVERLAYS } from '@/lib/overlay-config'
 import { OverlayDraggable } from '@/components/scoreboard/OverlayDraggable'
+import { OverlayCanvas } from '@/components/scoreboard/OverlayCanvas'
 import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
 interface Props {
@@ -37,8 +40,9 @@ export function SummaryOverlay({
   accent, textColor, numberStyle, clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center', embedded = false,
   layout = DEFAULT_LAYOUT.stats, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
+  const scaleRef = useRef(1)
   const D = ({ id, className, children }: { id: string; className?: string; children: React.ReactNode }) => (
-    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={canvasScale}
+    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={scaleRef.current}
       onChange={(k, v) => onLayoutChange?.(k, v)} className={className}>
       {children}
     </OverlayDraggable>
@@ -106,13 +110,7 @@ export function SummaryOverlay({
 
   return (
     <div className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[2800] bg-black bc-in overflow-hidden`}>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative" style={{
-          width: CANVAS_W, height: CANVAS_H,
-          transform: embedded
-            ? `scale(${canvasScale * scale})`
-            : `scale(calc(min(calc(100vw / 1920), calc(100dvh / 1080)) * ${scale}))`
-        }}>
+      <OverlayCanvas zoom={scale}>{(k) => { scaleRef.current = k; return (<>
 
       {/* ── CABECERA ─────────────────────────────────────────────────────── */}
       <D id="header" className="w-[1400px] flex items-center justify-center gap-[36px] bc-content-in">
@@ -206,8 +204,7 @@ export function SummaryOverlay({
           {sections.showCards && s.away.cards.length > 0 && <Cards data={s.away} align="right" />}
         </div>
       </D>
-        </div>
-      </div>
+      </>) }}</OverlayCanvas>
     </div>
   )
 }

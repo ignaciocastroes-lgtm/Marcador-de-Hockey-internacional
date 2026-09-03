@@ -1,7 +1,10 @@
 "use client"
 
+import { useRef } from 'react'
+
 import type { GoalOverlayConfig, LayoutConfig } from '@/lib/overlay-config'
 import { OverlayDraggable } from '@/components/scoreboard/OverlayDraggable'
+import { OverlayCanvas } from '@/components/scoreboard/OverlayCanvas'
 import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
 /**
@@ -50,8 +53,9 @@ export function GoalOverlay({
   homeScore, awayScore, homeLogo, awayLogo, fontFamily, embedded = false,
   layout = DEFAULT_LAYOUT.goal, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
+  const scaleRef = useRef(1)
   const D = ({ id, className, children }: { id: string; className?: string; children: React.ReactNode }) => (
-    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={canvasScale}
+    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={scaleRef.current}
       onChange={(k, v) => onLayoutChange?.(k, v)} className={className}>
       {children}
     </OverlayDraggable>
@@ -69,16 +73,7 @@ export function GoalOverlay({
         justifyContent: cfg.align === 'top' ? 'flex-start' : cfg.align === 'bottom' ? 'flex-end' : 'center'
       }}
       className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[3000] flex flex-col items-center bg-black overflow-hidden ${phase === 'out' ? 'bc-out' : 'bc-in'}`}>
-      <div className="absolute inset-0 flex items-center justify-center">
-        {/* El lienzo de 1920x1080 se ajusta al espacio disponible. En
-            proyeccion es el viewport y lo resuelve CSS; en previsualizacion
-            lo calcula el modal, que conoce el ancho de su caja. */}
-        <div className="relative" style={{
-          width: CANVAS_W, height: CANVAS_H,
-          transform: embedded
-            ? `scale(${canvasScale})`
-            : 'scale(min(calc(100vw / 1920), calc(100dvh / 1080)))'
-        }}>
+      <OverlayCanvas>{(k) => { scaleRef.current = k; return (<>
              
              {/* BACKGROUND PARALLAX SHIELD WATERMARK */}
              {cfg.showWatermark && <div className="absolute inset-0 z-0 flex items-center justify-center opacity-20 animate-parallax-pan pointer-events-none mix-blend-screen">
@@ -165,8 +160,7 @@ export function GoalOverlay({
                   </span>
                 </div>
              </div>
-        </div>
-      </div>
+      </>) }}</OverlayCanvas>
     </div>
   )
 }

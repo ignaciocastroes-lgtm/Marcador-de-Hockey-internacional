@@ -1,4 +1,4 @@
-# ARDI Hockey Patín 3.38 — "Pista Viva"
+# ARDI Hockey Patín 3.39 — "Pista Viva"
 
 ## Modo PISTA: la ficha es la mesa de mando
 Tocar un jugador abre su hoja de acciones. El menú de tarjetas lo decide la
@@ -772,3 +772,27 @@ reloj de descanso corriendo en la cabecera.
 juego. Y se actualiza sola cada veinte segundos: la pantalla puede quedar
 proyectada un buen rato y la hora tiene que ser la de ahora, no la del instante
 en que se dibujó.
+
+## 3.39 — Los lanzadores no se veían: dos bugs de escala
+
+**En proyección no aparecía nada.** La escala del lienzo se resolvía en CSS con
+`scale(min(calc(100vw/1920), calc(100dvh/1080)))`. Eso devuelve una **longitud**,
+no un número, y `scale()` sólo acepta números: el navegador descartaba la
+transformación entera. Por eso no llegaban ni el gol, ni el resumen del
+entretiempo, ni la pantalla de ganador.
+
+**En la previsualización todo salía diminuto.** El modal escalaba su contenedor y
+el lanzador volvía a escalar por dentro: el contenido quedaba al cuadrado de la
+escala.
+
+**`OverlayCanvas` reemplaza las dos.** Un lienzo que mide su propia caja con
+`ResizeObserver` y calcula la escala una sola vez. Funciona igual en el proyector
+y dentro del modal, y expone la escala a los hijos para que el arrastre convierta
+bien el movimiento del puntero.
+
+**Los escudos en la previsualización** ahora se leen de la configuración real
+(`ardi-live-logos`) en vez de ir vacíos.
+
+**Menú de capas**, como el del gestor de pantallas: lista los elementos del
+lanzador con su nombre legible, y permite ajustar tamaño y visibilidad de cada uno
+sin tener que acertarle arrastrando.

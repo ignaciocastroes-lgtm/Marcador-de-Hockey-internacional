@@ -11,7 +11,15 @@ import {
   loadLayouts, saveLayouts, resetLauncher, CANVAS_W,
   type AllLayouts, type LauncherId, type ElementPos
 } from '@/lib/overlay-layout'
-import { Move, Save, RotateCw } from 'lucide-react'
+import { Move, Save, RotateCw, EyeOff } from 'lucide-react'
+
+/** Nombres legibles de cada capa, para no mostrar identificadores tecnicos. */
+const CAPA_NOMBRE: Record<string, string> = {
+  watermark: 'Escudo de fondo', text: 'Texto del gol', jersey: 'Camiseta',
+  shield: 'Escudo', score: 'Marcador',
+  header: 'Cabecera', teams: 'Equipos y resultado', periods: 'Parciales',
+  scorers: 'Goleadores', compare: 'Comparativas'
+}
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,6 +44,16 @@ export function OverlaysModal({ open, onClose }: Props) {
   const [editMode, setEditMode] = useState(false)
   const [prevW, setPrevW] = useState(640)
   const [prevTeam, setPrevTeam] = useState<'home' | 'away'>('home')
+
+  /** Los escudos configurados en el gestor de pantallas, para ver lo real. */
+  const [logos, setLogos] = useState<{ home: string; away: string }>({ home: '', away: '' })
+  useEffect(() => {
+    if (!open) return
+    try {
+      const l = JSON.parse(localStorage.getItem('ardi-live-logos') || '{}')
+      setLogos({ home: l.homeUrl || '', away: l.awayUrl || '' })
+    } catch { /* ignorar */ }
+  }, [open])
 
   useEffect(() => { if (open) { setLayouts(loadLayouts()); setEditMode(false) } }, [open])
 
@@ -166,21 +184,20 @@ export function OverlaysModal({ open, onClose }: Props) {
               editMode ? 'border-blue-500' : 'border-zinc-700'}`}>
             {/* Los componentes REALES a escala, no una maqueta: lo que se ve
                 aquí es literalmente lo que sale por el proyector. */}
-            <div className={`absolute inset-0 origin-top-left ${editMode ? "" : "pointer-events-none"}`}
-              style={{ width: '1920px', height: '1080px', transform: `scale(${prevW / CANVAS_W})` }}>
+            <div className={`absolute inset-0 ${editMode ? '' : 'pointer-events-none'}`}>
               {t === 'goal' && (
                 <GoalOverlay embedded goal={{ id: 'demo', team: prevTeam, playerNumber: prevTeam === 'home' ? '7' : '11' }}
-                  layout={layouts.goal} editMode={editMode} canvasScale={prevW / CANVAS_W}
-                  onLayoutChange={(id, pos) => setPos('goal', id, pos)}
+                  layout={layouts.goal} editMode={editMode} onLayoutChange={(id, pos) => setPos('goal', id, pos)}
                   cfg={cfg.goal} phase="in"
                   homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
-                  homeScore={2} awayScore={1} homeLogo="" awayLogo="" fontFamily="var(--font-led)" />
+                  homeScore={2} awayScore={1}
+                  homeLogo={logos.home} awayLogo={logos.away} fontFamily="var(--font-led)" />
               )}
               {t === 'final' && (
                 <WinnerOverlay embedded state={DEMO_STATE}
-                  layout={layouts.final} editMode={editMode} canvasScale={prevW / CANVAS_W}
-                  onLayoutChange={(id, pos) => setPos('final', id, pos)}
+                  layout={layouts.final} editMode={editMode} onLayoutChange={(id, pos) => setPos('final', id, pos)}
                   homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
+                  homeLogo={logos.home} awayLogo={logos.away}
                   accent="#dc2626" textColor="#ffffff" winColor="#22c55e"
                   numberStyle={{ fontFamily: 'var(--font-led)', fontWeight: 900 }}
                   winnerText={cfg.final.winnerText} drawText={cfg.final.drawText}
@@ -188,9 +205,9 @@ export function OverlaysModal({ open, onClose }: Props) {
               )}
               {t === 'stats' && (
                 <SummaryOverlay embedded state={DEMO_STATE} scope="primer_tiempo"
-                  layout={layouts.stats} editMode={editMode} canvasScale={prevW / CANVAS_W}
-                  onLayoutChange={(id, pos) => setPos('stats', id, pos)}
+                  layout={layouts.stats} editMode={editMode} onLayoutChange={(id, pos) => setPos('stats', id, pos)}
                   homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
+                  homeLogo={logos.home} awayLogo={logos.away}
                   accent="#dc2626" textColor="#ffffff"
                   numberStyle={{ fontFamily: 'var(--font-led)', fontWeight: 900 }}
                   clockLabel="DESCANSO" clockValue="04:32"
@@ -218,6 +235,35 @@ export function OverlaysModal({ open, onClose }: Props) {
               </Button>
             </div>
           )}
+
+          {editMode && (
+            <div className="mt-2 bg-zinc-950 border border-zinc-800 rounded-lg p-2">
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1.5">
+                Capas
+              </span>
+              <div className="space-y-1">
+                {Object.keys(layouts[t as LauncherId]).map(id => {
+                  const pos = layouts[t as LauncherId][id]
+                  return (
+                    <div key={id} className="flex items-center gap-2 bg-zinc-900 rounded px-2 py-1">
+                      <span className="flex-1 text-[11px] font-bold text-zinc-300 capitalize">{CAPA_NOMBRE[id] || id}</span>
+                      <button onClick={() => setPos(t as LauncherId, id, { ...pos, s: Math.max(0.3, +(pos.s - 0.1).toFixed(2)) })}
+                        className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-white">−</button>
+                      <span className="text-[10px] font-mono text-zinc-500 w-9 text-center">{Math.round(pos.s * 100)}%</span>
+                      <button onClick={() => setPos(t as LauncherId, id, { ...pos, s: Math.min(3, +(pos.s + 0.1).toFixed(2)) })}
+                        className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-white">+</button>
+                      <button onClick={() => setPos(t as LauncherId, id, { ...pos, v: !pos.v })}
+                        title={pos.v ? 'Ocultar' : 'Mostrar'}
+                        className={`w-6 h-6 rounded flex items-center justify-center ${pos.v ? 'bg-green-700' : 'bg-zinc-800 text-zinc-600'}`}>
+                        {pos.v ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {editMode && (
             <p className="text-[10px] text-zinc-500 leading-snug mt-1">
               Arrastra cada elemento. Los botones sobre él ajustan tamaño y visibilidad.

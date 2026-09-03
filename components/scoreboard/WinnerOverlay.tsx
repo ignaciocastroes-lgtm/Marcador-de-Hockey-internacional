@@ -1,8 +1,11 @@
 "use client"
 
+import { useRef } from 'react'
+
 import type { GameState } from '@/hooks/use-game-state'
 import { buildSummary } from '@/lib/match-summary'
 import { OverlayDraggable } from '@/components/scoreboard/OverlayDraggable'
+import { OverlayCanvas } from '@/components/scoreboard/OverlayCanvas'
 import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
 /**
@@ -47,8 +50,9 @@ export function WinnerOverlay({
   scale = 1, align = 'center', embedded = false, onSaveAndReset,
   layout = DEFAULT_LAYOUT.final, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
+  const scaleRef = useRef(1)
   const D = ({ id, className, children }: { id: string; className?: string; children: React.ReactNode }) => (
-    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={canvasScale}
+    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={scaleRef.current}
       onChange={(k, v) => onLayoutChange?.(k, v)} className={className}>
       {children}
     </OverlayDraggable>
@@ -95,13 +99,7 @@ export function WinnerOverlay({
 
   return (
     <div className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[2900] bc-in bg-black overflow-hidden`}>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative flex flex-col items-center justify-center" style={{
-          width: CANVAS_W, height: CANVAS_H,
-          transform: embedded
-            ? `scale(${canvasScale * scale})`
-            : `scale(calc(min(calc(100vw / 1920), calc(100dvh / 1080)) * ${scale}))`
-        }}>
+      <OverlayCanvas zoom={scale}>{(k) => { scaleRef.current = k; return (<>
 
       {/* ── Cabecera ─────────────────────────────────────────────────────── */}
       <D id="header" className="flex flex-col items-center gap-[0.6vh] bc-content-in">
@@ -201,8 +199,7 @@ export function WinnerOverlay({
           GUARDAR RESULTADO Y REINICIAR
         </button>
       )}
-        </div>
-      </div>
+      </>) }}</OverlayCanvas>
     </div>
   )
 }
