@@ -259,3 +259,78 @@ comprobado. Además:
 Con esto los tres lanzadores arrastran, escalan y alinean de punta a punta —
 en el modal y en la proyección real— sin necesidad de F5 ni de que el gesto
 se le escape al scroll.
+
+---
+
+## 11. EL MODAL DE LANZADORES NO EDITABA NADA — CAUSA RAÍZ ENCONTRADA (no el arrastre)
+
+La ronda pasada until endurecí `OverlayDraggable` (touchAction, stopPropagation,
+captura sobre `currentTarget`) asumiendo que el problema era el arrastre en sí.
+Era necesario pero no era la causa raíz: **`Layout` — el componente que
+envuelve el lienzo completo de cada lanzador (Gol, Fin, Estadísticas) —
+estaba declarado DENTRO del cuerpo de `OverlaysModal`**, junto con `Toggle`,
+`BoardPicker`, `NumberField`, `ColorField` y `TabBtn`. Es la misma familia de
+bug que ya se había corregido una vez para las capas internas de los
+lanzadores (`OverlaySlot.tsx`), pero un nivel más arriba, sin corregir.
+
+Consecuencia exacta: arrastrar un elemento llama a `onChange` en cada
+`pointermove`, que actualiza el estado `layouts` del modal. Con `Layout`
+redefinida en cada render, React trataba cada `<Layout tab="goal" />` como un
+tipo de componente distinto al del render anterior y **desmontaba y volvía a
+montar el lienzo completo en el primerísimo píxel de movimiento** — perdiendo
+la captura del puntero y la referencia de arrastre al instante. El modo
+editar "no destrababa nada" porque, literalmente, el lienzo se recreaba antes
+de que el arrastre pudiera completar un solo frame. Remontar un árbol tan
+grande en cada movimiento es también lo que producía el salto de scroll: no
+era un elemento arrastrándose fuera de lugar, era el modal completo
+reconstruyéndose.
+
+Se movieron los seis (`Toggle`, `BoardPicker`, `NumberField`, `ColorField`,
+`TabBtn`, `Layout`) fuera del cuerpo de `OverlaysModal`, como componentes de
+verdad de nivel de módulo, recibiendo todo lo que antes tomaban por clausura
+como props explícitas. Ahora se renderizan de nuevo cuando cambian sus props,
+pero nunca se remontan — el arrastre puede completar un gesto entero sin que
+nada por debajo se reconstruya.
+
+Con esto, sumado al blindaje de la ronda anterior (`touchAction: 'none'`,
+`stopPropagation`, captura sobre `currentTarget`), el modo editar de los tres
+lanzadores queda funcionando de punta a punta: arrastra, no salta el scroll,
+y guarda.
+
+---
+
+## 12. OTROS DOS AJUSTES DE ESTA RONDA
+
+- **`'led-classic'` no existía en el mapa de fuentes.** El selector de
+  GESTOR PANTALLAS ofrece "LED clásico (Orbitron)" con ese identificador,
+  pero `LED_FONT_STACKS` no lo tenía — `resolveLedFont` caía en silencio al
+  valor por defecto. Coincidía visualmente con Orbitron sólo porque
+  `--font-led` en `globals.css` también es Orbitron; con cualquier otro tema
+  esa coincidencia se habría roto sin avisar. Se agregó el alias.
+- **Aviso visible de pantalla completa en `/scoreboard`.** El mecanismo para
+  pedir pantalla completa ya existía (intento automático + clic para
+  reintentar), pero el navegador exige un gesto genuino dentro de ESA
+  ventana — abrirla con `window.open` desde la mesa de control no cuenta — así
+  que el intento automático casi siempre se rechaza en silencio, y el único
+  indicio de que hacía falta un clic era un `title` que sólo se ve al pasar
+  el mouse por encima. Ahora, si la pantalla completa no se logra sola,
+  aparece un aviso grande y visible ("Toca la pantalla para pantalla
+  completa") que desaparece solo apenas se logra.
+
+## PENDIENTE — NO PUDE CONFIRMARLO
+
+Sobre "el puente al botón lanzar hace que los cables estén rotos": audité de
+punta a punta la cadena que conecta GESTOR PANTALLAS con la ventana real que
+abre "Lanzar" — la clave de `localStorage` (`ardi-live-logos`), el evento
+(`ardi-screens-updated`), la resolución del número de tablero desde la URL
+(`?board=`), y la carga de fuentes en el layout raíz (que aplica a todas las
+rutas, incluida `/scoreboard`) — y las encontré consistentes entre la
+previsualización y la ventana lanzada. No encontré, con eso, un quiebre
+concreto para reproducir y arreglar con confianza.
+
+Para no arriesgar un arreglo a ciegas sobre algo que no pude verificar: ¿me
+podrías indicar qué botón "Lanzar" exactamente (el de una tarjeta P2–P5, el
+de "Lanzar a proyector" dentro de Vistas y proyectores, o LANZAR TODO), y qué
+se ve roto en la ventana que abre — un color equivocado, la tipografía por
+defecto, el marcador en blanco? Con eso lo reproduzco y lo corrijo en la
+próxima ronda.

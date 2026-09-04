@@ -24,13 +24,18 @@ export const LED_FONT_STACKS: Record<string, string> = {
   'fira':         '"Fira Code", monospace',
   'chivo':        '"Chivo Mono", monospace',
   'orbitron':     '"Orbitron", sans-serif',
+  // El selector de GESTOR PANTALLAS ofrece "LED clásico (Orbitron)" con este
+  // identificador — sin este alias, resolveLedFont no lo encontraba y caía
+  // en silencio al valor por defecto. Coincidía con Orbitron sólo porque
+  // `--font-led` en globals.css también es Orbitron; con cualquier otro tema
+  // esa coincidencia se habría roto.
+  'led-classic':  '"Orbitron", sans-serif',
   'system':       'system-ui, -apple-system, sans-serif'
 }
 
 /** Identificador → pila de fuentes. Lo desconocido cae en la fuente del tema. */
 export const resolveLedFont = (id?: string): string =>
   (id && LED_FONT_STACKS[id]) || 'var(--font-led)'
-
 export interface BoardLook {
   homeUrl: string
   awayUrl: string
