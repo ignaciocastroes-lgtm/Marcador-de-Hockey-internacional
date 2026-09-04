@@ -289,6 +289,36 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const cardHistory = state.cardHistory || []
   const sanctions = state.sanctions || []
 
+  /**
+   * Sacar a alguien de la pista. Normalmente abre el selector de reemplazo.
+   *
+   * Excepción del portero: si sale el portero y hay UN solo portero disponible,
+   * el cambio no admite decisión —el reglamento sólo permite portero por
+   * portero— así que preguntar es un paso de más con el reloj corriendo. Se
+   * aplica directo y se avisa por toast, que sigue siendo reversible.
+   */
+  const startSubstitution = (out: Player, team: 'home' | 'away') => {
+    const roster = team === 'home' ? homePlayers : awayPlayers
+    const ids = team === 'home' ? homeCourtIds : awayCourtIds
+    const opciones = eligibleReplacements(out, team, ids, roster, cardHistory, sanctions)
+
+    if (isGoalie(out) && opciones.length === 1) {
+      const entra = opciones[0]
+      const r = resolveSubstitution(entra, out, team, ids, roster, cardHistory, sanctions)
+      if (r.ok) {
+        props.setCourtLineup(team, r.ids, [
+          { playerNumber: getDisplayNumber(out), direction: 'out' },
+          { playerNumber: getDisplayNumber(entra), direction: 'in' }
+        ])
+        toast.success(`Portero: entra #${getDisplayNumber(entra)} por #${getDisplayNumber(out)}`, { duration: 2200 })
+        return
+      }
+      toast.warning(r.reason)
+      return
+    }
+    setSubbing({ out, team })
+  }
+
   const homeLineup = getLineup(homePlayers, homeCourtIds, 'home', cardHistory, sanctions)
   const awayLineup = getLineup(awayPlayers, awayCourtIds, 'away', cardHistory, sanctions)
   const homeMax = getMaxAllowed(sanctions, 'home')
@@ -993,9 +1023,11 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               </div>
             </div>
           ) : (
-            <Button onClick={() => setShowIntermissionSelector(true)} disabled={matchEnded} className="h-10 w-full font-bold text-xs bg-orange-700 hover:bg-orange-600">
-              <Timer className="w-4 h-4 mr-1" /> DESCANSO
-            </Button>
+            /* El disparador vive ahora en la barra inferior, junto al resto de
+               la administración. Aquí sólo queda el estado en curso. */
+            <span className="text-[10px] text-zinc-700 font-bold uppercase text-center leading-tight">
+              Descanso y suspensión<br />en la barra inferior
+            </span>
           )}
         </div>
       </div>
@@ -1201,8 +1233,13 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       )}
 
-      {/* ── MESA DE CONTROL: solo azules (la roja expulsa) ─────────────────── */}
-      <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+      {/* ── MESA DE CONTROL: solo azules (la roja expulsa) ──────────────────
+           Vive en su propio contenedor con alto reservado y contexto de apilado
+           propio: aunque se abra el cajón de ajustes o crezca la barra inferior,
+           nada puede encimársele. El alto no depende del contenido, así que la
+           página tampoco salta cuando entra o sale un sancionado. */}
+      <div className="relative z-30 isolate min-h-[104px]">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden h-full">
         <div className="bg-zinc-900 py-1 text-center border-b border-zinc-800">
           <span className="text-[10px] font-black text-zinc-400 tracking-[0.2em] uppercase">Mesa de control — cumplimiento de azules</span>
         </div>
@@ -1214,20 +1251,23 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           ]).map((side, idx) => (
             <div key={idx} className={`flex-1 flex flex-wrap items-center justify-center gap-3 p-2 ${side.tone}`}>
               {side.blues.map(s => (
+                /* Ancho fijo por ficha: el sancionado no se mueve de su silla.
+                   Antes la ficha se encogía al pasar de 1:59 a 0:59 y toda la
+                   fila bailaba mientras corría el reloj. */
                 <button key={s.id} onClick={() => askCancel(s.id, s.playerNumber, 'azul')}
-                  className="flex items-center gap-2 z-20 group bg-black/50 border border-zinc-700 hover:border-white/60 rounded-lg px-2 py-1"
+                  className="w-[150px] sm:w-[168px] shrink-0 flex items-center justify-center gap-2 z-20 group bg-black/50 border border-zinc-700 hover:border-white/60 rounded-lg px-2 py-1"
                   title="Tocar para anular esta sanción">
                   <div className="relative shrink-0">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-black border-2 ${side.chip}`}>{s.playerNumber}</div>
                     <CardTally team={idx === 0 ? 'home' : 'away'} number={s.playerNumber} />
                   </div>
                   {/* Cuenta regresiva grande: el operador no tiene que girar la
-                      cabeza al televisor para saber cuánto le queda al sancionado */}
-                  <span className={`font-black tabular-nums leading-none text-2xl sm:text-3xl ${
-                    s.remainingTime <= 15 ? 'text-red-400 animate-pulse' : 'text-blue-300'}`}
-                    style={{ fontFamily: 'var(--font-led)' }}>
-                    {formatTime(s.remainingTime)}
-                  </span>
+                      cabeza al televisor para saber cuánto le queda al sancionado.
+                      RigidClock da a cada dígito su propia caja: nada se desplaza. */}
+                  <RigidClock seconds={s.remainingTime} tenthsUnder={0} digitEm={0.58}
+                    className={`font-black leading-none text-2xl sm:text-3xl ${
+                      s.remainingTime <= 15 ? 'text-red-400 animate-pulse' : 'text-blue-300'}`}
+                    style={{ fontFamily: 'var(--font-led)' }} />
                 </button>
               ))}
               {side.blues.length === 0 && (
@@ -1237,6 +1277,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           ))}
         </div>
       </div>
+      </div>
 
       {/* ── PANELES DE EQUIPO ──────────────────────────────────────────────── */}
       <div className={`flex flex-wrap gap-3 ${isFlipped ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -1245,9 +1286,16 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       </div>
 
       {/* ── ADMINISTRACION ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 pb-4">
         <Button onClick={toggleFullscreen} className="h-10 font-bold text-xs bg-zinc-800 hover:bg-zinc-700">
           <Maximize className="w-4 h-4 mr-1" /> PANTALLA
+        </Button>
+        {/* Un partido suspendido usa el mismo mecanismo que el entretiempo: el
+            reloj se detiene y la planilla ya sabe registrar la reanudación. */}
+        <Button onClick={() => setShowIntermissionSelector(true)} disabled={matchEnded}
+          title="Entretiempo o partido suspendido: detiene el juego y abre el bloque de reanudación"
+          className="h-10 font-bold text-[10px] leading-tight bg-orange-700 hover:bg-orange-600 disabled:opacity-40">
+          <Timer className="w-4 h-4 mr-1 shrink-0" /> DESCANSO /<br />SUSPENDIDO
         </Button>
         <Button onClick={() => setShowDrawer(v => !v)}
           className={`h-10 font-bold text-xs ${showDrawer ? 'bg-blue-600 hover:bg-blue-500' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
@@ -1421,7 +1469,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                     /* Sacar a alguien de la pista SIEMPRE es un cambio: el equipo
                        no juega con menos por decisión propia. */
                     <Button
-                      onClick={() => { setSubbing({ out: selected.player, team: selected.team }); setSelected(null) }}
+                      onClick={() => { const { player, team } = selected; setSelected(null); startSubstitution(player, team) }}
                       className="w-full h-12 font-black bg-indigo-700 hover:bg-indigo-600 text-sm">
                       <ArrowRightLeft className="w-4 h-4 mr-2" /> CAMBIAR POR…
                     </Button>

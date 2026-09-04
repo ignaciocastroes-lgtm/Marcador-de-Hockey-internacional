@@ -4,7 +4,7 @@ import { useRef } from 'react'
 
 import type { GameState } from '@/hooks/use-game-state'
 import { buildSummary } from '@/lib/match-summary'
-import { OverlayDraggable } from '@/components/scoreboard/OverlayDraggable'
+import { Slot, type SlotCtx } from '@/components/scoreboard/OverlaySlot'
 import { OverlayCanvas } from '@/components/scoreboard/OverlayCanvas'
 import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
@@ -31,6 +31,10 @@ interface Props {
   textColor: string
   winColor: string
   numberStyle: React.CSSProperties
+  /** Clase de acabado para las cifras (`fx-neon`, `fx-metal`…). */
+  numberClass?: string
+  /** Clase de acabado para los nombres de equipo. */
+  nameClass?: string
   winnerText: string
   drawText: string
   scale?: number
@@ -46,17 +50,23 @@ interface Props {
 
 export function WinnerOverlay({
   state, homeTeamName, awayTeamName, homeLogo, awayLogo,
-  accent, textColor, winColor, numberStyle, winnerText, drawText,
+  accent, textColor, winColor, numberStyle, numberClass = '', nameClass = '', winnerText, drawText,
   scale = 1, align = 'center', embedded = false, onSaveAndReset,
   layout = DEFAULT_LAYOUT.final, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
+  /**
+   * El acabado (neon, fluor, metal) llega como CLASE, no como color: la clase
+   * `fx-*` define el color del texto y un `color` inline se lo comeria. Cuando
+   * hay acabado, el color del elemento viaja como variable CSS.
+   */
+  const fxOn = (c?: string) => !!c && c !== 'fx-solid'
+  const paint = (color: string, cls?: string): React.CSSProperties =>
+    fxOn(cls) ? ({ ['--fx-color' as string]: color } as React.CSSProperties) : { color }
+
   const scaleRef = useRef(1)
-  const D = ({ id, className, children }: { id: string; className?: string; children: React.ReactNode }) => (
-    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={scaleRef.current}
-      onChange={(k, v) => onLayoutChange?.(k, v)} className={className}>
-      {children}
-    </OverlayDraggable>
-  )
+  /* El contexto es un dato, no un tipo de componente: cambiar de contexto
+     re-renderiza, pero no desmonta ni reinicia la animacion de entrada. */
+  const slotCtx: SlotCtx = { layout, editMode, scaleRef, onLayoutChange }
   const s = buildSummary(state, 'completo')
 
   /**
@@ -85,8 +95,8 @@ export function WinnerOverlay({
             filter: won && !isDraw ? `drop-shadow(0 0 3vh ${winColor}66)` : 'none'
           }} />
       )}
-      <span className="font-black leading-none text-center truncate max-w-full px-[1vh]"
-        style={{ color: won && !isDraw ? winColor : textColor, fontSize: won && !isDraw ? '6vh' : '3.6vh' }}>
+      <span className={`font-black leading-none text-center truncate max-w-full px-[1vh] ${nameClass}`}
+        style={{ ...paint(won && !isDraw ? winColor : textColor, nameClass), fontSize: won && !isDraw ? '6vh' : '3.6vh' }}>
         {name}
       </span>
       {won && !isDraw && (
@@ -102,7 +112,7 @@ export function WinnerOverlay({
       <OverlayCanvas zoom={scale}>{(k) => { scaleRef.current = k; return (<>
 
       {/* ── Cabecera ─────────────────────────────────────────────────────── */}
-      <D id="header" className="flex flex-col items-center gap-[0.6vh] bc-content-in">
+      <Slot ctx={slotCtx} id="header" className="flex flex-col items-center gap-[0.6vh] bc-content-in">
         <span className="font-black tracking-[0.34em] leading-none" style={{ color: accent, fontSize: '3vh' }}>
           {undecided ? 'PARTIDO EN DEFINICIÓN' : 'FIN DEL PARTIDO'}
         </span>
@@ -110,19 +120,19 @@ export function WinnerOverlay({
           {state.matchConfig.seriesName}
           {state.matchConfig.gender ? ` · ${state.matchConfig.gender}` : ''}
         </span>
-      </D>
+      </Slot>
 
       {/* ── Escudos y RESULTADO, que era lo que faltaba ──────────────────── */}
-      <D id="teams" className="w-[1700px] flex items-center justify-center gap-[3vh] bc-content-in">
-        <Side name={homeTeamName} logo={homeLogo} score={state.homeScore} won={homeWon && !undecided} align="left" />
+      <Slot ctx={slotCtx} id="teams" className="w-[1700px] flex items-center justify-center gap-[3vh] bc-content-in">
+        {Side({ name: homeTeamName, logo: homeLogo, score: state.homeScore, won: homeWon && !undecided, align: 'left' })}
 
         <div className="flex flex-col items-center shrink-0">
           <div className="flex items-center gap-[2.2vh] leading-none">
-            <span style={{ ...numberStyle, fontSize: '17vh', opacity: isDraw || undecided || homeWon ? 1 : 0.5 }} className="tabular-nums">
+            <span style={{ ...numberStyle, fontSize: '17vh', opacity: isDraw || undecided || homeWon ? 1 : 0.5 }} className={`tabular-nums ${numberClass}`}>
               {state.homeScore}
             </span>
             <span className="font-black" style={{ ...dim(0.25), fontSize: '8vh' }}>–</span>
-            <span style={{ ...numberStyle, fontSize: '17vh', opacity: isDraw || undecided || !homeWon ? 1 : 0.5 }} className="tabular-nums">
+            <span style={{ ...numberStyle, fontSize: '17vh', opacity: isDraw || undecided || !homeWon ? 1 : 0.5 }} className={`tabular-nums ${numberClass}`}>
               {state.awayScore}
             </span>
           </div>
@@ -149,24 +159,24 @@ export function WinnerOverlay({
           )}
         </div>
 
-        <Side name={awayTeamName} logo={awayLogo} score={state.awayScore} won={!homeWon && !isDraw && !undecided} align="right" />
-      </D>
+        {Side({ name: awayTeamName, logo: awayLogo, score: state.awayScore, won: !homeWon && !isDraw && !undecided, align: 'right' })}
+      </Slot>
 
       {/* ── Parciales por periodo ────────────────────────────────────────── */}
       {s.byPeriod.length > 0 && (
-        <D id="periods" className="flex items-center justify-center gap-[3vh] bc-content-in">
+        <Slot ctx={slotCtx} id="periods" className="flex items-center justify-center gap-[3vh] bc-content-in">
           {s.byPeriod.map(p => (
             <span key={p.label} className="font-bold tabular-nums leading-none"
               style={{ ...dim(0.45), fontSize: '2vh' }}>
               {p.label} {p.home}–{p.away}
             </span>
           ))}
-        </D>
+        </Slot>
       )}
 
       {/* ── Goleadores, para que el acta quede a la vista ────────────────── */}
       {(s.home.scorers.length > 0 || s.away.scorers.length > 0) && (
-        <D id="scorers" className="w-[1700px] flex items-start justify-center gap-[6vh] pt-[2vh] bc-content-in">
+        <Slot ctx={slotCtx} id="scorers" className="w-[1700px] flex items-start justify-center gap-[6vh] pt-[2vh] bc-content-in">
           {[s.home, s.away].map((d, i) => (
             <div key={i} className={`flex-1 min-w-0 flex flex-col gap-[0.5vh] ${i === 0 ? 'items-start' : 'items-end'}`}>
               <span className="font-bold tracking-[0.26em] leading-none" style={{ ...dim(0.4), fontSize: '1.5vh' }}>
@@ -185,7 +195,7 @@ export function WinnerOverlay({
               </div>
             </div>
           ))}
-        </D>
+        </Slot>
       )}
 
       {onSaveAndReset && (

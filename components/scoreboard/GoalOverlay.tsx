@@ -3,7 +3,7 @@
 import { useRef } from 'react'
 
 import type { GoalOverlayConfig, LayoutConfig } from '@/lib/overlay-config'
-import { OverlayDraggable } from '@/components/scoreboard/OverlayDraggable'
+import { Slot, type SlotCtx } from '@/components/scoreboard/OverlaySlot'
 import { OverlayCanvas } from '@/components/scoreboard/OverlayCanvas'
 import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
@@ -54,12 +54,9 @@ export function GoalOverlay({
   layout = DEFAULT_LAYOUT.goal, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
   const scaleRef = useRef(1)
-  const D = ({ id, className, children }: { id: string; className?: string; children: React.ReactNode }) => (
-    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={scaleRef.current}
-      onChange={(k, v) => onLayoutChange?.(k, v)} className={className}>
-      {children}
-    </OverlayDraggable>
-  )
+  /* El contexto es un dato, no un tipo de componente: cambiar de contexto
+     re-renderiza, pero no desmonta ni reinicia la animacion de entrada. */
+  const slotCtx: SlotCtx = { layout, editMode, scaleRef, onLayoutChange }
   const getJerseyFill = (team: 'home' | 'away', design: string) => {
     if (design === 'striped') return `url(#striped-${team})`
     if (design === 'halved') return `url(#halved-${team})`
@@ -84,14 +81,14 @@ export function GoalOverlay({
              {cfg.useTeamColor && <div className="absolute inset-0 z-0 opacity-60" style={{ background: `radial-gradient(circle at center, ${goal.team === 'home' ? cfg.homeJ1 : cfg.awayJ1} 0%, transparent 80%)` }} />}
              
              {/* Texto GOL */}
-             <D id="text">
+             <Slot ctx={slotCtx} id="text">
              <div className={`text-[300px] font-black tracking-widest z-10 animate-goal-flash drop-shadow-[0_0_80px_rgba(255,255,255,0.6)] leading-none mt-[-40px] ${phase === 'out' ? 'bc-content-out' : 'bc-content-in'}`} style={{ fontFamily: fontFamily, color: cfg.textColor }}>
                {cfg.text}
              </div>
-             </D>
+             </Slot>
              
              {/* MARCADOR ACTUAL (Píldora Flotante) */}
-             <D id="score">
+             <Slot ctx={slotCtx} id="score">
              <div className="flex items-center gap-[40px] z-10 bg-black/60 px-[60px] py-[20px] rounded-full border-4 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-md">
                 <span className="text-[70px] font-bold text-white uppercase tracking-widest" style={{ fontFamily: fontFamily }}>{homeTeamName}</span>
                 <div className="text-[100px] font-black text-yellow-400" style={{ fontFamily: fontFamily }}>{homeScore}</div>
@@ -99,7 +96,7 @@ export function GoalOverlay({
                 <div className="text-[100px] font-black text-yellow-400" style={{ fontFamily: fontFamily }}>{awayScore}</div>
                 <span className="text-[70px] font-bold text-white uppercase tracking-widest" style={{ fontFamily: fontFamily }}>{awayTeamName}</span>
              </div>
-             </D>
+             </Slot>
 
              <div className="flex flex-row items-center justify-center gap-[200px] w-full z-10">
                 {/* ESCUDO DEL EQUIPO GIGANTE (LIMPIO, SIN FONDO NEGRO) */}

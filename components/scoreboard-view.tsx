@@ -6,6 +6,7 @@ import { loadLayouts, OVERLAY_LAYOUT_EVENT, type AllLayouts } from '@/lib/overla
 import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
 
 import { finishClass, finishStyle, resolveFinish, type Finish } from '@/lib/finishes'
+import { resolveLedFont } from '@/lib/board-look'
 
 import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
 
@@ -748,23 +749,33 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   const clockColor = state.activeTimeout ? 'text-green-500' : state.isIntermission ? 'text-blue-400' : 'text-red-600'
   const clockBorder = state.activeTimeout ? 'border-green-900/60 shadow-[0_0_80px_rgba(34,197,94,0.4)]' : state.isIntermission ? 'border-blue-900/60 shadow-[0_0_80px_rgba(96,165,250,0.4)]' : 'border-red-900/40 shadow-[0_0_60px_rgba(220,38,38,0.2)]'
 
-  const currentFontFamily = liveLogos.ledFont === 'impact' ? '"Impact", "Arial Black", sans-serif' :
-                            liveLogos.ledFont === 'arial-black' ? '"Arial Black", "Arial Bold", sans-serif' :
-                            liveLogos.ledFont === 'consolas' ? '"Consolas", "Courier New", monospace' :
-                            liveLogos.ledFont === 'trebuchet' ? '"Trebuchet MS", "Lucida Grande", sans-serif' :
-                            liveLogos.ledFont === 'dseg7' ? '"DSEG7 Classic", monospace' :
-                            liveLogos.ledFont === 'dseg14' ? '"DSEG14 Classic", monospace' :
-                            liveLogos.ledFont === 'jetbrains' ? '"JetBrains Mono", monospace' :
-                            liveLogos.ledFont === 'fira' ? '"Fira Code", monospace' :
-                            liveLogos.ledFont === 'chivo' ? '"Chivo Mono", monospace' :
-                            liveLogos.ledFont === 'orbitron' ? '"Orbitron", sans-serif' :
-                            liveLogos.ledFont === 'system' ? 'system-ui, -apple-system, sans-serif' :
-                            'var(--font-led)'; 
+  const currentFontFamily = resolveLedFont(liveLogos.ledFont)
 
   const digitFinish = resolveFinish((liveLogos.finishDigits || 'solid') as Finish, true)
   const nameFinish = (liveLogos.finishNames || 'solid') as Finish
   const digitFxClass = finishClass(digitFinish)
   const nameFxClass = finishClass(nameFinish)
+  const digitFxOn = digitFinish !== 'solid'
+  const nameFxOn = nameFinish !== 'solid'
+
+  /**
+   * Color de un elemento bajo el acabado activo.
+   *
+   * Con acabado NO se puede pintar el color inline: la clase `fx-*` es la que
+   * dibuja (blanco con halo en neon, degradado recortado en metal) y un `color`
+   * en el atributo style le gana por especificidad. Ese era exactamente el
+   * motivo de que el previsualizador mostrara el efecto y el tablero no.
+   * Con acabado el color viaja como variable; sin acabado, como color normal.
+   */
+  const numFx = (color: string, glow?: string): React.CSSProperties =>
+    digitFxOn
+      ? ({ ['--fx-color' as string]: color } as React.CSSProperties)
+      : { color, ...(glow ? { textShadow: glow } : {}) }
+
+  const nameFx = (color: string): React.CSSProperties =>
+    nameFxOn
+      ? ({ ['--fx-color' as string]: color } as React.CSSProperties)
+      : { color }
 
   const customNumberStyle: React.CSSProperties = {
     fontFamily: currentFontFamily,
@@ -967,8 +978,8 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
             {clockTitle}
           </span>
           <div
-            className={`leading-none bg-black w-full text-center flex items-center justify-center transition-colors duration-300 ${clockBorder}`}
-            style={{ ...customNumberStyle, color: state.activeTimeout ? '#22c55e' : state.isIntermission ? '#60a5fa' : (liveLogos.boardAccentColor || '#dc2626'), fontSize: '260px', height: '280px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}
+            className={`leading-none bg-black w-full text-center flex items-center justify-center transition-colors duration-300 ${clockBorder} ${digitFxClass}`}
+            style={{ ...customNumberStyle, ...numFx(state.activeTimeout ? '#22c55e' : state.isIntermission ? '#60a5fa' : (liveLogos.boardAccentColor || '#dc2626')), fontSize: '260px', height: '280px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}
           >
             {formatTime(state.activeTimeout ? state.timeoutClock : state.mainClock)}
           </div>
@@ -980,21 +991,21 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
 
         {liveLogos.displayMode !== 'logoOnly' && (
           <Draggable id="homeName" pos={positions['homeName']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[800px] p-4">
-            <span className="font-bold tracking-widest text-center" style={{ color: liveLogos.boardTextColor || '#ffffff', fontSize: '60px', lineHeight: '1.1', wordWrap: 'break-word', width: '100%' }}>
+            <span className={`font-bold tracking-widest text-center ${nameFxClass}`} style={{ ...nameFx(liveLogos.boardTextColor || '#ffffff'), fontSize: '60px', lineHeight: '1.1', wordWrap: 'break-word', width: '100%' }}>
               {homeTeamName}
             </span>
           </Draggable>
         )}
 
         <Draggable id="homeScore" pos={positions['homeScore']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[450px] p-4">
-          <div className="leading-none bg-black w-full flex items-center justify-center" style={{ ...customNumberStyle, color: liveLogos.boardAccentColor || '#dc2626', borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, boxShadow: `0 0 60px ${liveLogos.boardAccentColor || '#dc2626'}4d`, fontSize: '320px', height: '340px', borderRadius: '40px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+          <div className={`leading-none bg-black w-full flex items-center justify-center ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.boardAccentColor || '#dc2626'), borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, boxShadow: `0 0 60px ${liveLogos.boardAccentColor || '#dc2626'}4d`, fontSize: '320px', height: '340px', borderRadius: '40px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
             {(state.homeScore || 0).toString().padStart(2, '0')}
           </div>
         </Draggable>
 
         <Draggable id="period" pos={positions['period']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[300px] p-4">
           <span className="font-bold tracking-[0.2em] mb-[15px] text-[35px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>PERIODO</span>
-          <div className="leading-none bg-black shadow-inner flex items-center justify-center" style={{ ...customNumberStyle, color: liveLogos.boardAccentColor || '#dc2626', borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, fontSize: '180px', width: '240px', height: '220px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+          <div className={`leading-none bg-black shadow-inner flex items-center justify-center ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.boardAccentColor || '#dc2626'), borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, fontSize: '180px', width: '240px', height: '220px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
             {state.period === '1er_tiempo' ? '1' : state.period === '2do_tiempo' ? '2' : state.period === 'alargue' ? 'E' : 'P'}
           </div>
         </Draggable>
@@ -1005,14 +1016,14 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
 
         {liveLogos.displayMode !== 'logoOnly' && (
           <Draggable id="awayName" pos={positions['awayName']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[800px] p-4">
-            <span className="font-bold tracking-widest text-center" style={{ color: liveLogos.boardTextColor || '#ffffff', fontSize: '60px', lineHeight: '1.1', wordWrap: 'break-word', width: '100%' }}>
+            <span className={`font-bold tracking-widest text-center ${nameFxClass}`} style={{ ...nameFx(liveLogos.boardTextColor || '#ffffff'), fontSize: '60px', lineHeight: '1.1', wordWrap: 'break-word', width: '100%' }}>
               {awayTeamName}
             </span>
           </Draggable>
         )}
 
         <Draggable id="awayScore" pos={positions['awayScore']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[450px] p-4">
-          <div className="leading-none bg-black w-full flex items-center justify-center" style={{ ...customNumberStyle, color: liveLogos.boardAccentColor || '#dc2626', borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, boxShadow: `0 0 60px ${liveLogos.boardAccentColor || '#dc2626'}4d`, fontSize: '320px', height: '340px', borderRadius: '40px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+          <div className={`leading-none bg-black w-full flex items-center justify-center ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.boardAccentColor || '#dc2626'), borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, boxShadow: `0 0 60px ${liveLogos.boardAccentColor || '#dc2626'}4d`, fontSize: '320px', height: '340px', borderRadius: '40px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
             {(state.awayScore || 0).toString().padStart(2, '0')}
           </div>
         </Draggable>
@@ -1020,7 +1031,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         <Draggable id="homePossession" pos={positions['homePossession']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[350px] p-4">
           <div className="w-full bg-[#0a0a0a] border-[6px] border-zinc-900 rounded-[30px] p-[20px] shadow-2xl flex flex-col items-center pointer-events-none">
             <span className="font-bold tracking-widest mb-[5px] text-[30px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>POSESION</span>
-            <div className="leading-none bg-black flex items-center justify-center w-full h-[110px]" style={{ ...customNumberStyle, color: liveLogos.possessionColor || '#22c55e', borderColor: `${liveLogos.possessionColor || '#22c55e'}4d`, fontSize: '130px', borderRadius: '20px', borderWidth: '4px', textShadow: `0 0 30px ${liveLogos.possessionColor || '#22c55e'}`, transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+            <div className={`leading-none bg-black flex items-center justify-center w-full h-[110px] ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.possessionColor || '#22c55e', `0 0 30px ${liveLogos.possessionColor || '#22c55e'}`), borderColor: `${liveLogos.possessionColor || '#22c55e'}4d`, fontSize: '130px', borderRadius: '20px', borderWidth: '4px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
               {(state.possessionClockLeft || 0).toString().padStart(2, '0')}
             </div>
           </div>
@@ -1043,14 +1054,14 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
 
         <Draggable id="homeFouls" pos={positions['homeFouls']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[350px] p-4">
           <span className="font-bold tracking-[0.2em] mb-[15px] text-[35px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>FALTA LOCAL</span>
-          <div className="leading-none bg-black shadow-xl flex items-center justify-center w-full h-[220px]" style={{ ...customNumberStyle, color: liveLogos.boardAccentColor || '#dc2626', borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, fontSize: '180px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+          <div className={`leading-none bg-black shadow-xl flex items-center justify-center w-full h-[220px] ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.boardAccentColor || '#dc2626'), borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, fontSize: '180px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
             {(state.homeFouls || 0).toString().padStart(2, '0')}
           </div>
         </Draggable>
 
         <Draggable id="awayFouls" pos={positions['awayFouls']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[350px] p-4">
           <span className="font-bold tracking-[0.2em] mb-[15px] text-[35px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>FALTA VISITA</span>
-          <div className="leading-none bg-black shadow-xl flex items-center justify-center w-full h-[220px]" style={{ ...customNumberStyle, color: liveLogos.boardAccentColor || '#dc2626', borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, fontSize: '180px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+          <div className={`leading-none bg-black shadow-xl flex items-center justify-center w-full h-[220px] ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.boardAccentColor || '#dc2626'), borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, fontSize: '180px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
             {(state.awayFouls || 0).toString().padStart(2, '0')}
           </div>
         </Draggable>
@@ -1058,7 +1069,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         <Draggable id="awayPossession" pos={positions['awayPossession']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[350px] p-4">
           <div className="w-full bg-[#0a0a0a] border-[6px] border-zinc-900 rounded-[30px] p-[20px] shadow-2xl flex flex-col items-center pointer-events-none">
             <span className="font-bold tracking-widest mb-[5px] text-[30px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>POSESION</span>
-            <div className="leading-none bg-black flex items-center justify-center w-full h-[110px]" style={{ ...customNumberStyle, color: liveLogos.possessionColor || '#22c55e', borderColor: `${liveLogos.possessionColor || '#22c55e'}4d`, fontSize: '130px', borderRadius: '20px', borderWidth: '4px', textShadow: `0 0 30px ${liveLogos.possessionColor || '#22c55e'}`, transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+            <div className={`leading-none bg-black flex items-center justify-center w-full h-[110px] ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.possessionColor || '#22c55e', `0 0 30px ${liveLogos.possessionColor || '#22c55e'}`), borderColor: `${liveLogos.possessionColor || '#22c55e'}4d`, fontSize: '130px', borderRadius: '20px', borderWidth: '4px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
               {(state.possessionClockRight || 0).toString().padStart(2, '0')}
             </div>
           </div>
@@ -1081,14 +1092,14 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
 
         <Draggable id="homePenalties" pos={positions['homePenalties']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[350px] p-4">
           <span className="font-bold tracking-[0.2em] mb-[15px] text-[35px]" style={{ color: liveLogos.penaltiesColor || '#eab308' }}>PENALES</span>
-          <div className="leading-none bg-black flex items-center justify-center w-full h-[220px]" style={{ ...customNumberStyle, color: liveLogos.penaltiesColor || '#eab308', borderColor: `${liveLogos.penaltiesColor || '#eab308'}66`, boxShadow: `0 0 40px ${liveLogos.penaltiesColor || '#eab308'}33`, fontSize: '180px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+          <div className={`leading-none bg-black flex items-center justify-center w-full h-[220px] ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.penaltiesColor || '#eab308'), borderColor: `${liveLogos.penaltiesColor || '#eab308'}66`, boxShadow: `0 0 40px ${liveLogos.penaltiesColor || '#eab308'}33`, fontSize: '180px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
             {(state.homePenalties || 0).toString().padStart(2, '0')}
           </div>
         </Draggable>
 
         <Draggable id="awayPenalties" pos={positions['awayPenalties']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[350px] p-4">
           <span className="font-bold tracking-[0.2em] mb-[15px] text-[35px]" style={{ color: liveLogos.penaltiesColor || '#eab308' }}>PENALES</span>
-          <div className="leading-none bg-black flex items-center justify-center w-full h-[220px]" style={{ ...customNumberStyle, color: liveLogos.penaltiesColor || '#eab308', borderColor: `${liveLogos.penaltiesColor || '#eab308'}66`, boxShadow: `0 0 40px ${liveLogos.penaltiesColor || '#eab308'}33`, fontSize: '180px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+          <div className={`leading-none bg-black flex items-center justify-center w-full h-[220px] ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.penaltiesColor || '#eab308'), borderColor: `${liveLogos.penaltiesColor || '#eab308'}66`, boxShadow: `0 0 40px ${liveLogos.penaltiesColor || '#eab308'}33`, fontSize: '180px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
             {(state.awayPenalties || 0).toString().padStart(2, '0')}
           </div>
         </Draggable>
@@ -1102,7 +1113,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
                 return (
                   <div key={s.id} className={`flex flex-col items-center p-[15px] rounded-[20px] border-[4px] shadow-2xl w-[260px] ${isActive ? (s.type === 'blue' ? 'bg-blue-950/80 border-blue-600' : 'bg-red-950/80 border-red-600') : 'bg-zinc-900/80 border-zinc-600 opacity-60 grayscale'}`}>
                     <span className="text-white font-black text-[25px]">#{s.playerNumber}</span>
-                    <div className={`${isActive ? (s.type === 'blue' ? 'text-blue-400' : 'text-red-400') : 'text-zinc-500'}`} style={{ ...customNumberStyle, fontSize: '70px', lineHeight: '1', textShadow: isActive ? (s.type === 'blue' ? '0 0 20px #3b82f6' : '0 0 20px #ef4444') : 'none', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+                    <div className={`${isActive ? (s.type === 'blue' ? 'text-blue-400' : 'text-red-400') : 'text-zinc-500'} ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(isActive ? (s.type === 'blue' ? '#60a5fa' : '#f87171') : '#71717a', isActive ? (s.type === 'blue' ? '0 0 20px #3b82f6' : '0 0 20px #ef4444') : 'none'), fontSize: '70px', lineHeight: '1', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
                       {formatSanctionTime(s.remainingTime)}
                     </div>
                     <span className={`font-bold text-[16px] tracking-widest ${isActive ? (s.type === 'blue' ? 'text-blue-400' : 'text-red-400') : 'text-zinc-500'}`}>
@@ -1131,7 +1142,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
                 return (
                   <div key={s.id} className={`flex flex-col items-center p-[15px] rounded-[20px] border-[4px] shadow-2xl w-[260px] ${isActive ? (s.type === 'blue' ? 'bg-blue-950/80 border-blue-600' : 'bg-red-950/80 border-red-600') : 'bg-zinc-900/80 border-zinc-600 opacity-60 grayscale'}`}>
                     <span className="text-white font-black text-[25px]">#{s.playerNumber}</span>
-                    <div className={`${isActive ? (s.type === 'blue' ? 'text-blue-400' : 'text-red-400') : 'text-zinc-500'}`} style={{ ...customNumberStyle, fontSize: '70px', lineHeight: '1', textShadow: isActive ? (s.type === 'blue' ? '0 0 20px #3b82f6' : '0 0 20px #ef4444') : 'none', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+                    <div className={`${isActive ? (s.type === 'blue' ? 'text-blue-400' : 'text-red-400') : 'text-zinc-500'} ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(isActive ? (s.type === 'blue' ? '#60a5fa' : '#f87171') : '#71717a', isActive ? (s.type === 'blue' ? '0 0 20px #3b82f6' : '0 0 20px #ef4444') : 'none'), fontSize: '70px', lineHeight: '1', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
                       {formatSanctionTime(s.remainingTime)}
                     </div>
                     <span className={`font-bold text-[16px] tracking-widest ${isActive ? (s.type === 'blue' ? 'text-blue-400' : 'text-red-400') : 'text-zinc-500'}`}>
@@ -1156,11 +1167,11 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
             <>
               <span className="font-bold tracking-[0.2em] mb-[10px] text-[30px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>PATINADORES</span>
               <div className="flex items-center justify-center gap-[30px] bg-black border-[5px] rounded-[25px] px-[40px] py-[10px]" style={{ borderColor: `${liveLogos.boardAccentColor || '#dc2626'}55` }}>
-                <span className="leading-none" style={{ ...customNumberStyle, color: homeSkaters > awaySkaters ? '#22c55e' : (liveLogos.boardTextColor || '#ffffff'), fontSize: '110px' }}>
+                <span className={`leading-none ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(homeSkaters > awaySkaters ? '#22c55e' : (liveLogos.boardTextColor || '#ffffff')), fontSize: '110px' }}>
                   {homeSkaters}
                 </span>
                 <span className="text-zinc-600 font-black text-[50px]">vs</span>
-                <span className="leading-none" style={{ ...customNumberStyle, color: awaySkaters > homeSkaters ? '#22c55e' : (liveLogos.boardTextColor || '#ffffff'), fontSize: '110px' }}>
+                <span className={`leading-none ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(awaySkaters > homeSkaters ? '#22c55e' : (liveLogos.boardTextColor || '#ffffff')), fontSize: '110px' }}>
                   {awaySkaters}
                 </span>
               </div>
@@ -1179,6 +1190,8 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
             accent={liveLogos.boardAccentColor || '#dc2626'}
             textColor={liveLogos.boardTextColor || '#ffffff'}
             numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
+            numberClass={digitFxClass}
+            nameClass={nameFxClass}
             clockLabel={showFinalSummary ? 'HORA' : 'DESCANSO'}
             clockValue={showFinalSummary ? wallClock : formatTime(state.mainClock)}
             sections={ov.stats}
@@ -1199,6 +1212,8 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
             textColor={liveLogos.boardTextColor || '#ffffff'}
             winColor={liveLogos.possessionColor || '#22c55e'}
             numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
+            numberClass={digitFxClass}
+            nameClass={nameFxClass}
             winnerText={ov.final.winnerText}
             drawText={ov.final.drawText}
             layout={ovLayout.final}

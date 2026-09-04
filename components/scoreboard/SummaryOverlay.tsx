@@ -6,7 +6,7 @@ import type { GameState } from '@/hooks/use-game-state'
 import { buildSummary, fmtDuration } from '@/lib/match-summary'
 import type { StatsOverlayConfig } from '@/lib/overlay-config'
 import { DEFAULT_OVERLAYS } from '@/lib/overlay-config'
-import { OverlayDraggable } from '@/components/scoreboard/OverlayDraggable'
+import { Slot, type SlotCtx } from '@/components/scoreboard/OverlaySlot'
 import { OverlayCanvas } from '@/components/scoreboard/OverlayCanvas'
 import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
@@ -20,6 +20,10 @@ interface Props {
   accent: string
   textColor: string
   numberStyle: React.CSSProperties
+  /** Clase de acabado para las cifras (`fx-neon`, `fx-metal`…). */
+  numberClass?: string
+  /** Clase de acabado para los nombres de equipo. */
+  nameClass?: string
   clockLabel?: string
   clockValue?: string
   sections?: StatsOverlayConfig
@@ -37,16 +41,22 @@ const CARD_COLOR = { yellow: '#facc15', blue: '#3b82f6', red: '#dc2626' } as con
 
 export function SummaryOverlay({
   state, scope, homeTeamName, awayTeamName, homeLogo, awayLogo,
-  accent, textColor, numberStyle, clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center', embedded = false,
+  accent, textColor, numberStyle, numberClass = '', nameClass = '', clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center', embedded = false,
   layout = DEFAULT_LAYOUT.stats, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
+  /**
+   * El acabado (neon, fluor, metal) llega como CLASE, no como color: la clase
+   * `fx-*` define el color del texto y un `color` inline se lo comeria. Cuando
+   * hay acabado, el color del elemento viaja como variable CSS.
+   */
+  const fxOn = (c?: string) => !!c && c !== 'fx-solid'
+  const paint = (color: string, cls?: string): React.CSSProperties =>
+    fxOn(cls) ? ({ ['--fx-color' as string]: color } as React.CSSProperties) : { color }
+
   const scaleRef = useRef(1)
-  const D = ({ id, className, children }: { id: string; className?: string; children: React.ReactNode }) => (
-    <OverlayDraggable id={id} pos={layout[id]} editMode={editMode} canvasScale={scaleRef.current}
-      onChange={(k, v) => onLayoutChange?.(k, v)} className={className}>
-      {children}
-    </OverlayDraggable>
-  )
+  /* El contexto es un dato, no un tipo de componente: cambiar de contexto
+     re-renderiza, pero no desmonta ni reinicia la animacion de entrada. */
+  const slotCtx: SlotCtx = { layout, editMode, scaleRef, onLayoutChange }
   const s = buildSummary(state, scope)
   const titulo = scope === 'primer_tiempo' ? 'RESUMEN 1ER TIEMPO' : 'FICHA DEL PARTIDO'
   const dim = (o: number) => ({ color: textColor, opacity: o })
@@ -113,35 +123,35 @@ export function SummaryOverlay({
       <OverlayCanvas zoom={scale}>{(k) => { scaleRef.current = k; return (<>
 
       {/* ── CABECERA ─────────────────────────────────────────────────────── */}
-      <D id="header" className="w-[1400px] flex items-center justify-center gap-[36px] bc-content-in">
+      <Slot ctx={slotCtx} id="header" className="w-[1400px] flex items-center justify-center gap-[36px] bc-content-in">
         <span className="font-black tracking-[0.32em] text-[40px]" style={{ color: accent }}>{titulo}</span>
         {clockValue && (
           <div className="flex items-center gap-[18px] border-[4px] rounded-[16px] px-[28px] py-[4px]"
             style={{ borderColor: `${accent}66` }}>
             <span className="font-bold text-[22px] tracking-[0.2em]" style={dim(0.55)}>{clockLabel}</span>
-            <span className="leading-none tabular-nums" style={{ ...numberStyle, fontSize: '60px' }}>{clockValue}</span>
+            <span className={`leading-none tabular-nums ${numberClass}`} style={{ ...numberStyle, fontSize: '60px' }}>{clockValue}</span>
           </div>
         )}
-      </D>
+      </Slot>
 
       {/* ── MARCADOR: escudo, nombre y goles en una sola linea base ──────── */}
-      <D id="score" className="w-[1700px] flex items-center justify-between gap-[40px] bc-content-in">
+      <Slot ctx={slotCtx} id="score" className="w-[1700px] flex items-center justify-between gap-[40px] bc-content-in">
         <div className="flex items-center gap-[26px] flex-1 min-w-0">
           {homeLogo && <img src={homeLogo} alt="" className="h-[128px] w-[128px] object-contain shrink-0" />}
-          <span className="font-black text-[58px] leading-none truncate" style={{ color: textColor }}>{homeTeamName}</span>
+          <span className={`font-black text-[58px] leading-none truncate ${nameClass}`} style={paint(textColor, nameClass)}>{homeTeamName}</span>
         </div>
 
         <div className="flex items-center gap-[34px] shrink-0">
-          <span className="leading-none tabular-nums" style={{ ...numberStyle, fontSize: '170px' }}>{s.home.score}</span>
+          <span className={`leading-none tabular-nums ${numberClass}`} style={{ ...numberStyle, fontSize: '170px' }}>{s.home.score}</span>
           <span className="font-black text-[80px] leading-none" style={dim(0.3)}>–</span>
-          <span className="leading-none tabular-nums" style={{ ...numberStyle, fontSize: '170px' }}>{s.away.score}</span>
+          <span className={`leading-none tabular-nums ${numberClass}`} style={{ ...numberStyle, fontSize: '170px' }}>{s.away.score}</span>
         </div>
 
         <div className="flex items-center gap-[26px] flex-1 min-w-0 justify-end">
-          <span className="font-black text-[58px] leading-none truncate text-right" style={{ color: textColor }}>{awayTeamName}</span>
+          <span className={`font-black text-[58px] leading-none truncate text-right ${nameClass}`} style={paint(textColor, nameClass)}>{awayTeamName}</span>
           {awayLogo && <img src={awayLogo} alt="" className="h-[128px] w-[128px] object-contain shrink-0" />}
         </div>
-      </D>
+      </Slot>
 
       {/* Parciales por periodo y definicion por penales */}
       {(sections.showByPeriod || s.hasPenalties) && (
@@ -160,18 +170,18 @@ export function SummaryOverlay({
       )}
 
       {/* ── COMPARATIVAS: etiqueta al centro, valores enfrentados ─────────── */}
-      <D id="compare" className="w-[1700px] flex flex-col justify-center gap-[42px] bc-content-in">
+      <Slot ctx={slotCtx} id="compare" className="w-[1700px] flex flex-col justify-center gap-[42px] bc-content-in">
         {sections.showPossession && (
-          <StatRow
-            label="POSESIÓN"
-            home={`${s.home.possessionPct}%`}
-            away={`${s.away.possessionPct}%`}
-            homeBar={s.home.possessionPct}
-            awayBar={s.away.possessionPct}
-          />
+          StatRow({
+            label: 'POSESIÓN',
+            home: `${s.home.possessionPct}%`,
+            away: `${s.away.possessionPct}%`,
+            homeBar: s.home.possessionPct,
+            awayBar: s.away.possessionPct
+          })
         )}
         {sections.showFouls && (
-          <StatRow label="FALTAS" home={String(s.home.fouls)} away={String(s.away.fouls)} />
+          StatRow({ label: 'FALTAS', home: String(s.home.fouls), away: String(s.away.fouls) })
         )}
         {sections.showPossession && (
           <div className="flex items-center w-full gap-[24px] -mt-[26px]">
@@ -180,30 +190,30 @@ export function SummaryOverlay({
             <span className="flex-1 text-left font-mono text-[24px]" style={dim(0.4)}>{fmtDuration(s.away.possession)}</span>
           </div>
         )}
-      </D>
+      </Slot>
 
       {/* ── PIE: goleadores y tarjetas, alineados a la misma base ─────────── */}
-      <D id="scorers" className="w-[1700px] flex items-start justify-between gap-[60px] pt-[34px] bc-content-in">
+      <Slot ctx={slotCtx} id="scorers" className="w-[1700px] flex items-start justify-between gap-[60px] pt-[34px] bc-content-in">
         <div className="flex-1 min-w-0 flex flex-col gap-[16px]">
           {sections.showGoalMinutes && (
             <>
               <span className="font-bold tracking-[0.26em] text-[22px]" style={dim(0.45)}>GOLES</span>
-              <Scorers data={s.home} align="left" />
+              {Scorers({ data: s.home, align: 'left' })}
             </>
           )}
-          {sections.showCards && s.home.cards.length > 0 && <Cards data={s.home} align="left" />}
+          {sections.showCards && s.home.cards.length > 0 && Cards({ data: s.home, align: 'left' })}
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col gap-[16px] items-end">
           {sections.showGoalMinutes && (
             <>
               <span className="font-bold tracking-[0.26em] text-[22px]" style={dim(0.45)}>GOLES</span>
-              <Scorers data={s.away} align="right" />
+              {Scorers({ data: s.away, align: 'right' })}
             </>
           )}
-          {sections.showCards && s.away.cards.length > 0 && <Cards data={s.away} align="right" />}
+          {sections.showCards && s.away.cards.length > 0 && Cards({ data: s.away, align: 'right' })}
         </div>
-      </D>
+      </Slot>
       </>) }}</OverlayCanvas>
     </div>
   )

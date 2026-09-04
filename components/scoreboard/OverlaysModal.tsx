@@ -27,6 +27,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import {
   loadOverlays, saveOverlays, DEFAULT_OVERLAYS, type OverlaysConfig
 } from '@/lib/overlay-config'
+import { loadBoardLook, resolveLedFont, DEFAULT_LOOK, type BoardLook } from '@/lib/board-look'
+import { finishClass, resolveFinish, finishStyle, type Finish } from '@/lib/finishes'
 
 interface Props { open: boolean; onClose: () => void }
 
@@ -45,15 +47,40 @@ export function OverlaysModal({ open, onClose }: Props) {
   const [prevW, setPrevW] = useState(640)
   const [prevTeam, setPrevTeam] = useState<'home' | 'away'>('home')
 
-  /** Los escudos configurados en el gestor de pantallas, para ver lo real. */
-  const [logos, setLogos] = useState<{ home: string; away: string }>({ home: '', away: '' })
+  /**
+   * La apariencia REAL del tablero: escudos, colores, tipografía y acabado.
+   *
+   * Antes aquí sólo se leían los escudos y el resto iba escrito a mano
+   * (`#dc2626`, `var(--font-led)`). Si el operador dejaba el tablero en verde,
+   * la previsualización seguía mostrándolo rojo: los componentes eran reales
+   * pero les llegaban datos falsos. Ahora leen de la misma fuente que el
+   * proyector, así que lo que se ve aquí es lo que sale allá.
+   */
+  const [look, setLook] = useState<BoardLook>(DEFAULT_LOOK)
   useEffect(() => {
     if (!open) return
-    try {
-      const l = JSON.parse(localStorage.getItem('ardi-live-logos') || '{}')
-      setLogos({ home: l.homeUrl || '', away: l.awayUrl || '' })
-    } catch { /* ignorar */ }
+    setLook(loadBoardLook())
+    const refresh = () => setLook(loadBoardLook())
+    window.addEventListener('storage', refresh)
+    window.addEventListener('ardi-screens-updated', refresh)
+    return () => {
+      window.removeEventListener('storage', refresh)
+      window.removeEventListener('ardi-screens-updated', refresh)
+    }
   }, [open])
+
+  /* Mismo criterio que el tablero: metal degrada a sólido en cifras críticas. */
+  const digitFinish = resolveFinish(look.finishDigits as Finish, true)
+  const nameFinish = look.finishNames as Finish
+  const digitFxClass = finishClass(digitFinish)
+  const nameFxClass = finishClass(nameFinish)
+  const previewFont = resolveLedFont(look.ledFont)
+  const previewNumberStyle: React.CSSProperties = {
+    fontFamily: previewFont,
+    fontWeight: (look.fontWeight || '900') as React.CSSProperties['fontWeight'],
+    letterSpacing: look.letterSpacing || 'normal',
+    ...finishStyle(look.boardAccentColor, digitFinish)
+  }
 
   useEffect(() => { if (open) { setLayouts(loadLayouts()); setEditMode(false) } }, [open])
 
@@ -191,15 +218,15 @@ export function OverlaysModal({ open, onClose }: Props) {
                   cfg={cfg.goal} phase="in"
                   homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
                   homeScore={2} awayScore={1}
-                  homeLogo={logos.home} awayLogo={logos.away} fontFamily="var(--font-led)" />
+                  homeLogo={look.homeUrl} awayLogo={look.awayUrl} fontFamily={previewFont} />
               )}
               {t === 'final' && (
                 <WinnerOverlay embedded state={DEMO_STATE}
                   layout={layouts.final} editMode={editMode} onLayoutChange={(id, pos) => setPos('final', id, pos)}
                   homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
-                  homeLogo={logos.home} awayLogo={logos.away}
-                  accent="#dc2626" textColor="#ffffff" winColor="#22c55e"
-                  numberStyle={{ fontFamily: 'var(--font-led)', fontWeight: 900 }}
+                  homeLogo={look.homeUrl} awayLogo={look.awayUrl}
+                  accent={look.boardAccentColor} textColor={look.boardTextColor} winColor={look.possessionColor}
+                  numberStyle={previewNumberStyle} numberClass={digitFxClass} nameClass={nameFxClass}
                   winnerText={cfg.final.winnerText} drawText={cfg.final.drawText}
                   scale={cfg.final.scale} align={cfg.final.align} />
               )}
@@ -207,9 +234,9 @@ export function OverlaysModal({ open, onClose }: Props) {
                 <SummaryOverlay embedded state={DEMO_STATE} scope="primer_tiempo"
                   layout={layouts.stats} editMode={editMode} onLayoutChange={(id, pos) => setPos('stats', id, pos)}
                   homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
-                  homeLogo={logos.home} awayLogo={logos.away}
-                  accent="#dc2626" textColor="#ffffff"
-                  numberStyle={{ fontFamily: 'var(--font-led)', fontWeight: 900 }}
+                  homeLogo={look.homeUrl} awayLogo={look.awayUrl}
+                  accent={look.boardAccentColor} textColor={look.boardTextColor}
+                  numberStyle={previewNumberStyle} numberClass={digitFxClass} nameClass={nameFxClass}
                   clockLabel="DESCANSO" clockValue="04:32"
                   sections={cfg.stats} scale={cfg.stats.scale} align={cfg.stats.align} />
               )}
