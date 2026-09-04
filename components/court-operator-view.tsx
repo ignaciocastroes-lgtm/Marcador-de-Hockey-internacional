@@ -671,7 +671,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       <button
         onClick={() => openSheet(p, team)}
         className={`relative flex flex-col items-center justify-center rounded-xl border-2 shadow-lg transition-transform hover:scale-105 active:scale-95
-          ${onCourt ? 'w-[46px] h-[46px] sm:w-[68px] sm:h-[68px] lg:w-[76px] lg:h-[76px]' : 'w-[38px] h-[38px] sm:w-[54px] sm:h-[54px] lg:w-[60px] lg:h-[60px] opacity-90'}
+          ${onCourt ? 'w-[46px] h-[46px] sm:w-[68px] sm:h-[68px] lg:w-[76px] lg:h-[76px] xl:w-[86px] xl:h-[86px]' : 'w-[38px] h-[38px] sm:w-[54px] sm:h-[54px] lg:w-[60px] lg:h-[60px] xl:w-[68px] xl:h-[68px] opacity-90'}
           ${style !== 'cubo' ? 'border-transparent' : goalie ? 'border-white ring-2 ring-green-400/60' : staff ? 'border-purple-400/70' : 'border-white/70'}`}
         style={bg}
         title={p.name || `Jugador ${display}`}
@@ -691,7 +691,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           </div>
         )}
         {style === 'cubo' ? (
-          <span className={`font-black text-white bg-black/50 px-1.5 rounded backdrop-blur-sm ${onCourt ? 'text-sm sm:text-lg lg:text-xl' : 'text-[11px] sm:text-sm'}`}>
+          <span className={`font-black text-white bg-black/50 px-1.5 rounded backdrop-blur-sm ${onCourt ? 'text-sm sm:text-lg lg:text-xl xl:text-2xl' : 'text-[11px] sm:text-sm xl:text-base'}`}>
             {display}
           </span>
         ) : (
@@ -761,7 +761,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       (p.isDisabled || isPlayerAvailable(p, team, cardHistory, sanctions)))
 
     return (
-      <div className={`w-[22%] min-w-[68px] sm:min-w-[110px] p-1 sm:p-2 flex flex-col transition-colors ${
+      <div className={`w-[22%] min-w-[68px] sm:min-w-[110px] lg:min-w-[130px] xl:min-w-[150px] p-1 sm:p-2 xl:p-3 flex flex-col transition-colors ${
         benchArm?.team === team
           ? (benchArm.card === 'yellow' ? 'bg-yellow-500/15 ring-2 ring-inset ring-yellow-500/60' : 'bg-red-600/15 ring-2 ring-inset ring-red-500/60')
           : team === 'home' ? 'bg-blue-950/20 border-r border-blue-500/30' : 'bg-amber-950/20 border-l border-amber-500/30'}`}>
@@ -800,8 +800,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               <Button size="sm"
                 onClick={() => req ? props.cancelTimeoutRequest(team) : (team === 'home' ? props.requestTimeoutHome() : props.requestTimeoutAway())}
                 disabled={stopped || matchEnded || state.period === 'penales' || used >= 2}
-                className={`h-7 px-0 text-[9px] font-black ${req ? 'bg-red-600 hover:bg-red-500 animate-pulse' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
-                {req ? 'CANCELAR' : 'SOLICITAR'}
+                className={`h-7 px-0 text-[7px] sm:text-[9px] leading-[1.05] font-black ${req ? 'bg-red-600 hover:bg-red-500 animate-pulse' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+                {req ? 'CANCELAR' : 'SOLICITAR BANCA'}
               </Button>
               <Button size="sm"
                 onClick={() => team === 'home' ? props.grantTimeoutHome() : props.grantTimeoutAway()}
@@ -852,18 +852,18 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     const fouls = isHome ? state.homeFouls : state.awayFouls
     const foulActive = isHome ? state.isHomeFoul10Active : state.isAwayFoul10Active
     return (
-      <div className="flex flex-col items-center gap-1 px-1">
-        <div className="flex items-center gap-1">
-          <span className="text-[8px] font-bold text-zinc-500 w-9 text-right">GOL</span>
-          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} className="h-6 w-6 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-2.5 h-2.5" /></Button>
-          <span className="text-2xl font-black text-red-500 tabular-nums w-6 text-center">{score}</span>
-          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} className="h-6 w-6 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-2.5 h-2.5" /></Button>
+      <div className="flex flex-col items-center gap-0.5 sm:gap-1 px-1">
+        <div className="flex items-center gap-1 sm:gap-2">
+          <span className="text-[8px] sm:text-[10px] font-bold text-zinc-500 w-9 sm:w-11 text-right">GOL</span>
+          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
+          <span className="text-3xl sm:text-4xl font-black text-red-500 tabular-nums w-9 sm:w-11 text-center leading-none" style={{ fontFamily: 'var(--font-led)' }}>{score}</span>
+          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[8px] font-bold text-zinc-500 w-9 text-right">FALTA</span>
-          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} className="h-6 w-6 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-2.5 h-2.5" /></Button>
-          <span className={`text-xl font-black tabular-nums w-6 text-center ${foulActive ? 'text-red-500 animate-pulse' : 'text-amber-400'}`}>{fouls}</span>
-          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} className="h-6 w-6 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-2.5 h-2.5" /></Button>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <span className="text-[8px] sm:text-[10px] font-bold text-zinc-500 w-9 sm:w-11 text-right">FALTA</span>
+          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
+          <span className={`text-3xl sm:text-4xl font-black tabular-nums w-9 sm:w-11 text-center leading-none ${foulActive ? 'text-red-500 animate-pulse' : 'text-amber-400'}`} style={{ fontFamily: 'var(--font-led)' }}>{fouls}</span>
+          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
         </div>
       </div>
     )
@@ -898,45 +898,10 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     { top: '32%', left: '39%' }, { top: '68%', left: '39%' }
   ]
 
-  // ─── Bloque de equipo (marcador, faltas, timeouts) ─────────────────────────
-
-  const TeamPanel = ({ team }: { team: 'home' | 'away' }) => {
-    const isHome = team === 'home'
-    const name = isHome ? homeTeamName : awayTeamName
-    const count = isHome ? homeLineup.count : awayLineup.count
-    const max = isHome ? homeMax : awayMax
-    const accent = isHome ? 'text-blue-400' : 'text-amber-400'
-    const border = isHome ? 'border-blue-800' : 'border-amber-800'
-
-    return (
-      <div className={`flex-1 min-w-[260px] bg-zinc-950 border-2 ${border} rounded-xl p-3 flex flex-col gap-2`}>
-        <div className="flex items-center justify-between">
-          <h2 className={`${accent} font-black text-base sm:text-lg uppercase truncate`}>{name}</h2>
-          <span className={`text-[10px] font-black px-2 py-0.5 rounded ${count >= MIN_TOTAL_PLAYERS ? 'bg-zinc-800 text-zinc-300' : 'bg-red-900/60 text-red-300 animate-pulse'}`}>
-            {count}/{max} EN PISTA
-          </span>
-        </div>
-
-        {/* Goles y faltas manuales viven ahora bajo el reloj, junto al resto de
-            controles de partido: mismo dato, un solo lugar, sin bajar la
-            vista hasta esta ficha para corregir un marcador. */}
-
-        {state.matchConfig.allowPenalties && (
-          <div className="bg-black/60 rounded-lg p-2 flex items-center justify-between">
-            <span className="text-[10px] font-bold text-zinc-500">PENALES</span>
-            <span className="text-2xl font-black text-purple-400 tabular-nums">{isHome ? state.homePenalties : state.awayPenalties}</span>
-            <div className="flex gap-1">
-              <Button size="sm" disabled={state.period !== 'penales' || matchEnded} onClick={() => isHome ? props.adjustHomePenalties(-1) : props.adjustAwayPenalties(-1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3" /></Button>
-              <Button size="sm" disabled={state.period !== 'penales' || matchEnded} onClick={() => isHome ? props.adjustHomePenalties(1) : props.adjustAwayPenalties(1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3" /></Button>
-            </div>
-          </div>
-        )}
-
-        {/* El tiempo muerto de banca se pide y se concede en BenchZone —
-            está ahí, junto a la banca, sin repetirse aquí. */}
-      </div>
-    )
-  }
+  // El bloque de equipo (goles/faltas/tiempo muerto/penales) se retiró: cada
+  // control encontró un lugar más directo — goles y faltas junto al reloj
+  // (ManualScore), tiempo muerto junto a la banca (BenchZone), y los penales
+  // de la tanda los registra sola la vista de shootout al cargar cada tiro.
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -1015,6 +980,15 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           </div>
           <Button onPointerDown={() => buzz(1200)} className="h-8 font-black bg-red-700 hover:bg-red-600 text-xs">
             <Bell className="w-4 h-4 mr-1" /> CHICHARRA
+          </Button>
+          {/* Girar pista: quién ataca a cada lado. Útil sobre todo al empezar
+              — sorteo de campo — pero queda disponible todo el partido; el
+              cambio de lado automático de entretiempo sigue funcionando
+              igual y esto sólo lo adelanta o lo corrige a mano. */}
+          <Button onClick={() => setIsFlipped(f => !f)} disabled={matchEnded}
+            title="Girar pista — cambia qué lado ataca cada equipo"
+            className="h-8 font-black bg-zinc-800 hover:bg-zinc-700 text-xs">
+            <ArrowRightLeft className="w-4 h-4 mr-1" /> GIRAR PISTA
           </Button>
         </div>
 
@@ -1109,7 +1083,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           </span>
         </div>
       ) : (
-      <div className={`w-full aspect-[1.25/1] sm:aspect-[1.8/1] lg:aspect-[2.2/1] min-h-[300px] sm:min-h-[380px] flex rounded-2xl overflow-hidden border-2 sm:border-4 border-zinc-700 shadow-2xl ${isFlipped ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={`w-full xl:max-w-[1500px] xl:mx-auto aspect-[1.25/1] sm:aspect-[1.8/1] lg:aspect-[2.2/1] min-h-[300px] sm:min-h-[380px] flex rounded-2xl overflow-hidden border-2 sm:border-4 border-zinc-700 shadow-2xl ${isFlipped ? 'flex-row-reverse' : 'flex-row'}`}>
         <BenchZone team="home" />
 
         <div className="flex-1 bg-slate-900 relative border-x-2 border-white/40 rounded-[40px] sm:rounded-[70px] overflow-hidden">
@@ -1290,12 +1264,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       </div>
       </div>
 
-      {/* ── PANELES DE EQUIPO ──────────────────────────────────────────────── */}
-      <div className={`flex flex-wrap gap-3 ${isFlipped ? 'flex-row-reverse' : 'flex-row'}`}>
-        <TeamPanel team="home" />
-        <TeamPanel team="away" />
-      </div>
-
       {/* ── ADMINISTRACION ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 pb-4">
         <Button onClick={toggleFullscreen} className="h-10 font-bold text-xs bg-zinc-800 hover:bg-zinc-700">
@@ -1393,7 +1361,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       {/* ── HOJA DE ACCIONES SOBRE LA FICHA ────────────────────────────────── */}
       <Dialog open={!!selected} onOpenChange={open => { if (!open) setSelected(null) }}>
-        <DialogContent className="bg-zinc-900 border-2 border-zinc-700 text-white max-w-lg p-0" aria-describedby={undefined}>
+        <DialogContent className="bg-zinc-900 border-2 border-zinc-700 text-white max-w-lg lg:max-w-2xl p-0" aria-describedby={undefined}>
           <DialogHeader className="sr-only"><DialogTitle>Acciones del jugador</DialogTitle></DialogHeader>
           {selected && (
             <>
@@ -1548,7 +1516,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
            HISTORIAL y NUEVO. Se configura una vez por temporada, no cada
            partido, así que no tiene por qué ocupar espacio permanente. */}
       <Dialog open={showLook} onOpenChange={setShowLook}>
-        <DialogContent className="bg-zinc-900 border-2 border-zinc-700 text-white max-w-md" aria-describedby={undefined}>
+        <DialogContent className="bg-zinc-900 border-2 border-zinc-700 text-white max-w-md lg:max-w-xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg font-black">
               <Palette className="w-5 h-5 text-blue-400" /> Apariencia de la pista
@@ -1606,7 +1574,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       {/* ── ÁRBITRO: la falta es del equipo ─────────────────────────────────── */}
       <Dialog open={refOpen} onOpenChange={setRefOpen}>
-        <DialogContent className="bg-zinc-900 border-2 border-zinc-500 text-white max-w-md" aria-describedby={undefined}>
+        <DialogContent className="bg-zinc-900 border-2 border-zinc-500 text-white max-w-md lg:max-w-xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="text-lg font-black">Falta de equipo</DialogTitle>
             <p className="text-[11px] text-zinc-500 leading-snug">
@@ -1639,7 +1607,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       {/* ── Cambio jugador por jugador: una sola operación ──────────────────── */}
       <Dialog open={!!subbing} onOpenChange={o => { if (!o) setSubbing(null) }}>
-        <DialogContent className="bg-zinc-900 border-2 border-indigo-700 text-white max-w-lg" aria-describedby={undefined}>
+        <DialogContent className="bg-zinc-900 border-2 border-indigo-700 text-white max-w-lg lg:max-w-2xl" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="text-lg font-black">
               Sale el #{subbing ? getDisplayNumber(subbing.out) : ''} — ¿quién entra?
@@ -1773,7 +1741,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       </Dialog>
 
       <Dialog open={showIntermissionSelector} onOpenChange={setShowIntermissionSelector}>
-        <DialogContent className="bg-zinc-900 border-2 border-amber-600 text-white max-w-md" aria-describedby={undefined}>
+        <DialogContent className="bg-zinc-900 border-2 border-amber-600 text-white max-w-md lg:max-w-xl" aria-describedby={undefined}>
           <DialogHeader><DialogTitle className="text-amber-400 text-xl font-black text-center">TIEMPO DE DESCANSO</DialogTitle></DialogHeader>
           <div className="p-4 space-y-4">
             <div className="grid grid-cols-3 gap-2">
@@ -1793,7 +1761,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       </Dialog>
 
       <Dialog open={showEndConfirm} onOpenChange={setShowEndConfirm}>
-        <DialogContent className="bg-zinc-900 border-2 border-red-700 text-white max-w-md" aria-describedby={undefined}>
+        <DialogContent className="bg-zinc-900 border-2 border-red-700 text-white max-w-md lg:max-w-xl" aria-describedby={undefined}>
           <DialogHeader className="sr-only"><DialogTitle>Confirmar fin</DialogTitle></DialogHeader>
           <div className="text-center p-4">
             <AlertCircle className="w-14 h-14 text-red-500 mx-auto mb-3" />
@@ -1808,7 +1776,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       </Dialog>
 
       <Dialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
-        <DialogContent className="bg-zinc-900 border-2 border-red-700 text-white max-w-md" aria-describedby={undefined}>
+        <DialogContent className="bg-zinc-900 border-2 border-red-700 text-white max-w-md lg:max-w-xl" aria-describedby={undefined}>
           <DialogHeader className="sr-only"><DialogTitle>Confirmar reset</DialogTitle></DialogHeader>
           <div className="text-center p-4">
             <AlertTriangle className="w-14 h-14 text-red-500 mx-auto mb-3" />

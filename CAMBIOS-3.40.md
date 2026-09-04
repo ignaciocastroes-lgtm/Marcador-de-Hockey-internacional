@@ -116,3 +116,32 @@ detenido o el partido terminado); sólo cambió el lugar.
 
 1. **Tope de 10 jugadores** (`MAX_ENTRIES` en `ExpressRosterModal`).
 2. **Encaje de los lanzadores**: *contain* actual vs *cover* en `OverlayCanvas`.
+
+---
+
+## 6. GIRAR PISTA, TICKET DE EQUIPO ELIMINADO, ESCALA DE ESCRITORIO
+
+- **Botón GIRAR PISTA**, junto a CHICHARRA en la barra maestra. Cambia qué
+  lado ataca cada equipo — útil para el sorteo de campo al inicio, pero queda
+  disponible todo el partido. El cambio automático de lado en el entretiempo
+  sigue funcionando igual; esto sólo lo adelanta o lo corrige a mano.
+- **La ficha de equipo (goles/faltas/tiempo muerto/penales) se eliminó por
+  completo.** Cada control ya tenía un lugar más directo: goles y faltas
+  junto al reloj (`ManualScore`), tiempo muerto junto a la banca (`BenchZone`),
+  y los penales de la tanda los registra sola la vista de shootout al cargar
+  cada tiro — la ficha los duplicaba con un camino manual que podía
+  desincronizarse del conteo real.
+- **Los números de `ManualScore` crecen al tamaño de los relojes de 45** en
+  vista de escritorio (`sm:text-4xl`, misma fuente LED), con botones +/-
+  proporcionalmente más grandes.
+- **"SOLICITAR" pasó a "SOLICITAR BANCA"** en el botón de tiempo muerto de la
+  banca, para que quede claro qué se está pidiendo.
+- **Escala de escritorio**: la pista y las bancas tenían casi todos sus
+  tamaños tope en el punto de quiebre `lg` (1024px) mientras el contenedor
+  seguía creciendo con la pantalla — en un monitor grande la cancha se veía
+  enorme y los jugadores, chicos. Se agregó un peldaño `xl` a fichas, texto de
+  dorsal y ancho de banca, y un tope de ancho (`xl:max-w-[1500px] xl:mx-auto`)
+  para que la cancha no se estire más allá de lo razonable. Los modales de
+  contenido sustancial (ficha de jugador, apariencia de la pista, editor de
+  camiseta, falta de equipo, descanso, fin de partido) crecen un paso más en
+  pantallas grandes (`lg:max-w-xl` / `lg:max-w-2xl`).
