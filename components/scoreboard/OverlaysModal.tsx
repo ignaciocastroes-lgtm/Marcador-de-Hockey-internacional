@@ -44,7 +44,6 @@ export function OverlaysModal({ open, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('goal')
   const [layouts, setLayouts] = useState<AllLayouts>(loadLayouts())
   const [editMode, setEditMode] = useState(false)
-  const [prevW, setPrevW] = useState(640)
   const [prevTeam, setPrevTeam] = useState<'home' | 'away'>('home')
 
   /**
@@ -206,7 +205,7 @@ export function OverlaysModal({ open, onClose }: Props) {
               </div>
             )}
           </div>
-          <div ref={el => { if (el && el.clientWidth && el.clientWidth !== prevW) setPrevW(el.clientWidth) }}
+          <div
             className={`w-full aspect-video bg-black rounded-lg relative overflow-hidden border-2 ${
               editMode ? 'border-blue-500' : 'border-zinc-700'}`}>
             {/* Los componentes REALES a escala, no una maqueta: lo que se ve

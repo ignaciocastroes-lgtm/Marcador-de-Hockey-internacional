@@ -65,12 +65,12 @@ export function GoalOverlay({
 
   return (
     <div
-      style={{
-        alignItems: 'center',
-        justifyContent: cfg.align === 'top' ? 'flex-start' : cfg.align === 'bottom' ? 'flex-end' : 'center'
-      }}
-      className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[3000] flex flex-col items-center bg-black overflow-hidden ${phase === 'out' ? 'bc-out' : 'bc-in'}`}>
-      <OverlayCanvas zoom={cfg.scale}>{(k) => { scaleRef.current = k; return (<>
+      /* El justifyContent de este flex nunca hacía nada: OverlayCanvas es
+         position:absolute (inset-0), y un hijo absoluto queda fuera del
+         flujo flex — el padre no puede alinearlo por más que lo intente.
+         La alineación real vive ahora dentro del propio lienzo. */
+      className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[3000] bg-black overflow-hidden ${phase === 'out' ? 'bc-out' : 'bc-in'}`}>
+      <OverlayCanvas zoom={cfg.scale} align={cfg.align}>{(k) => { scaleRef.current = k; return (<>
              
              {/* BACKGROUND PARALLAX SHIELD WATERMARK */}
              {cfg.showWatermark && <div className="absolute inset-0 z-0 flex items-center justify-center opacity-20 animate-parallax-pan pointer-events-none mix-blend-screen">

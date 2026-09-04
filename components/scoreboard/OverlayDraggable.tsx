@@ -11,6 +11,23 @@ import type { ElementPos } from '@/lib/overlay-layout'
  * contiene puede estar escalada —la previsualizacion lo esta— asi que el
  * desplazamiento del puntero se divide por esa escala: sin eso, el elemento
  * se mueve mas rapido que el dedo dentro de una previsualizacion chica.
+ *
+ * EL BLINDAJE CONTRA SCROLL ES EL MISMO QUE YA USA EL EDITOR DE PANTALLAS EN
+ * `scoreboard-view.tsx` (el que "funciona perfecto"), porque faltaba aquí:
+ *
+ *  - `touchAction: 'none'` — sin esto, el navegador interpreta el gesto de
+ *    arrastre como un intento de hacer scroll (la previsualización vive
+ *    dentro de un modal con `overflow-y-auto`), y la página "salta" en vez
+ *    de mover el elemento.
+ *  - `e.stopPropagation()` en down/move/up — sin esto, el gesto se le
+ *    escapa al contenedor scrolleable del modal aunque `touchAction` ya lo
+ *    frene a nivel del navegador; algunos dispositivos igual dejan pasar el
+ *    evento hacia arriba.
+ *  - Captura de puntero sobre `e.currentTarget` (el propio elemento
+ *    arrastrable), no sobre `e.target` (que puede ser un hijo interno, como
+ *    un escudo o un número): con `e.target` la captura y el arrastre podían
+ *    terminar mirando cosas distintas, y ahí es donde el modo edición se
+ *    sentía como una maqueta — el mouse se movía, el elemento no.
  */
 
 interface Props {
@@ -35,12 +52,14 @@ export function OverlayDraggable({
   const onPointerDown = (e: React.PointerEvent) => {
     if (!editMode) return
     e.preventDefault()
-    ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
     drag.current = { px: e.clientX, py: e.clientY, ox: pos.x, oy: pos.y }
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!drag.current) return
+    if (!editMode || !drag.current) return
+    e.stopPropagation()
     const k = canvasScale || 1
     onChange(id, {
       ...pos,
@@ -49,7 +68,12 @@ export function OverlayDraggable({
     })
   }
 
-  const end = () => { drag.current = null }
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (!drag.current) return
+    e.stopPropagation()
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
+    drag.current = null
+  }
 
   return (
     <div
@@ -60,12 +84,14 @@ export function OverlayDraggable({
         transform: `translate(-50%, -50%) scale(${pos.s})`,
         opacity: pos.v ? 1 : 0.25,
         outline: editMode ? '2px dashed rgba(255,255,255,.35)' : undefined,
-        outlineOffset: editMode ? '10px' : undefined
+        outlineOffset: editMode ? '10px' : undefined,
+        touchAction: 'none',
+        willChange: editMode ? 'transform' : undefined
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={end}
-      onPointerCancel={end}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
     >
       {children}
 

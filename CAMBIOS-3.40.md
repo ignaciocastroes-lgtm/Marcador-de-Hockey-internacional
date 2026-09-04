@@ -213,3 +213,49 @@ forma distinta:
 Con esto los tres lanzadores quedan al mismo nivel que GESTOR PANTALLAS:
 arrastre, tamaño y posición vertical funcionando de punta a punta, desde el
 modal hasta la proyección real.
+
+---
+
+## 10. MODO EDITAR DE LOS LANZADORES — POR FIN ARRASTRA DE VERDAD
+
+El diagnóstico anterior (que el mecanismo de arrastre "en principio funciona")
+era incompleto. Comparé `OverlayDraggable.tsx` línea por línea contra el
+editor de pantallas de `scoreboard-view.tsx` — el que sí funciona — y le
+faltaban exactamente las tres piezas que existen ahí para blindar el gesto
+contra el scroll del navegador:
+
+1. **`touchAction: 'none'` no estaba.** Sin esto, el navegador interpreta el
+   arrastre como un intento de hacer scroll — la previsualización vive dentro
+   de un modal con `overflow-y-auto` — y la página salta en vez de mover el
+   elemento. Esto solo explica una parte del síntoma "salta la pantalla".
+2. **Faltaba `e.stopPropagation()`** en el pointerdown, el pointermove y el
+   pointerup. Sin eso el gesto se le sigue escapando al contenedor
+   scrolleable en algunos navegadores aunque `touchAction` ya lo frene a
+   nivel del navegador.
+3. **La captura de puntero se pedía sobre `e.target`, no sobre
+   `e.currentTarget`.** Si el pointerdown arrancaba sobre un hijo interno
+   del elemento (un escudo, un número, un texto), la captura quedaba en ese
+   hijo mientras el resto de la lógica asumía el contenedor — en algunos
+   navegadores eso es exactamente lo que hace que el mouse se mueva pero el
+   elemento no se mueva con él: el modo edición se sentía como una maqueta
+   porque, técnicamente, lo era en ese caso.
+
+Reescribí `OverlayDraggable.tsx` con las tres piezas alineadas al patrón
+comprobado. Además:
+
+- **Se eliminó el `ref` inline que medía `prevW`.** Era estado muerto —se
+  escribía pero nunca se leía en ningún lado— y al ser una función anónima
+  creada en cada render, React desmontaba y volvía a montar esa referencia
+  en cada pintado, generando renders de sobra que podían contribuir al salto
+  visual. No cumplía ninguna función; se quitó entera.
+- **GOL: la Posición vertical tampoco funcionaba, y no se había detectado.**
+  El contenedor externo de `GoalOverlay` intentaba alinear verticalmente con
+  `flex` + `justifyContent`, pero su único hijo (`OverlayCanvas`) es
+  `position: absolute` — queda fuera del flujo del flex, así que ese
+  `justifyContent` nunca pudo hacer nada, con zoom o sin él. Ahora `align` se
+  pasa directo al lienzo (`<OverlayCanvas zoom={cfg.scale} align={cfg.align}>`),
+  igual que ya se había arreglado para Estadísticas y Fin la ronda anterior.
+
+Con esto los tres lanzadores arrastran, escalan y alinean de punta a punta —
+en el modal y en la proyección real— sin necesidad de F5 ni de que el gesto
+se le escape al scroll.
