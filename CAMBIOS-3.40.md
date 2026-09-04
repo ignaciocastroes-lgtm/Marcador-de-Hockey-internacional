@@ -145,3 +145,71 @@ detenido o el partido terminado); sólo cambió el lugar.
   contenido sustancial (ficha de jugador, apariencia de la pista, editor de
   camiseta, falta de equipo, descanso, fin de partido) crecen un paso más en
   pantallas grandes (`lg:max-w-xl` / `lg:max-w-2xl`).
+
+---
+
+## 7. GIRAR PISTA: FICHAS SUPERPUESTAS — CAUSA ENCONTRADA
+
+Al girar la pista las fichas quedaban mal ubicadas hasta forzar F5. La causa
+estaba en `court-operator-view.tsx`: la posición de cada ficha se anclaba
+alternando entre las propiedades CSS `left` y `right` según `isFlipped`, pero
+el `translateX` de centrado se quedaba fijo en un solo sentido. Dos problemas
+distintos, uno encima del otro:
+
+1. **CSS no anima entre dos propiedades distintas.** Pasar de `left: 28%` a
+   `right: 28%` no es una transición — son dos valores inconexos. El
+   resultado quedaba mal calculado hasta que algo forzaba un reflow, como F5.
+2. **El centrado dependía del lado.** `left` + `translateX(-50%)` centra
+   correctamente; `right` + `translateX(-50%)` no — habría necesitado
+   `translateX(+50%)`. Al no ajustarse, las fichas quedaban corridas un ancho
+   completo de token en el lado girado.
+
+Arreglo: todas las fichas (porteros y jugadores de campo, local y visita) se
+anclan ahora **siempre con `left` + `translateX(-50%)`**, sin excepción. El
+giro se resuelve espejando el porcentaje (`100 - x`) según `isFlipped`, no
+cambiando de propiedad. Con eso la transición siempre es entre dos valores de
+`left` — que sí es animable — y el centrado nunca se descuadra.
+
+---
+
+## 8. BOTONES DE BANCA: RENOMBRADO Y MÁS GRANDES
+
+- **"T.B. {usados}/2" → "CONCEDER {usados}/2"**, para que quede claro qué
+  acción hace el botón sin tener que descifrar la sigla.
+- Los cuatro botones de banca (AM. BANCA, RJ. BANCA, SOLICITAR BANCA,
+  CONCEDER) crecen de `h-7` a `h-8 sm:h-10` con texto más grande en
+  escritorio — la banca ya tiene más aire (`lg:min-w-[130px]
+  xl:min-w-[150px]` de la ronda anterior) y la ficha de equipo que
+  competía por espacio ya no existe.
+
+---
+
+## 9. LANZADORES: TAMAÑO Y POSICIÓN VERTICAL — TRES BUGS DISTINTOS, UNO POR LANZADOR
+
+El modal de lanzadores parecía una maqueta en los mismos controles que en
+GESTOR PANTALLAS sí funcionan (arrastrar, tamaño, posición). No era un problema
+de mecanismo — el arrastre (`MOVER`) y el guardado de posiciones ya
+funcionaban correctamente en los tres. El bug estaba en el control de
+**Tamaño** y el de **Posición vertical**, y cada lanzador lo tenía roto de una
+forma distinta:
+
+- **GOL**: la Posición vertical funcionaba (`cfg.align` sí se leía). El
+  **Tamaño no hacía nada** — `cfg.scale` se guardaba pero nunca se pasaba al
+  lienzo. Arreglo: `<OverlayCanvas zoom={cfg.scale}>`.
+- **ESTADÍSTICAS y FIN**: el Tamaño funcionaba (`scale` sí llegaba al
+  lienzo). La **Posición vertical no hacía nada** — el prop `align` se
+  recibía pero nunca se usaba: dentro de `SummaryOverlay` y `WinnerOverlay`
+  había otra variable local también llamada `align` (horizontal, `left`/
+  `right`, para alinear goleadores y equipos) que tapaba a la de verdad sin
+  que nada fallara en la compilación. Arreglo: pasar el `align` real al
+  lienzo (`<OverlayCanvas zoom={scale} align={align}>`).
+- **`OverlayCanvas` no sabía alinear verticalmente.** Tenía `items-center`
+  escrito a mano en el string base; agregarle una clase por fuera no la podía
+  ganar (misma especificidad, orden de cascada impredecible). Ahora
+  `OverlayCanvas` acepta `align` y calcula la clase una sola vez
+  (`items-start` / `items-center` / `items-end`), reemplazando al valor fijo
+  en vez de competir con él.
+
+Con esto los tres lanzadores quedan al mismo nivel que GESTOR PANTALLAS:
+arrastre, tamaño y posición vertical funcionando de punta a punta, desde el
+modal hasta la proyección real.

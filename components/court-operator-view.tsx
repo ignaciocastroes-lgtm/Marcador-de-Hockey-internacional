@@ -785,9 +785,9 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         ) : (
           <div className="grid grid-cols-2 gap-1 mt-2">
             <Button onClick={() => setBenchArm({ team, card: 'yellow' })} disabled={matchEnded} size="sm"
-              className="h-7 px-0 text-[9px] font-black bg-yellow-500 hover:bg-yellow-400 text-black">AM. BANCA</Button>
+              className="h-8 sm:h-10 px-0 text-[9px] sm:text-xs font-black bg-yellow-500 hover:bg-yellow-400 text-black">AM. BANCA</Button>
             <Button onClick={() => setBenchArm({ team, card: 'red' })} disabled={matchEnded} size="sm"
-              className="h-7 px-0 text-[9px] font-black bg-red-600 hover:bg-red-500 text-white">RJ. BANCA</Button>
+              className="h-8 sm:h-10 px-0 text-[9px] sm:text-xs font-black bg-red-600 hover:bg-red-500 text-white">RJ. BANCA</Button>
           </div>
         )}
 
@@ -800,14 +800,14 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               <Button size="sm"
                 onClick={() => req ? props.cancelTimeoutRequest(team) : (team === 'home' ? props.requestTimeoutHome() : props.requestTimeoutAway())}
                 disabled={stopped || matchEnded || state.period === 'penales' || used >= 2}
-                className={`h-7 px-0 text-[7px] sm:text-[9px] leading-[1.05] font-black ${req ? 'bg-red-600 hover:bg-red-500 animate-pulse' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+                className={`h-8 sm:h-10 px-0 text-[7px] sm:text-[10px] leading-[1.05] font-black ${req ? 'bg-red-600 hover:bg-red-500 animate-pulse' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
                 {req ? 'CANCELAR' : 'SOLICITAR BANCA'}
               </Button>
               <Button size="sm"
                 onClick={() => team === 'home' ? props.grantTimeoutHome() : props.grantTimeoutAway()}
                 disabled={stopped || matchEnded || state.period === 'penales' || !req || used >= 2}
-                className="h-7 px-0 text-[9px] font-black bg-cyan-700 hover:bg-cyan-600 disabled:opacity-30">
-                T.B. {used}/2
+                className="h-8 sm:h-10 px-0 text-[9px] sm:text-xs font-black bg-cyan-700 hover:bg-cyan-600 disabled:opacity-30">
+                CONCEDER {used}/2
               </Button>
             </div>
           )
@@ -1182,31 +1182,46 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <div className="absolute left-[26%] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/35 rounded-full" />
           <div className="absolute right-[26%] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/35 rounded-full" />
 
+          {/*
+            Todo se ancla con `left` + `translateX(-50%)`, siempre — nunca se
+            alterna a `right`. El bug anterior era exactamente eso: al girar
+            la pista la propiedad de anclaje cambiaba de `left` a `right` (o
+            viceversa) pero el traslado de centrado se quedaba fijo, y CSS no
+            puede animar entre dos propiedades distintas — el resultado
+            quedaba mal calculado (fichas superpuestas) hasta que algo forzaba
+            un reflow, como F5. Con un solo porcentaje "espejado" según
+            isFlipped, la transición siempre es entre dos valores de `left`,
+            que sí es animable, y el centrado nunca se descuadra.
+          */}
           {homeLineup.goalie && (
-            <div className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 ${isFlipped ? 'right-[9.5%]' : 'left-[9.5%]'}`}>
+            <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 transition-all duration-500"
+              style={{ left: `${isFlipped ? 100 - 9.5 : 9.5}%` }}>
               <Token p={homeLineup.goalie} team="home" onCourt />
             </div>
           )}
           {homeLineup.field.map((p, i) => {
             const pos = FIELD_POS[i] || { top: '50%', left: '36%' }
+            const x = parseFloat(pos.left)
             return (
               <div key={p.id} className="absolute -translate-y-1/2 -translate-x-1/2 z-10 transition-all duration-500"
-                style={{ top: pos.top, [isFlipped ? 'right' : 'left']: pos.left }}>
+                style={{ top: pos.top, left: `${isFlipped ? 100 - x : x}%` }}>
                 <Token p={p} team="home" onCourt />
               </div>
             )
           })}
 
           {awayLineup.goalie && (
-            <div className={`absolute top-1/2 -translate-y-1/2 translate-x-1/2 z-10 ${isFlipped ? 'left-[9.5%]' : 'right-[9.5%]'}`}>
+            <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 transition-all duration-500"
+              style={{ left: `${isFlipped ? 9.5 : 100 - 9.5}%` }}>
               <Token p={awayLineup.goalie} team="away" onCourt />
             </div>
           )}
           {awayLineup.field.map((p, i) => {
             const pos = FIELD_POS[i] || { top: '50%', left: '36%' }
+            const x = parseFloat(pos.left)
             return (
-              <div key={p.id} className="absolute -translate-y-1/2 translate-x-1/2 z-10 transition-all duration-500"
-                style={{ top: pos.top, [isFlipped ? 'left' : 'right']: pos.left }}>
+              <div key={p.id} className="absolute -translate-y-1/2 -translate-x-1/2 z-10 transition-all duration-500"
+                style={{ top: pos.top, left: `${isFlipped ? x : 100 - x}%` }}>
                 <Token p={p} team="away" onCourt />
               </div>
             )

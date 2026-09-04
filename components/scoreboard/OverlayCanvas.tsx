@@ -22,9 +22,11 @@ interface Props {
   className?: string
   /** Multiplicador adicional del usuario (control de Tamaño). */
   zoom?: number
+  /** Posición vertical del lienzo dentro de su caja (control de Posición vertical). */
+  align?: 'top' | 'center' | 'bottom'
 }
 
-export function OverlayCanvas({ children, className = '', zoom = 1 }: Props) {
+export function OverlayCanvas({ children, className = '', zoom = 1, align = 'center' }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(0)
 
@@ -44,9 +46,14 @@ export function OverlayCanvas({ children, className = '', zoom = 1 }: Props) {
   }, [])
 
   const s = scale * zoom
+  /* `items-center` vivía escrito a mano en el string base: agregar una clase
+     de alineación por fuera no la podía ganar (misma especificidad, orden de
+     cascada impredecible), así que "Posición vertical" no movía nada. Ahora
+     la alineación se calcula una sola vez y reemplaza al valor fijo. */
+  const alignClass = align === 'top' ? 'items-start' : align === 'bottom' ? 'items-end' : 'items-center'
 
   return (
-    <div ref={box} className={`absolute inset-0 flex items-center justify-center overflow-hidden ${className}`}>
+    <div ref={box} className={`absolute inset-0 flex justify-center overflow-hidden ${alignClass} ${className}`}>
       {scale > 0 && (
         <div className="relative shrink-0"
           style={{ width: CANVAS_W, height: CANVAS_H, transform: `scale(${s})` }}>

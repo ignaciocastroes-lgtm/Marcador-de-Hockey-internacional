@@ -120,7 +120,7 @@ export function SummaryOverlay({
 
   return (
     <div className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[2800] bg-black bc-in overflow-hidden`}>
-      <OverlayCanvas zoom={scale}>{(k) => { scaleRef.current = k; return (<>
+      <OverlayCanvas zoom={scale} align={align}>{(k) => { scaleRef.current = k; return (<>
 
       {/* ── CABECERA ─────────────────────────────────────────────────────── */}
       <Slot ctx={slotCtx} id="header" className="w-[1400px] flex items-center justify-center gap-[36px] bc-content-in">

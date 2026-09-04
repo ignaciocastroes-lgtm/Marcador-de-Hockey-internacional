@@ -109,7 +109,7 @@ export function WinnerOverlay({
 
   return (
     <div className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[2900] bc-in bg-black overflow-hidden`}>
-      <OverlayCanvas zoom={scale}>{(k) => { scaleRef.current = k; return (<>
+      <OverlayCanvas zoom={scale} align={align}>{(k) => { scaleRef.current = k; return (<>
 
       {/* ── Cabecera ─────────────────────────────────────────────────────── */}
       <Slot ctx={slotCtx} id="header" className="flex flex-col items-center gap-[0.6vh] bc-content-in">
