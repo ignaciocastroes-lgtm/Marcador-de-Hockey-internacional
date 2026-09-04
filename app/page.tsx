@@ -274,7 +274,25 @@ export default function HockeyControlPanel() {
 
   const handleSaveAndReset = () => { gameState.saveMatchToHistory(); gameState.resetForNewMatch() }
 
-  const operatorProps = { ...gameState, setSignature: gameState.setSignature, setMatchPhase: gameState.setMatchPhase, onSaveAndReset: handleSaveAndReset }
+  /**
+   * Al confirmar el partido (Express o completo) la estación salta sola a
+   * PISTA, que es donde se juega. Antes, si el operador armaba el partido
+   * parado en CONTROL, tenía que acordarse de tocar PISTA a mano; ahora el
+   * mismo gesto de "Iniciar" lo deja donde tiene que estar.
+   */
+  const configureMatch = (...args: Parameters<typeof gameState.configureMatch>) => {
+    gameState.configureMatch(...args)
+    changeViewMode('pista')
+  }
+  const configureMatchWithResume = (...args: Parameters<typeof gameState.configureMatchWithResume>) => {
+    gameState.configureMatchWithResume(...args)
+    changeViewMode('pista')
+  }
+
+  const operatorProps = {
+    ...gameState, configureMatch, configureMatchWithResume,
+    setSignature: gameState.setSignature, setMatchPhase: gameState.setMatchPhase, onSaveAndReset: handleSaveAndReset
+  }
 
   return (
     <div className="h-screen w-screen bg-black flex flex-col font-sans overflow-hidden">

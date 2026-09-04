@@ -96,6 +96,22 @@ origen aunque no estuviera reportado.
 
 ---
 
+## 5. BARRA MAESTRA: dos botones menos, un marcador manual más
+
+Los dos botones verdes de arranque que flanqueaban el reloj (sin chicharra y
+con chicharra) eran el mismo gesto que ya existe en dos lugares: el círculo
+central de la pista ya arranca/pausa sin chicharra (sacar del centro, como en
+la cancha real), y CHICHARRA ya está como botón aparte. Sostenerlos los tres
+era redundancia pura.
+
+Se quitaron los dos botones. En su lugar, **goles y faltas editables junto al
+reloj** (`ManualScore`, local a la izquierda, visita a la derecha) — la fila
+que había agregado por separado se fusionó aquí, que es más cerca del pulgar
+todavía. Misma acción y mismos límites de siempre (bloqueada con el reloj
+detenido o el partido terminado); sólo cambió el lugar.
+
+---
+
 ## PENDIENTE DE TU DECISIÓN (no lo toqué)
 
 1. **Tope de 10 jugadores** (`MAX_ENTRIES` en `ExpressRosterModal`).

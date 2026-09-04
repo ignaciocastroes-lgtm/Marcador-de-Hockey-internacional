@@ -7,9 +7,9 @@ import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import {
-  Play, Pause, RotateCcw, Plus, Minus, Bell, Timer, Coffee, Goal, Square,
+  Play, Pause, RotateCcw, Plus, Minus, Bell, Timer, Goal, Square,
   ArrowRightLeft, ChevronRight, FileText, AlertTriangle, AlertCircle, Users,
-  VolumeX, LogOut, LogIn, X, History, HeartPulse, Shield, Hash, Star, SlidersHorizontal, Trash2, UserPlus, Maximize, Lock, Palette
+  LogOut, LogIn, X, History, HeartPulse, Shield, Hash, Star, SlidersHorizontal, Trash2, UserPlus, Maximize, Lock, Palette
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -268,18 +268,43 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const homeCourtIds = state.homeCourtIds || []
   const awayCourtIds = state.awayCourtIds || []
 
-  // Alineacion inicial automatica, una sola vez por equipo
-  const seeded = useRef({ home: false, away: false })
+  /**
+   * Alineación inicial automática: ni bien hay plantel y la pista está vacía,
+   * se siembra sola.
+   *
+   * LA CLAVE ES POR PARTIDO, NO POR MONTAJE. Antes el candado era un booleano
+   * que vivía mientras el componente seguía montado — y en modo Pista el
+   * componente NO se remonta entre partidos: sigue siendo la misma instancia
+   * antes y después de "Iniciar", y también después de un NUEVO partido con
+   * RESET. Resultado: la siembra funcionaba la primera vez y nunca más en esa
+   * sesión, porque el candado seguía en `true` de la vez anterior. La única
+   * salida era F5, que crea una instancia nueva con el candado en blanco — y
+   * como el plantel y la pista vacía ya estaban guardados, al recargar la
+   * siembra corría bien. Eso es exactamente el síntoma reportado.
+   *
+   * `timestamps.matchStart` cambia una vez por cada partido real (lo pone
+   * `configureMatch` / `configureMatchWithResume`, y `resetForNewMatch` lo deja
+   * vacío otra vez), así que sirve como llave: mientras no cambie, no se vuelve
+   * a sembrar aunque el operador vacíe la pista a mano.
+   */
+  const seededFor = useRef<string | null>(null)
   useEffect(() => {
-    if (!seeded.current.home && homeCourtIds.length === 0 && homePlayers.length > 0) {
-      seeded.current.home = true
+    const matchKey = state.timestamps.matchStart || null
+    if (!matchKey || seededFor.current === matchKey) return
+
+    const homeOk = homeCourtIds.length > 0 || homePlayers.length === 0
+    const awayOk = awayCourtIds.length > 0 || awayPlayers.length === 0
+    if (homeCourtIds.length === 0 && homePlayers.length > 0) {
       props.setCourtLineup('home', getDefaultLineup(homePlayers))
     }
-    if (!seeded.current.away && awayCourtIds.length === 0 && awayPlayers.length > 0) {
-      seeded.current.away = true
+    if (awayCourtIds.length === 0 && awayPlayers.length > 0) {
       props.setCourtLineup('away', getDefaultLineup(awayPlayers))
     }
-  }, [homePlayers, awayPlayers, homeCourtIds.length, awayCourtIds.length, props])
+    // Sólo se marca sembrado cuando ambos equipos ya tenían con qué sembrar
+    // (o de plano no tienen plantel): si el plantel llega en un render
+    // posterior, el efecto vuelve a intentarlo en vez de darse por hecho.
+    if (homeOk && awayOk) seededFor.current = matchKey
+  }, [state.timestamps.matchStart, homePlayers, awayPlayers, homeCourtIds.length, awayCourtIds.length, props])
 
   // Auto-flip por periodo
   useEffect(() => {
@@ -302,19 +327,22 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     const ids = team === 'home' ? homeCourtIds : awayCourtIds
     const opciones = eligibleReplacements(out, team, ids, roster, cardHistory, sanctions)
 
-    if (isGoalie(out) && opciones.length === 1) {
-      const entra = opciones[0]
-      const r = resolveSubstitution(entra, out, team, ids, roster, cardHistory, sanctions)
+    // Portero por portero siempre es directo. El criterio es "¿hay un portero
+    // en la banca?", no "¿hay una sola opción?": con plantel completo la banca
+    // suele tener también jugadores de campo disponibles, y esa mezcla hacía
+    // que el chequeo anterior (opciones.length === 1) casi nunca se cumpliera
+    // y el selector se abriera de todos modos.
+    const entraPortero = isGoalie(out) ? opciones.find(isGoalie) : undefined
+    if (entraPortero) {
+      const r = resolveSubstitution(entraPortero, out, team, ids, roster, cardHistory, sanctions)
       if (r.ok) {
         props.setCourtLineup(team, r.ids, [
           { playerNumber: getDisplayNumber(out), direction: 'out' },
-          { playerNumber: getDisplayNumber(entra), direction: 'in' }
+          { playerNumber: getDisplayNumber(entraPortero), direction: 'in' }
         ])
-        toast.success(`Portero: entra #${getDisplayNumber(entra)} por #${getDisplayNumber(out)}`, { duration: 2200 })
+        toast.success(`Portero: entra #${getDisplayNumber(entraPortero)} por #${getDisplayNumber(out)}`, { duration: 2200 })
         return
       }
-      toast.warning(r.reason)
-      return
     }
     setSubbing({ out, team })
   }
@@ -497,7 +525,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     setMatchEnded(false)
     setShowOfficialSheet(false)
     setPlanillaLocked(false)
-    seeded.current = { home: false, away: false }
+    // Ya no hace falta resetear un candado a mano: seededFor se guía por
+    // timestamps.matchStart, y resetAll() lo deja vacío por su cuenta.
   }
 
   const resumeMatch = () => {
@@ -810,6 +839,36 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
    * proposito: la accion frecuente —cambio de posesion— se hace tocando el lado
    * de la pista. Estos botones son para el caso raro: pausar o corregir.
    */
+  /**
+   * Goles y faltas manuales, compactos, junto al reloj — donde antes estaban
+   * los dos botones de arranque redundantes. Misma acción que ya existía en
+   * la ficha de equipo, con los mismos límites (bloqueados si el reloj está
+   * detenido o el partido terminó): sólo cambia dónde vive, para que corregir
+   * un marcador no obligue a bajar la vista.
+   */
+  const ManualScore = ({ team }: { team: 'home' | 'away' }) => {
+    const isHome = team === 'home'
+    const score = isHome ? state.homeScore : state.awayScore
+    const fouls = isHome ? state.homeFouls : state.awayFouls
+    const foulActive = isHome ? state.isHomeFoul10Active : state.isAwayFoul10Active
+    return (
+      <div className="flex flex-col items-center gap-1 px-1">
+        <div className="flex items-center gap-1">
+          <span className="text-[8px] font-bold text-zinc-500 w-9 text-right">GOL</span>
+          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} className="h-6 w-6 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-2.5 h-2.5" /></Button>
+          <span className="text-2xl font-black text-red-500 tabular-nums w-6 text-center">{score}</span>
+          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} className="h-6 w-6 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-2.5 h-2.5" /></Button>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[8px] font-bold text-zinc-500 w-9 text-right">FALTA</span>
+          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} className="h-6 w-6 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-2.5 h-2.5" /></Button>
+          <span className={`text-xl font-black tabular-nums w-6 text-center ${foulActive ? 'text-red-500 animate-pulse' : 'text-amber-400'}`}>{fouls}</span>
+          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} className="h-6 w-6 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-2.5 h-2.5" /></Button>
+        </div>
+      </div>
+    )
+  }
+
   const PossessionSide = ({ side }: { side: 'home' | 'away' }) => {
     const isHome = side === 'home'
     const clock = isHome ? state.possessionClockLeft : state.possessionClockRight
@@ -839,21 +898,11 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     { top: '32%', left: '39%' }, { top: '68%', left: '39%' }
   ]
 
-  const homeTimeoutsUsed = state.homeTimeoutsUsed || 0
-  const awayTimeoutsUsed = state.awayTimeoutsUsed || 0
-
   // ─── Bloque de equipo (marcador, faltas, timeouts) ─────────────────────────
 
   const TeamPanel = ({ team }: { team: 'home' | 'away' }) => {
     const isHome = team === 'home'
     const name = isHome ? homeTeamName : awayTeamName
-    const score = isHome ? state.homeScore : state.awayScore
-    const fouls = isHome ? state.homeFouls : state.awayFouls
-    const foulActive = isHome ? state.isHomeFoul10Active : state.isAwayFoul10Active
-    const used = isHome ? homeTimeoutsUsed : awayTimeoutsUsed
-    const requested = isHome ? state.homeTimeoutRequested : state.awayTimeoutRequested
-    const poss = isHome ? state.possessionClockLeft : state.possessionClockRight
-    const possRunning = isHome ? state.isPossessionLeftRunning : state.isPossessionRightRunning
     const count = isHome ? homeLineup.count : awayLineup.count
     const max = isHome ? homeMax : awayMax
     const accent = isHome ? 'text-blue-400' : 'text-amber-400'
@@ -868,24 +917,9 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-black/60 rounded-lg p-2 text-center">
-            <span className="text-[10px] font-bold text-zinc-500 block">GOLES</span>
-            <span className="text-4xl font-black text-red-500 tabular-nums block">{score}</span>
-            <div className="flex justify-center gap-1 mt-1">
-              <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3" /></Button>
-              <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3" /></Button>
-            </div>
-          </div>
-          <div className={`rounded-lg p-2 text-center border-2 ${foulActive ? 'bg-red-900/50 border-red-500 animate-pulse' : 'bg-black/60 border-transparent'}`}>
-            <span className="text-[10px] font-bold text-zinc-500 block">FALTAS</span>
-            <span className={`text-4xl font-black tabular-nums block ${foulActive ? 'text-red-500' : 'text-amber-400'}`}>{fouls}</span>
-            <div className="flex justify-center gap-1 mt-1">
-              <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3" /></Button>
-              <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} className="h-7 w-7 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3" /></Button>
-            </div>
-          </div>
-        </div>
+        {/* Goles y faltas manuales viven ahora bajo el reloj, junto al resto de
+            controles de partido: mismo dato, un solo lugar, sin bajar la
+            vista hasta esta ficha para corregir un marcador. */}
 
         {state.matchConfig.allowPenalties && (
           <div className="bg-black/60 rounded-lg p-2 flex items-center justify-between">
@@ -898,22 +932,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-1">
-          <Button
-            onClick={() => requested ? props.cancelTimeoutRequest(team) : (isHome ? props.requestTimeoutHome() : props.requestTimeoutAway())}
-            disabled={stopped || matchEnded || state.period === 'penales' || used >= 2}
-            className={`h-8 text-[9px] font-bold px-1 ${requested ? 'bg-red-600 hover:bg-red-500' : 'bg-zinc-800 hover:bg-zinc-700'}`}
-          >
-            {requested ? 'CANCELAR' : 'SOLICITAR T.B.'}
-          </Button>
-          <Button
-            onClick={() => isHome ? props.grantTimeoutHome() : props.grantTimeoutAway()}
-            disabled={stopped || matchEnded || state.period === 'penales' || !requested || used >= 2}
-            className="h-8 text-[9px] font-bold px-1 bg-cyan-700 hover:bg-cyan-600"
-          >
-            <Coffee className="w-3 h-3 mr-1" /> CONCEDER ({used}/2)
-          </Button>
-        </div>
+        {/* El tiempo muerto de banca se pide y se concede en BenchZone —
+            está ahí, junto a la banca, sin repetirse aquí. */}
       </div>
     )
   }
@@ -950,14 +970,12 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       {/* ── BARRA MAESTRA: reloj, periodo, chicharra ───────────────────────── */}
       <div className="bg-black border-2 border-zinc-800 rounded-xl p-3 flex flex-wrap items-center justify-center gap-3">
-        <Button
-          onClick={() => { skipNextBuzzer.current = true; props.toggleMainClock() }}
-          disabled={matchEnded}
-          className={`h-14 w-20 sm:h-16 sm:w-24 font-black ${state.isMainClockRunning ? 'bg-red-600 hover:bg-red-500' : 'bg-green-800 hover:bg-green-700'}`}
-          title="Iniciar/Pausar SIN chicharra [M]"
-        >
-          {state.isMainClockRunning ? <Pause className="w-7 h-7" /> : <div className="flex items-center"><Play className="w-6 h-6" /><VolumeX className="w-4 h-4 ml-1 opacity-70" /></div>}
-        </Button>
+        {/* Arrancar/pausar sin chicharra ya lo hace el círculo central de la
+            pista (sacar del centro), y con chicharra: CHICHARRA + el mismo
+            círculo. Los dos botones que estaban aquí eran el mismo gesto dos
+            veces, así que ceden el lugar a lo que sí faltaba a mano: goles y
+            faltas editables, justo al lado del reloj. */}
+        <ManualScore team="home" />
 
         {/* 45 del local, pegado al reloj principal */}
         <PossessionSide side="home" />
@@ -980,14 +998,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
         <PossessionSide side="away" />
 
-        <Button
-          onClick={() => { skipNextBuzzer.current = false; props.toggleMainClock() }}
-          disabled={matchEnded}
-          className={`h-14 w-20 sm:h-16 sm:w-24 font-black ${state.isMainClockRunning ? 'bg-red-600 hover:bg-red-500' : 'bg-green-700 hover:bg-green-600'}`}
-          title="Iniciar/Pausar CON chicharra [Espacio]"
-        >
-          {state.isMainClockRunning ? <Pause className="w-7 h-7" /> : <div className="flex items-center"><Play className="w-6 h-6" /><Bell className="w-4 h-4 ml-1" /></div>}
-        </Button>
+        <ManualScore team="away" />
 
         <div className="flex flex-col gap-1 min-w-[150px]">
           <div className="flex gap-1">
