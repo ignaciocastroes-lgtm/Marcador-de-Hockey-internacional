@@ -390,6 +390,12 @@ export function OverlaysModal({ open, onClose }: Props) {
             <>
               <Toggle on={cfg.goal.enabled} onChange={v => patchGoal({ enabled: v })}
                 label="Animación de gol" hint="Se dispara sólo cuando el gol se carga con goleador" />
+
+              {/* La previsualización va primero, justo debajo del interruptor —
+                  antes quedaba al final de una lista larga de ajustes, y había
+                  que bajar bastante para verla siquiera una vez. */}
+              <Layout tab="goal" {...layoutProps} />
+
               <BoardPicker value={cfg.goal.boards} onChange={v => patchGoal({ boards: v })} />
               <div className="grid grid-cols-2 gap-3">
                 <NumberField label="Duración" value={cfg.goal.duration} onChange={v => patchGoal({ duration: v })} min={2} max={12} suffix="segundos" />
@@ -431,13 +437,15 @@ export function OverlaysModal({ open, onClose }: Props) {
                 </div>
               </div>
 
-              <Layout tab="goal" {...layoutProps} />
             </>
           )}
 
           {tab === 'final' && (
             <>
               <Toggle on={cfg.final.enabled} onChange={v => patchFinal({ enabled: v })} label="Pantalla de fin de partido" />
+
+              <Layout tab="final" {...layoutProps} />
+
               <BoardPicker value={cfg.final.boards} onChange={v => patchFinal({ boards: v })} />
               <NumberField label="Letrero de ganador" value={cfg.final.winnerSeconds} onChange={v => patchFinal({ winnerSeconds: v })} min={3} max={60} suffix="segundos" />
               <Toggle on={cfg.final.showFicha} onChange={v => patchFinal({ showFicha: v })}
@@ -454,13 +462,15 @@ export function OverlaysModal({ open, onClose }: Props) {
                     className="h-10 mt-1.5 bg-zinc-900 border-zinc-700 text-center font-black" />
                 </div>
               </div>
-              <Layout tab="final" {...layoutProps} />
             </>
           )}
 
           {tab === 'stats' && (
             <>
               <Toggle on={cfg.stats.enabled} onChange={v => patchStats({ enabled: v })} label="Pantalla de estadísticas" />
+
+              <Layout tab="stats" {...layoutProps} />
+
               <BoardPicker value={cfg.stats.boards} onChange={v => patchStats({ boards: v })} />
               <Toggle on={cfg.stats.showInBreak} onChange={v => patchStats({ showInBreak: v })}
                 label="Mostrar durante el descanso" hint="El reloj del entretiempo se mantiene visible arriba" />
@@ -473,7 +483,6 @@ export function OverlaysModal({ open, onClose }: Props) {
               <Toggle on={cfg.stats.showCards}      onChange={v => patchStats({ showCards: v })}      label="Tarjetas" hint="La B marca las de banca" />
               <Toggle on={cfg.stats.showFouls}      onChange={v => patchStats({ showFouls: v })}      label="Faltas acumuladas" />
               <Toggle on={cfg.stats.showPossession} onChange={v => patchStats({ showPossession: v })} label="Posesión" hint="Porcentaje y minutos de los relojes de 45" />
-              <Layout tab="stats" {...layoutProps} />
             </>
           )}
         </div>

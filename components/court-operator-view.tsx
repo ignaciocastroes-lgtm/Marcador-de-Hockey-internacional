@@ -138,7 +138,20 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const awayTeamName = state.awayTeam?.name || 'VISITA'
 
   const [isFlipped, setIsFlipped] = useState(false)
-  const [matchEnded, setMatchEnded] = useState(false)
+  /**
+   * El bloqueo de fin de partido lee directo de `state.isMatchEnded`
+   * (persistido en el GameState compartido), no de un estado local.
+   *
+   * Antes era un `useState` propio de este componente, y se ponia en
+   * sincronia a mano en cada punto donde el partido termina o se reanuda.
+   * El problema: cambiar a CONTROL y volver a PISTA desmonta y vuelve a
+   * montar este componente — el `useState` local arrancaba de nuevo en
+   * `false`, desbloqueando todo, aunque el partido siguiera terminado de
+   * verdad en el estado compartido. Leer directo de `state.isMatchEnded`
+   * sobrevive a cualquier cambio de vista, porque vive en el hook de arriba,
+   * no en este componente.
+   */
+  const matchEnded = state.isMatchEnded
   const [showOfficialSheet, setShowOfficialSheet] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const [planillaLocked, setPlanillaLocked] = useState(false)
@@ -514,7 +527,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const confirmEndMatch = () => {
     props.setMatchPhase('finalizado' as MatchPhase)
     props.endMatch()
-    setMatchEnded(true)
     setShowEndConfirm(false)
     setShowOfficialSheet(true)
   }
@@ -522,7 +534,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const handleFullReset = () => {
     props.resetAll()
     setShowResetConfirm(false)
-    setMatchEnded(false)
     setShowOfficialSheet(false)
     setPlanillaLocked(false)
     // Ya no hace falta resetear un candado a mano: seededFor se guía por
@@ -530,7 +541,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   }
 
   const resumeMatch = () => {
-    setMatchEnded(false)
     props.closeMatchEndModal()
     props.setMatchPhase('en-curso' as MatchPhase)
     toast.info("Partido reanudado. Controles desbloqueados.", { position: 'top-center' })

@@ -919,24 +919,6 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         }}
       >
 
-        {/* 🛡️ CAPA MAGICA DE ANIMACIÓN DE GOL (PANTALLA COMPLETA 100%) */}
-        {/* Solo se proyecta en el marcador Global (P1), dejando los cronómetros P2 y P3 limpios */}
-        {goalEvent && !editMode && ov.goal.enabled && showsOn(ov.goal.boards, bId) && (
-          <GoalOverlay
-            goal={goalEvent}
-            layout={ovLayout.goal}
-            cfg={ov.goal}
-            phase={goalPhase}
-            homeTeamName={homeTeamName}
-            awayTeamName={awayTeamName}
-            homeScore={state.homeScore}
-            awayScore={state.awayScore}
-            homeLogo={liveLogos.homeUrl || state.homeTeam?.logo || ''}
-            awayLogo={liveLogos.awayUrl || state.awayTeam?.logo || ''}
-            fontFamily={currentFontFamily}
-          />
-        )}
-
         {/* Guias de alineacion: el eje de simetria y la linea media. Sin una
             referencia visible, "centrado" es a ojo. */}
         {editMode && (
@@ -1179,51 +1161,97 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
           )}
         </Draggable>
 
-        {!editMode && (showBreakSummary || showFinalSummary) && (
-          <SummaryOverlay
-            state={state}
-            scope={showFinalSummary ? 'completo' : 'primer_tiempo'}
-            homeTeamName={homeTeamName}
-            awayTeamName={awayTeamName}
-            homeLogo={liveLogos.homeUrl || state.homeTeam?.logo}
-            awayLogo={liveLogos.awayUrl || state.awayTeam?.logo}
-            accent={liveLogos.boardAccentColor || '#dc2626'}
-            textColor={liveLogos.boardTextColor || '#ffffff'}
-            numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
-            numberClass={digitFxClass}
-            nameClass={nameFxClass}
-            clockLabel={showFinalSummary ? 'HORA' : 'DESCANSO'}
-            clockValue={showFinalSummary ? wallClock : formatTime(state.mainClock)}
-            sections={ov.stats}
-            layout={ovLayout.stats}
-            scale={ov.stats.scale}
-            align={ov.stats.align}
-          />
-        )}
-
-        {state.isMatchEnded && !editMode && !showFinalSummary && finalOn && (
-          <WinnerOverlay
-            state={state}
-            homeTeamName={homeTeamName}
-            awayTeamName={awayTeamName}
-            homeLogo={liveLogos.homeUrl || defaultHomeLogo() || state.homeTeam?.logo}
-            awayLogo={liveLogos.awayUrl || state.awayTeam?.logo}
-            accent={liveLogos.boardAccentColor || '#dc2626'}
-            textColor={liveLogos.boardTextColor || '#ffffff'}
-            winColor={liveLogos.possessionColor || '#22c55e'}
-            numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
-            numberClass={digitFxClass}
-            nameClass={nameFxClass}
-            winnerText={ov.final.winnerText}
-            drawText={ov.final.drawText}
-            layout={ovLayout.final}
-            scale={ov.final.scale}
-            align={ov.final.align}
-            onSaveAndReset={!isPreview ? onSaveAndReset : undefined}
-          />
-        )}
-
       </div>
+
+      {/*
+        LOS TRES LANZADORES VIVEN FUERA DE LA CAJA DEL TABLERO, A PROPÓSITO.
+        =====================================================================
+        El div del tablero de arriba tiene su propio `transform: translate()
+        scale()` para encajar el lienzo de 1920x1080 en la ventana real. Un
+        `transform` en un ancestro crea, para cualquier descendiente
+        `position:fixed`, un nuevo "containing block" — deja de anclarse
+        contra el viewport real y pasa a anclarse (y a escalarse visualmente)
+        contra ESE ancestro transformado.
+
+        `overlay-fullscreen` (la clase que usan estos tres cuando NO están
+        embebidos en una previsualización) es `position:fixed`. Mientras
+        vivieron DENTRO del div del tablero, quedaban atrapados por ese
+        containing block: en vez de cubrir la pantalla completa, se
+        encogían con el mismo factor de escala que reduce el tablero para
+        caber en la ventana — por eso se veían como una isla chica flotando
+        en medio de una pantalla negra, con el fondo de lo que hubiera debajo
+        asomando por los bordes.
+
+        Al vivir aquí, como hermanos del div del tablero (ambos dentro del
+        mismo contenedor exterior, que no tiene transform), su `position:
+        fixed` encuentra el viewport real y punto: cubren la pantalla
+        completa como corresponde.
+      */}
+
+      {/* 🛡️ CAPA MAGICA DE ANIMACIÓN DE GOL (PANTALLA COMPLETA 100%) */}
+      {/* Solo se proyecta en el marcador Global (P1), dejando los cronómetros P2 y P3 limpios */}
+      {goalEvent && !editMode && ov.goal.enabled && showsOn(ov.goal.boards, bId) && (
+        <GoalOverlay
+          embedded={isPreview}
+          goal={goalEvent}
+          layout={ovLayout.goal}
+          cfg={ov.goal}
+          phase={goalPhase}
+          homeTeamName={homeTeamName}
+          awayTeamName={awayTeamName}
+          homeScore={state.homeScore}
+          awayScore={state.awayScore}
+          homeLogo={liveLogos.homeUrl || state.homeTeam?.logo || ''}
+          awayLogo={liveLogos.awayUrl || state.awayTeam?.logo || ''}
+          fontFamily={currentFontFamily}
+        />
+      )}
+
+      {!editMode && (showBreakSummary || showFinalSummary) && (
+        <SummaryOverlay
+          embedded={isPreview}
+          state={state}
+          scope={showFinalSummary ? 'completo' : 'primer_tiempo'}
+          homeTeamName={homeTeamName}
+          awayTeamName={awayTeamName}
+          homeLogo={liveLogos.homeUrl || state.homeTeam?.logo}
+          awayLogo={liveLogos.awayUrl || state.awayTeam?.logo}
+          accent={liveLogos.boardAccentColor || '#dc2626'}
+          textColor={liveLogos.boardTextColor || '#ffffff'}
+          numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
+          numberClass={digitFxClass}
+          nameClass={nameFxClass}
+          clockLabel={showFinalSummary ? 'HORA' : 'DESCANSO'}
+          clockValue={showFinalSummary ? wallClock : formatTime(state.mainClock)}
+          sections={ov.stats}
+          layout={ovLayout.stats}
+          scale={ov.stats.scale}
+          align={ov.stats.align}
+        />
+      )}
+
+      {state.isMatchEnded && !editMode && !showFinalSummary && finalOn && (
+        <WinnerOverlay
+          embedded={isPreview}
+          state={state}
+          homeTeamName={homeTeamName}
+          awayTeamName={awayTeamName}
+          homeLogo={liveLogos.homeUrl || defaultHomeLogo() || state.homeTeam?.logo}
+          awayLogo={liveLogos.awayUrl || state.awayTeam?.logo}
+          accent={liveLogos.boardAccentColor || '#dc2626'}
+          textColor={liveLogos.boardTextColor || '#ffffff'}
+          winColor={liveLogos.possessionColor || '#22c55e'}
+          numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
+          numberClass={digitFxClass}
+          nameClass={nameFxClass}
+          winnerText={ov.final.winnerText}
+          drawText={ov.final.drawText}
+          layout={ovLayout.final}
+          scale={ov.final.scale}
+          align={ov.final.align}
+          onSaveAndReset={!isPreview ? onSaveAndReset : undefined}
+        />
+      )}
     </div>
   )
 }

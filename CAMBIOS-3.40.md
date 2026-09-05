@@ -467,3 +467,70 @@ un evento `click`) es `event.detail === 0` — así que esto no interfiere con
 navegar la interfaz a propósito con Tab + Enter. Corta el problema de raíz en
 vez de tecla por tecla, y cubre cualquier atajo que se agregue después sin
 que nadie tenga que acordarse de nada.
+
+---
+
+## 16. LA PROYECCIÓN REAL SE VEÍA CHICA — BUG ESTRUCTURAL DE FONDO
+
+Este era el más serio de la ronda: en la proyección real de FIN y
+ESTADÍSTICAS (y probablemente GOL también, aunque no reportado — el modal
+tapaba el síntoma), el contenido aparecía como una isla chica flotando en
+medio de una pantalla negra, sin cubrir la pantalla completa.
+
+**Causa:** los tres lanzadores viven, cuando NO están en una previsualización,
+con `position: fixed` (la clase `overlay-fullscreen`), que normalmente ancla
+directo contra el viewport real sin importar dónde vivan en el árbol de
+React. Pero un `transform` en cualquier ANCESTRO crea, para los descendientes
+`position: fixed`, un "containing block" nuevo — dejan de anclarse contra la
+ventana y pasan a anclarse (y a escalarse visualmente) contra ese ancestro.
+
+Los tres lanzadores se renderizaban **dentro** del div del tablero, que tiene
+exactamente ese `transform: translate() scale()` para encajar el lienzo de
+1920×1080 en la ventana real. Quedaban atrapados: en vez de cubrir la
+pantalla, se encogían con el mismo factor que reduce el tablero para caber
+en la ventana — de ahí la isla chica en medio de la pantalla negra, con lo
+que hubiera detrás asomando por los bordes (los círculos de banca que se ven
+en las fotos 3, 5 y 6 son la página de control asomando por debajo, no parte
+de la proyección).
+
+**Arreglo:** los tres lanzadores se movieron a vivir como HERMANOS del div
+del tablero — ambos dentro del mismo contenedor exterior, que no tiene
+transform — así su `position: fixed` encuentra el viewport real. Y para que
+las tarjetas de previsualización P2–P5 de la página de control (que sí
+necesitan quedar contenidas dentro de su recuadro chico) no empezaran a
+cubrir toda la ventana con este cambio, se conectó el prop `embedded` que ya
+existía —pero nunca se usaba en la proyección real— pasándole
+`embedded={isPreview}`: contenido en las tarjetas de previsualización,
+pantalla completa de verdad en la ventana real y en el proyector del
+estadio.
+
+---
+
+## 17. BLOQUEO DE FIN DE PARTIDO — SE PERDÍA AL CAMBIAR DE VISTA
+
+Confirmado en los dos modos (Pista y Control): el bloqueo de controles al
+terminar el partido vivía en un `useState` local del componente
+(`matchEnded`), sincronizado a mano en cada punto donde el partido termina,
+se reanuda o se resetea. Cambiar de PISTA a CONTROL (o abrir cualquier modal
+que desmonte la vista) y volver desmonta y vuelve a montar el componente —el
+`useState` arranca de nuevo en `false`, desbloqueando todo, aunque el partido
+siguiera terminado de verdad en el estado compartido.
+
+Arreglo: `matchEnded` ahora lee directo de `state.isMatchEnded` (persistido
+en el GameState compartido, sobrevive cualquier cambio de vista) en vez de
+ser un estado propio. Se quitaron las cuatro llamadas de sincronización
+manual que ya no hacen falta, en ambas vistas.
+
+---
+
+## 18. OTROS DOS AJUSTES DE ESTA RONDA
+
+- **La barra PROYECTAR (P1–P5) ahora respeta los monitores configurados.**
+  Antes mostraba los cinco botones siempre, sin importar cuántas pantallas
+  estuvieran activadas en GESTOR PANTALLAS. Ahora P2–P5 sólo aparecen si
+  están en `visibleScreens` (P1 siempre está, es el tablero principal), y
+  "LANZAR TODO" reparte sólo los tableros configurados.
+- **La previsualización de cada lanzador se movió al principio de su
+  pestaña**, justo debajo del interruptor de activar/desactivar, en vez de
+  al final de una lista larga de ajustes — ahora se ve por defecto sin
+  necesidad de bajar el scroll.

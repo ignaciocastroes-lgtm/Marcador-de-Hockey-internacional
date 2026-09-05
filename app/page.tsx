@@ -361,16 +361,28 @@ export default function HockeyControlPanel() {
 
           <div className="hidden xl:flex items-center bg-zinc-800/80 border border-zinc-700 rounded-lg p-1 gap-1 mx-2">
             <span className="text-zinc-400 text-xs font-bold px-2 flex items-center"><Tv className="w-4 h-4 mr-1 text-amber-500" /> PROYECTAR:</span>
+            {/* P1 (el marcador global) siempre está — es el tablero principal
+                del partido. P2-P5 son monitores adicionales configurables, y
+                este atajo ahora respeta exactamente los mismos que ya elegiste
+                en GESTOR PANTALLAS: si sólo tienes P1, sólo ves P1 aquí. */}
             <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(1)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P1 (Glb)</Button>
-            <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(2)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P2 (Loc)</Button>
-            <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(3)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P3 (Vis)</Button>
-            <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(4)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P4 (T.L)</Button>
-            <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(5)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P5 (T.V)</Button>
+            {visibleScreens.includes('2') && (
+              <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(2)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P2 (Loc)</Button>
+            )}
+            {visibleScreens.includes('3') && (
+              <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(3)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P3 (Vis)</Button>
+            )}
+            {visibleScreens.includes('4') && (
+              <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(4)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P4 (T.L)</Button>
+            )}
+            {visibleScreens.includes('5') && (
+              <Button variant="ghost" size="sm" onClick={() => openScoreboardWindow(5)} className="hover:bg-zinc-700 text-zinc-300 h-8 font-bold text-xs px-2">P5 (T.V)</Button>
+            )}
             <Button size="sm" onClick={() => setShowHotkeys(true)}
               className="h-8 font-black text-xs px-2 bg-zinc-800 hover:bg-zinc-700 ml-1" title="Teclas rápidas y mando Bluetooth">
               <Keyboard className="w-4 h-4" />
             </Button>
-            <Button size="sm" onClick={() => venue.launchAllBoards([1, 2, 3, 4, 5])} className="h-8 font-black text-xs px-2 bg-amber-600 hover:bg-amber-500 text-black ml-1" title="Reparte los tableros por los monitores conectados">LANZAR TODO</Button>
+            <Button size="sm" onClick={() => venue.launchAllBoards([1, 2, 3, 4, 5].filter(n => n === 1 || visibleScreens.includes(String(n))))} className="h-8 font-black text-xs px-2 bg-amber-600 hover:bg-amber-500 text-black ml-1" title="Reparte los tableros configurados por los monitores conectados">LANZAR TODO</Button>
           </div>
 
           <div className="hidden xl:flex items-center gap-1.5 mr-2" title={venue.isOnline ? 'Con conexión' : 'Sin conexión — la app sigue funcionando'}>

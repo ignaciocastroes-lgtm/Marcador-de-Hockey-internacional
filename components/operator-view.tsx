@@ -164,7 +164,14 @@ export function OperatorView(props: OperatorViewProps) {
   const [showOfficialSheet, setShowOfficialSheet] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showEndConfirm, setShowEndConfirm]       = useState(false)
-  const [matchEnded, setMatchEnded]               = useState(false)
+  /**
+   * Mismo arreglo que en la vista Pista: el bloqueo de fin de partido lee
+   * directo de `state.isMatchEnded` (persistido), no de un `useState` local
+   * que se reiniciaba en `false` cada vez que se cambiaba a Pista y se
+   * volvía a Control, desbloqueando todo aunque el partido siguiera
+   * terminado de verdad.
+   */
+  const matchEnded = state.isMatchEnded
 
   const [signingClosingRole, setSigningClosingRole] = useState<keyof ClosingSignatureData | null>(null)
   const [extraSignatures, setExtraSignatures]       = useState<{ arbitroPrincipal: string | null; arbitroAuxiliar: string | null }>({ arbitroPrincipal: null, arbitroAuxiliar: null })
@@ -491,7 +498,6 @@ export function OperatorView(props: OperatorViewProps) {
             triggerAutoBuzzer(3000); 
             props.setMatchPhase('finalizado' as MatchPhase);
             props.endMatch();
-            setMatchEnded(true);
             setShowOfficialSheet(true);
           }, 800);
         }
@@ -511,7 +517,6 @@ export function OperatorView(props: OperatorViewProps) {
   const confirmEndMatch = () => {
     props.setMatchPhase('finalizado' as MatchPhase)
     props.endMatch()
-    setMatchEnded(true)
     setShowEndConfirm(false)
     setShowOfficialSheet(true)
   }
@@ -519,7 +524,6 @@ export function OperatorView(props: OperatorViewProps) {
   const handleFullReset = () => {
     props.resetAll()
     setShowResetConfirm(false)
-    setMatchEnded(false)
     setPlanillaLocked(false)
     setExtraSignatures({ arbitroPrincipal: null, arbitroAuxiliar: null })
     setShowOfficialSheet(false)
@@ -825,7 +829,6 @@ export function OperatorView(props: OperatorViewProps) {
                   
                   {matchEnded ? (
                     <Button onClick={() => {
-                      setMatchEnded(false);
                       props.closeMatchEndModal(); // 🛡️ REPARADO: Ahora limpia el letrero gigante de FIN DEL PARTIDO
                       props.setMatchPhase('en-curso' as MatchPhase);
                       toast.info("Partido reanudado. Controles desbloqueados.", { position: 'top-center' });
