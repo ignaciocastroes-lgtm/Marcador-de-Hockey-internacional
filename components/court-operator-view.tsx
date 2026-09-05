@@ -670,7 +670,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     return (
       <button
         onClick={() => openSheet(p, team)}
-        className={`relative flex flex-col items-center justify-center rounded-xl border-2 shadow-lg transition-transform hover:scale-105 active:scale-95
+        className={`relative flex flex-col items-center justify-center rounded-xl border-2 shadow-lg transition-transform touch-manipulation select-none hover:scale-105 active:scale-95
           ${onCourt ? 'w-[46px] h-[46px] sm:w-[68px] sm:h-[68px] lg:w-[76px] lg:h-[76px] xl:w-[86px] xl:h-[86px]' : 'w-[38px] h-[38px] sm:w-[54px] sm:h-[54px] lg:w-[60px] lg:h-[60px] xl:w-[68px] xl:h-[68px] opacity-90'}
           ${style !== 'cubo' ? 'border-transparent' : goalie ? 'border-white ring-2 ring-green-400/60' : staff ? 'border-purple-400/70' : 'border-white/70'}`}
         style={bg}
@@ -1106,7 +1106,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
             <button onClick={() => { if (stopped) { toast.info(`Juego detenido (${stoppedLabel}): no se cobran faltas`); return } setRefOpen(true) }}
               disabled={matchEnded}
               title="Árbitro — cobrar falta de equipo"
-              className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-zinc-900 border-2 border-zinc-400 hover:border-white flex items-center justify-center shadow-lg disabled:opacity-30">
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-zinc-900 border-2 border-zinc-400 hover:border-white active:scale-90 active:border-white active:bg-zinc-800 transition-transform touch-manipulation select-none flex items-center justify-center shadow-lg disabled:opacity-30">
               <svg viewBox="0 0 40 44" className="w-8 h-8" aria-hidden>
                 <circle cx="20" cy="10" r="7" fill="#18181b" stroke="#e4e4e7" strokeWidth="1.6" />
                 <path d="M6 40c0-8 6-14 14-14s14 6 14 14z" fill="#18181b" stroke="#e4e4e7" strokeWidth="1.6" />
@@ -1136,7 +1136,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                   toast.success(`Posesión ${zone.team === 'home' ? homeTeamName : awayTeamName}`, { duration: 1200 })
                 }}
                 title={`Tocar: posesión de ${zone.team === 'home' ? homeTeamName : awayTeamName}`}
-                className={`absolute top-0 bottom-0 w-1/2 z-0 transition-colors ${zone.pos} ${
+                className={`absolute top-0 bottom-0 w-1/2 z-0 transition-colors touch-manipulation select-none active:bg-white/[0.12] ${zone.pos} ${
                   running ? 'bg-green-500/[0.07]' : 'hover:bg-white/[0.04]'}`}>
                 <span className={`absolute bottom-8 left-1/2 -translate-x-1/2 text-[9px] font-black uppercase tracking-widest ${
                   running ? 'text-green-400/70' : 'text-white/20'}`}>
@@ -1154,10 +1154,10 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
             onClick={() => { skipNextBuzzer.current = true; props.toggleMainClock() }}
             disabled={matchEnded}
             title="Sacar del centro — inicia o pausa el tiempo, sin chicharra"
-            className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[16%] aspect-square rounded-full z-[2] border-2 flex items-center justify-center transition-colors ${
+            className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[16%] aspect-square rounded-full z-[2] border-2 flex items-center justify-center transition-all touch-manipulation select-none active:scale-90 ${
               state.isMainClockRunning
-                ? 'border-red-500/70 bg-red-600/10 hover:bg-red-600/20'
-                : 'border-green-500/70 bg-green-600/10 hover:bg-green-600/20'}`}>
+                ? 'border-red-500/70 bg-red-600/10 hover:bg-red-600/20 active:bg-red-600/30'
+                : 'border-green-500/70 bg-green-600/10 hover:bg-green-600/20 active:bg-green-600/30'}`}>
             {state.isMainClockRunning
               ? <Pause className="w-[38%] h-[38%] text-red-400" />
               : <Play className="w-[38%] h-[38%] text-green-400" />}
@@ -1255,7 +1255,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                    Antes la ficha se encogía al pasar de 1:59 a 0:59 y toda la
                    fila bailaba mientras corría el reloj. */
                 <button key={s.id} onClick={() => askCancel(s.id, s.playerNumber, 'azul')}
-                  className="w-[150px] sm:w-[168px] shrink-0 flex items-center justify-center gap-2 z-20 group bg-black/50 border border-zinc-700 hover:border-white/60 rounded-lg px-2 py-1"
+                  className="w-[150px] sm:w-[168px] shrink-0 flex items-center justify-center gap-2 z-20 group bg-black/50 border border-zinc-700 hover:border-white/60 active:scale-95 active:bg-black/70 transition-transform touch-manipulation select-none rounded-lg px-2 py-2"
                   title="Tocar para anular esta sanción">
                   <div className="relative shrink-0">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-black border-2 ${side.chip}`}>{s.playerNumber}</div>
@@ -1544,7 +1544,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               <div className="grid grid-cols-3 gap-2">
                 {TOKEN_STYLES.map(t => (
                   <button key={t.id} onClick={() => patchLook({ ...look, tokenStyle: t.id })} title={t.hint}
-                    className={`h-16 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                    className={`h-16 rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 transition-transform touch-manipulation select-none active:scale-95 ${
                       look.tokenStyle === t.id ? 'border-blue-500 bg-blue-950/40' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}>
                     <span className="text-sm font-black">{t.label}</span>
                     <span className="text-[8px] text-zinc-500 px-1 text-center leading-tight">{t.hint}</span>
@@ -1609,7 +1609,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                   toast.warning(`Falta de ${t.name} — van ${t.fouls + 1}`, { duration: 2200 })
                   setRefOpen(false)
                 }}
-                className={`h-28 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-colors ${t.cls}`}>
+                className={`h-28 rounded-xl border-2 flex flex-col items-center justify-center gap-1 transition-transform touch-manipulation select-none active:scale-95 ${t.cls}`}>
                 <span className="text-sm font-black uppercase truncate max-w-full px-2">{t.name}</span>
                 <span className="text-4xl font-black tabular-nums">{t.fouls}</span>
                 <span className="text-[10px] font-bold text-zinc-500">faltas · tocar para sumar</span>
@@ -1651,7 +1651,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                         toast.success(`Entra #${getDisplayNumber(p)} por #${getDisplayNumber(subbing.out)}`, { duration: 1800 })
                         setSubbing(null)
                       }}
-                      className="h-16 rounded-xl border-2 border-zinc-700 bg-zinc-950 hover:border-indigo-500 flex flex-col items-center justify-center transition-colors">
+                      className="h-16 rounded-xl border-2 border-zinc-700 bg-zinc-950 hover:border-indigo-500 active:scale-95 active:border-indigo-400 flex flex-col items-center justify-center transition-transform touch-manipulation select-none">
                       <span className="font-black text-lg">{getDisplayNumber(p)}</span>
                       {isGoalie(p) && <span className="text-[8px] font-black text-green-400">PO</span>}
                     </button>

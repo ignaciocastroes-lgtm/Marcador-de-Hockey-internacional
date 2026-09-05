@@ -208,6 +208,36 @@ export default function HockeyControlPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [hotkeys, gameState])
 
+  /**
+   * "Espacio funciona como Enter" — el bug no estaba en el atajo, estaba en
+   * el foco. Un botón clickeado con el mouse se queda enfocado, y
+   * Espacio/Enter activan el elemento enfocado: la siguiente vez que el
+   * operador apretaba Espacio para el reloj, el navegador ADEMÁS volvía a
+   * pulsar ese botón. Dos acciones por una tecla, sin ninguna manera de
+   * deducirlo mirando el atajo en sí.
+   *
+   * El preventDefault de arriba no alcanza: sólo actúa cuando la tecla
+   * coincide con un atajo de `KEYS_NEEDING_PREVENT`, así que cualquier atajo
+   * nuevo hereda el mismo bug a menos que alguien se acuerde de sumarlo ahí.
+   *
+   * La solución de raíz: quitarle el foco al botón apenas se suelta el clic,
+   * en vez de parchear tecla por tecla. `event.detail === 0` es como el
+   * navegador distingue un clic sintético por teclado (Enter/Espacio también
+   * disparan un evento "click") de uno real de mouse o touch — así que esto
+   * nunca interfiere con navegar la interfaz a propósito con Tab + Enter.
+   */
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.detail === 0) return
+      const el = document.activeElement
+      if (el instanceof HTMLElement && el.matches('button, [role="button"], a[href], input[type="submit"], input[type="button"]')) {
+        el.blur()
+      }
+    }
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
+  }, [])
+
   const [liveLogos, setLiveLogos] = useState({ 
     homeUrl: '', 
     awayUrl: '', 

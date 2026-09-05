@@ -72,10 +72,12 @@ export function GoalOverlay({
       className={`${embedded ? 'absolute inset-0' : 'overlay-fullscreen'} z-[3000] bg-black overflow-hidden ${phase === 'out' ? 'bc-out' : 'bc-in'}`}>
       <OverlayCanvas zoom={cfg.scale} align={cfg.align}>{(k) => { scaleRef.current = k; return (<>
              
-             {/* BACKGROUND PARALLAX SHIELD WATERMARK */}
-             {cfg.showWatermark && <div className="absolute inset-0 z-0 flex items-center justify-center opacity-20 animate-parallax-pan pointer-events-none mix-blend-screen">
+             {/* ESCUDO DE FONDO */}
+             <Slot ctx={slotCtx} id="watermark">
+             {cfg.showWatermark && <div className="flex items-center justify-center opacity-20 animate-parallax-pan pointer-events-none mix-blend-screen" style={{ width: CANVAS_W, height: CANVAS_H }}>
                 <img src={goal.team === 'home' ? (homeLogo || '' || GENERIC_SHIELDS[0]) : (awayLogo || '' || GENERIC_SHIELDS[1])} className="w-[120%] h-[120%] object-contain blur-[8px]" alt="Watermark" />
              </div>}
+             </Slot>
 
              {/* Glow Radial del Equipo */}
              {cfg.useTeamColor && <div className="absolute inset-0 z-0 opacity-60" style={{ background: `radial-gradient(circle at center, ${goal.team === 'home' ? cfg.homeJ1 : cfg.awayJ1} 0%, transparent 80%)` }} />}
@@ -98,13 +100,15 @@ export function GoalOverlay({
              </div>
              </Slot>
 
-             <div className="flex flex-row items-center justify-center gap-[200px] w-full z-10">
-                {/* ESCUDO DEL EQUIPO GIGANTE (LIMPIO, SIN FONDO NEGRO) */}
+             {/* ESCUDO DEL EQUIPO GIGANTE (LIMPIO, SIN FONDO NEGRO) */}
+             <Slot ctx={slotCtx} id="shield">
                 <div className="animate-in slide-in-from-left-[100px] duration-700 w-[450px] h-[450px] flex items-center justify-center">
                    <img src={goal.team === 'home' ? (homeLogo || '' || GENERIC_SHIELDS[0]) : (awayLogo || '' || GENERIC_SHIELDS[1])} alt="Crest" className="w-full h-full object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.8)]" />
                 </div>
+             </Slot>
 
-                {/* CAMISETA DEPORTIVA SVG REALISTA */}
+             {/* CAMISETA DEPORTIVA SVG REALISTA */}
+             <Slot ctx={slotCtx} id="jersey">
                 <div className="relative w-[450px] h-[450px] flex items-center justify-center animate-sway-3d animate-in slide-in-from-right-[100px] duration-700">
                   <svg viewBox="0 0 512 512" className="absolute inset-0 w-full h-full drop-shadow-[0_40px_50px_rgba(0,0,0,0.9)]">
                     <defs>
@@ -156,7 +160,7 @@ export function GoalOverlay({
                     {goal.playerNumber && goal.playerNumber !== 'EQUIPO' ? goal.playerNumber : ''}
                   </span>
                 </div>
-             </div>
+             </Slot>
       </>) }}</OverlayCanvas>
     </div>
   )

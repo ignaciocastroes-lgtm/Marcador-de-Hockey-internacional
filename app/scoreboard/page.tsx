@@ -57,7 +57,22 @@ export default function ScoreboardPage() {
   return (
     <div
       onClick={handleClick}
-      className="cursor-pointer w-full h-full relative"
+      /*
+       * `fixed inset-0` en vez de `w-full h-full relative`: ancla directo al
+       * viewport, sin depender de que el padre (el layout de /scoreboard,
+       * que usa `min-h-screen` — un MÍNIMO, no una altura fija) tenga una
+       * altura definida contra la cual resolver un `h-full` en porcentaje.
+       *
+       * Sin esto, con el padre en `min-h-screen` y el único hijo real
+       * (`ScoreboardView`) siendo `position:absolute` —que no aporta altura
+       * a un contenedor en flujo normal—, este contenedor colapsaba a
+       * prácticamente cero de alto. El tablero, anclado con `inset-0` ADENTRO
+       * de esa caja colapsada, quedaba con tamaño cero: no se veía nada, y el
+       * aviso de pantalla completa (también `absolute inset-0`) se
+       * desarmaba contra el mismo colapso. `fixed inset-0` no depende de
+       * ningún ancestro para tener tamaño: siempre es el viewport completo.
+       */
+      className="fixed inset-0 cursor-pointer"
       title="Haz clic en cualquier parte para Pantalla Completa"
     >
       {/* No necesitamos pasarle el boardId manualmente aquí, porque el componente 

@@ -58,6 +58,17 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /*
+   * En tablet, sin esto, cada toque dispara además el resaltado gris/azul
+   * translúcido que el navegador dibuja solo — encima de nuestro propio
+   * `active:` de cada botón. Los dos a la vez se ven baratos y en conflicto;
+   * uno solo, hecho a medida, se siente como una app nativa. Es el último
+   * punto de la pasada táctil: sin esto, todo el trabajo de `active:` se
+   * pisa con el highlight por defecto del sistema.
+   */
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     @apply bg-background text-foreground;
   }

@@ -334,3 +334,136 @@ de "Lanzar a proyector" dentro de Vistas y proyectores, o LANZAR TODO), y qué
 se ve roto en la ventana que abre — un color equivocado, la tipografía por
 defecto, el marcador en blanco? Con eso lo reproduzco y lo corrijo en la
 próxima ronda.
+
+---
+
+## 13. PASADA TÁCTIL PARA TABLET — "HÁPTICO DE LUJO"
+
+Auditoría de la vista PISTA pensada para un dedo sobre vidrio, no un mouse.
+El hallazgo central: **la mayoría de los controles no daban ninguna señal al
+tocarlos.** El componente base `Button` (65 usos sólo en esta vista) sólo
+tenía `hover:` — que en touch casi nunca dispara — así que se tocaba un botón
+y no pasaba nada visible hasta que el efecto de la acción se reflejaba en
+otra parte de la pantalla. Eso es lo opuesto de "lujo": se siente como que la
+app no respondió.
+
+**Arreglo de fondo, uno solo, máximo alcance:** `components/ui/button.tsx`
+—la base que usan los 65 botones de esta vista y todos los del resto de la
+app— ahora tiene:
+- `active:scale-[0.97]` + un tono más oscuro por variante al presionar
+  (`active:bg-primary/80`, etc.) — la respuesta inmediata que faltaba.
+- `touch-manipulation` — le saca al navegador el retraso de ~300ms que usa
+  para distinguir un toque de un intento de doble-toque-para-zoom. Importa
+  cuando hay que anotar goles o faltas rápido, tocando varias veces seguidas.
+- `select-none` — un dedo moviéndose rápido entre botones adyacentes ya no
+  arrastra selección de texto por accidente.
+
+**Controles sueltos que no usan `Button` y no tenían nada de esto:**
+el silbato del árbitro, las dos zonas de posesión (se tocan ~40 veces por
+partido), el círculo central de puesta en juego (el control más importante
+de toda la mesa — arranca y pausa el reloj), el botón de anular sanción en
+la mesa de control, los dos diálogos de falta de equipo y de sustitución, y
+el selector de estilo de ficha. Los ocho ahora responden al tacto con
+`active:` + `touch-manipulation` + `select-none`, igual que el resto.
+
+**Último punto, a nivel de página:** se suprimió el resaltado gris/azul que
+dibuja el navegador solo en cada toque (`-webkit-tap-highlight-color:
+transparent` en `html`). Sin esto, ese highlight por defecto se dibuja
+ENCIMA del `active:` a medida de cada botón — los dos a la vez se ven
+baratos y en conflicto. Con uno solo, hecho a propósito, se siente como una
+app nativa y no como una página web.
+
+No se tocó el layout ni el tamaño de nada: los pasos `sm:`/`lg:`/`xl:` que ya
+se habían afinado en rondas anteriores (fichas, banca, reloj, botones de
+banca) ya daban objetivos de toque generosos para tablet. Lo que faltaba era
+la respuesta al tacto, no el tamaño.
+
+---
+
+## 14. AUDITORÍA COMPLETA DEL MODAL DE LANZADORES — TRES BUGS DISTINTOS CERRADOS
+
+### 14.1 · Posición vertical: ARRIBA/ABAJO hacían desaparecer todo el lienzo
+
+Causa encontrada: el lienzo mide 1920×1080 completos siempre — su tamaño de
+layout no cambia, sólo se le aplica `transform: scale()` para verse chico.
+`transform-origin` por defecto es el CENTRO del elemento. Con ARRIBA/ABAJO,
+flexbox posicionaba el borde superior/inferior del lienzo en el borde de la
+caja, pero la escala seguía pivotando desde su propio centro — que en
+coordenadas sin escalar está en y=540, muy por debajo de una caja de
+previsualización típica de ~200px. El contenido, ya reducido, terminaba
+empujado fuera del área visible y el `overflow-hidden` lo recortaba por
+completo. Con CENTRO coincidía por casualidad el pivote de la escala con el
+centrado de flexbox — por eso era la única opción que se veía, y por eso
+Estadísticas y Fin parecían "maquetas rotas": probablemente quedaron
+guardados en ARRIBA o ABAJO de una prueba anterior, e invisibles
+permanentemente hasta volver a CENTRO a mano.
+
+Arreglo: `OverlayCanvas` ya no depende de flexbox para esto. Se posiciona con
+coordenadas absolutas y el `transform-origin` se ancla al MISMO borde que la
+alineación elegida (`top center` / `bottom center` / `center center`), así la
+escala siempre reduce hacia el lado correcto y el contenido nunca se sale de
+la caja.
+
+### 14.2 · GOL: sólo dos de cinco capas eran de verdad — las otras tres eran maqueta
+
+Confirmado exactamente como se reportó: `DEFAULT_LAYOUT.goal` declara cinco
+capas (`watermark`, `text`, `jersey`, `shield`, `score`), pero
+`GoalOverlay.tsx` sólo envolvía **dos** (`text` y `score`) en un `<Slot>` de
+verdad. El escudo de fondo, el escudo del equipo y la camiseta eran divs
+sueltos: se veían, pero moverlos o escalarlos desde Capas no tenía ningún
+efecto porque no había ningún elemento arrastrable ahí — la configuración
+guardada existía pero no estaba conectada a nada.
+
+Se envolvieron las tres capas restantes en `<Slot>`. De paso, el escudo y la
+camiseta vivían **combinados en un solo bloque flex** (una fila con `gap`),
+cuando el layout de fábrica define posiciones INDEPENDIENTES para cada uno
+(`jersey: x:760`, `shield: x:1160`) — se separaron en dos `<Slot>`
+independientes para que cada uno se pueda mover y escalar por su cuenta,
+como ya prometía el panel de Capas.
+
+### 14.3 · `/scoreboard?board=1` no mostraba nada — regresión introducida por mí
+
+Encontré un `app/scoreboard/layout.tsx` que envuelve la página en un `div`
+con `min-h-screen` (un **mínimo**, no una altura fija). Mi página usaba
+`h-full` — que necesita que el padre tenga una altura *definida* para
+resolver el porcentaje. Como el único contenido real (`ScoreboardView`) es
+`position: absolute` y no aporta altura a un contenedor en flujo normal, mi
+`div` colapsaba a prácticamente cero de alto, y el tablero — anclado con
+`inset-0` adentro de esa caja colapsada — quedaba con tamaño cero: no se veía
+nada, y el aviso de pantalla completa (agregado en la ronda anterior, también
+`absolute inset-0`) se desarmaba contra el mismo colapso, apareciendo
+recortado arriba de la pantalla.
+
+Esta regresión la introduje yo mismo la ronda pasada, al agregar `relative`
+al contenedor para poder posicionar el aviso de pantalla completa encima —
+antes de eso, sin ningún ancestro `position != static`, el tablero se
+posicionaba directo contra el viewport y el colapso no importaba.
+
+Arreglo: el contenedor de la página pasa a `fixed inset-0` en vez de `w-full
+h-full relative`. Ancla directo al viewport, sin depender de la altura de
+ningún ancestro — el tablero y el aviso de pantalla completa vuelven a
+tener el tamaño correcto sin importar qué haga el layout que lo envuelve.
+
+---
+
+## 15. "ESPACIO FUNCIONA COMO ENTER" — DIAGNÓSTICO DEL OPERADOR, CERRADO DE RAÍZ
+
+Diagnóstico correcto y completo, aportado directamente: un botón clickeado
+con el mouse se queda con el foco; Espacio y Enter activan el elemento
+enfocado; la siguiente vez que se apretaba Espacio para el reloj, el
+navegador además volvía a pulsar el último botón tocado. Dos acciones por una
+tecla, sin ninguna pista visible en el atajo en sí para saber por qué.
+
+El `preventDefault` que ya existía en `app/page.tsx` no alcanzaba porque sólo
+actúa cuando la tecla presionada coincide con una entrada de
+`KEYS_NEEDING_PREVENT` — un parche por tecla que cualquier atajo nuevo
+hereda sin cubrir, a menos que alguien se acuerde de sumarlo ahí a mano.
+
+Arreglo implementado tal como se planteó: un solo listener global de `click`
+en `app/page.tsx`, junto al teclado único de la estación, que le quita el
+foco al botón apenas se suelta el clic. La distinción entre un clic real de
+mouse/touch y una activación por teclado (Enter/Espacio, que también disparan
+un evento `click`) es `event.detail === 0` — así que esto no interfiere con
+navegar la interfaz a propósito con Tab + Enter. Corta el problema de raíz en
+vez de tecla por tecla, y cubre cualquier atajo que se agregue después sin
+que nadie tenga que acordarse de nada.

@@ -15,6 +15,22 @@ import { CANVAS_W, CANVAS_H } from '@/lib/overlay-layout'
  * Aqui el lienzo mide su propia caja y calcula la escala una sola vez. Sirve
  * igual en el proyector y dentro del modal, y expone la escala a los hijos para
  * que el arrastre convierta bien el movimiento del puntero.
+ *
+ * POSICIÓN VERTICAL — POR QUÉ "ARRIBA"/"ABAJO" HACÍAN DESAPARECER TODO:
+ * el lienzo mide 1920x1080 completos (su tamaño de LAYOUT no cambia, sólo se
+ * lo escala visualmente con `transform: scale()`), y `transform-origin` por
+ * defecto es el CENTRO del elemento. Alinearlo arriba con flexbox posiciona
+ * su borde superior en y=0 del contenedor, pero la escala sigue pivotando
+ * desde su propio centro — que en coordenadas sin escalar está en y=540,
+ * muy por debajo de una caja de previsualización típica de ~200px de alto.
+ * El contenido, ya reducido, terminaba empujado fuera del área visible y
+ * recortado por completo por el `overflow-hidden`. Con CENTRO coincidía por
+ * casualidad el pivote de la escala con el centrado de flexbox, por eso era
+ * la única opción que se veía.
+ *
+ * La solución es no depender de flexbox para esto: se posiciona con
+ * coordenadas absolutas y el `transform-origin` se ancla al MISMO borde que
+ * la alineación, así la escala siempre reduce hacia el lado correcto.
  */
 
 interface Props {
@@ -46,17 +62,19 @@ export function OverlayCanvas({ children, className = '', zoom = 1, align = 'cen
   }, [])
 
   const s = scale * zoom
-  /* `items-center` vivía escrito a mano en el string base: agregar una clase
-     de alineación por fuera no la podía ganar (misma especificidad, orden de
-     cascada impredecible), así que "Posición vertical" no movía nada. Ahora
-     la alineación se calcula una sola vez y reemplaza al valor fijo. */
-  const alignClass = align === 'top' ? 'items-start' : align === 'bottom' ? 'items-end' : 'items-center'
+
+  const posStyle: React.CSSProperties =
+    align === 'top'
+      ? { top: 0, left: '50%', transform: `translateX(-50%) scale(${s})`, transformOrigin: 'top center' }
+      : align === 'bottom'
+      ? { bottom: 0, left: '50%', transform: `translateX(-50%) scale(${s})`, transformOrigin: 'bottom center' }
+      : { top: '50%', left: '50%', transform: `translate(-50%, -50%) scale(${s})`, transformOrigin: 'center center' }
 
   return (
-    <div ref={box} className={`absolute inset-0 flex justify-center overflow-hidden ${alignClass} ${className}`}>
+    <div ref={box} className={`absolute inset-0 overflow-hidden ${className}`}>
       {scale > 0 && (
-        <div className="relative shrink-0"
-          style={{ width: CANVAS_W, height: CANVAS_H, transform: `scale(${s})` }}>
+        <div className="absolute shrink-0"
+          style={{ width: CANVAS_W, height: CANVAS_H, ...posStyle }}>
           {children(s)}
         </div>
       )}
