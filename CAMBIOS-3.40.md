@@ -534,3 +534,42 @@ manual que ya no hacen falta, en ambas vistas.
   pestaña**, justo debajo del interruptor de activar/desactivar, en vez de
   al final de una lista larga de ajustes — ahora se ve por defecto sin
   necesidad de bajar el scroll.
+
+---
+
+## 19. RELOJ DE POSESIÓN UNIFICADO EN LA PROYECCIÓN
+
+Pedido con foto de referencia de un tablero físico real: un solo reloj de
+posesión en pantalla, no uno por equipo, con parpadeo rojo en la cuenta final
+y bocina al llegar a cero. **La vista operador no cambia** — se sigue
+midiendo por equipo, tocando cada lado o con los dos botones de PLAY en modo
+Control, exactamente como antes; eso es lo que permite llevar la estadística
+por equipo. Lo que cambia es sólo cómo se **proyecta**.
+
+- **Un solo elemento "POSESIÓN"**, nuevo, en el sistema de posiciones
+  arrastrables de `scoreboard-view.tsx`. Muestra el lado que esté corriendo
+  en ese momento (`isPossessionLeftRunning ? possessionClockLeft :
+  isPossessionRightRunning ? possessionClockRight : …`); si ninguno corre,
+  muestra el que quedó más bajo de los dos, para que un reloj recién
+  congelado en cero se siga viendo congelado en vez de desaparecer.
+- **De 10 a 1: rojo y parpadeando** (un `step-start` de medio segundo, como
+  el parpadeo discreto de un LED real, no un fundido suave). **En 0: rojo
+  fijo, sin parpadeo** — coincide con que el valor ya no cambia (el hook de
+  estado ya lo dejaba congelado en 0 y disparaba la bocina; eso no se tocó).
+- **Sonido en la proyección misma**, no sólo en la mesa de control: un tic
+  corto por cada segundo dentro de la zona roja, al mismo compás del
+  parpadeo, y un tono más largo y grave al llegar a cero. Antes
+  `scoreboard-view.tsx` no reproducía ningún sonido por su cuenta — todo el
+  audio vivía sólo en la página de control. Se guardó explícitamente para no
+  sonar en las tarjetas de previsualización de esa misma página (ya tienen
+  de sobra con su propio audio).
+- **P1** muestra el reloj unificado en el lugar donde antes había dos cajas
+  separadas (ahora ocultas por defecto, pero siguen existiendo por si algún
+  club prefiere volver al modo de dos cajas a mano, vía el editor de
+  posiciones).
+- **P2 y P3** muestran *sólo* el reloj de posesión, a pantalla completa —
+  sin escudo, sin nombre de equipo y sin semáforo (los indicadores de 10ª
+  falta / tiempo muerto), tal como se pidió.
+- Los operadores que ya tenían un diseño personalizado guardado no pierden
+  nada: el reloj nuevo se suma solo a la posición por defecto, sin tocar lo
+  que ya habían ajustado a mano.

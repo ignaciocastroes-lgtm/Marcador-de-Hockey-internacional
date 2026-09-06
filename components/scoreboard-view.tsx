@@ -63,35 +63,42 @@ const DEFAULTS_P1 = {
   awayLogo: { x: 1610, y: 220, s: 1, v: true },
   awayName: { x: 1610, y: 380, s: 1, v: true },
   awayScore: { x: 1610, y: 640, s: 1, v: true },
-  homePossession: { x: 200, y: 920, s: 0.9, v: true },
+  homePossession: { x: 200, y: 920, s: 0.9, v: false },
   homeLights: { x: 200, y: 740, s: 0.9, v: true },
   homePenalties: { x: 500, y: 920, s: 0.9, v: true },
   homeFouls: { x: 800, y: 920, s: 0.9, v: true },
-  awayPossession: { x: 1720, y: 920, s: 0.9, v: true },
+  awayPossession: { x: 1720, y: 920, s: 0.9, v: false },
   awayLights: { x: 1720, y: 740, s: 0.9, v: true },
   awayPenalties: { x: 1420, y: 920, s: 0.9, v: true },
   awayFouls: { x: 1120, y: 920, s: 0.9, v: true },
   homeSanctions: { x: 750, y: 700, s: 1, v: true },
   awaySanctions: { x: 1170, y: 700, s: 1, v: true },
   skaters: { x: 960, y: 880, s: 1, v: true },
+  // Reloj de posesión unificado — reemplaza a las dos cajas de arriba
+  // (homePossession/awayPossession, que quedan ocultas por defecto pero
+  // siguen ahí por si alguna vez hace falta el modo de dos cajas a mano).
+  possession: { x: 960, y: 790, s: 1, v: true },
 }
 
 const DEFAULTS_P2 = {
   ...DEFAULTS_P1,
   clock: { ...DEFAULTS_P1.clock, v: false },
-  homeLogo: { x: 960, y: 240, s: 2.2, v: true },
-  homeName: { x: 960, y: 460, s: 1.5, v: true },
+  homeLogo: { ...DEFAULTS_P1.homeLogo, v: false },
+  homeName: { ...DEFAULTS_P1.homeName, v: false },
   homeScore: { ...DEFAULTS_P1.homeScore, v: false },
   period: { ...DEFAULTS_P1.period, v: false },
   awayLogo: { ...DEFAULTS_P1.awayLogo, v: false },
   awayName: { ...DEFAULTS_P1.awayName, v: false },
   awayScore: { ...DEFAULTS_P1.awayScore, v: false },
-  homePossession: { x: 960, y: 850, s: 1.8, v: true },
-  homeLights: { x: 960, y: 620, s: 1.5, v: true },
+  homePossession: { ...DEFAULTS_P1.homePossession, v: false },
+  homeLights: { ...DEFAULTS_P1.homeLights, v: false },
   homeFouls: { x: 710, y: 920, s: 1, v: false },
   awayFouls: { x: 1210, y: 920, s: 1, v: false },
   awayPossession: { x: 1650, y: 920, s: 1, v: false },
   awayLights: { ...DEFAULTS_P1.awayLights, v: false },
+  // Sólo el reloj de posesión, a pantalla completa: sin nombre de equipo,
+  // sin escudo y sin semáforo — lo único que se ve en este monitor.
+  possession: { x: 960, y: 540, s: 2.6, v: true },
   homePenalties: { x: 310, y: 880, s: 0.8, v: false },
   awayPenalties: { x: 1610, y: 880, s: 0.8, v: false },
   homeSanctions: { x: 300, y: 850, s: 1, v: false },
@@ -106,15 +113,17 @@ const DEFAULTS_P3 = {
   homeName: { ...DEFAULTS_P1.homeName, v: false },
   homeScore: { ...DEFAULTS_P1.homeScore, v: false },
   period: { ...DEFAULTS_P1.period, v: false },
-  awayLogo: { x: 960, y: 240, s: 2.2, v: true },
-  awayName: { x: 960, y: 460, s: 1.5, v: true },
+  awayLogo: { ...DEFAULTS_P1.awayLogo, v: false },
+  awayName: { ...DEFAULTS_P1.awayName, v: false },
   awayScore: { ...DEFAULTS_P1.awayScore, v: false },
   homePossession: { x: 270, y: 920, s: 1, v: false },
   homeLights: { ...DEFAULTS_P1.homeLights, v: false },
   homeFouls: { x: 710, y: 920, s: 1, v: false },
   awayFouls: { x: 1210, y: 920, s: 1, v: false },
-  awayPossession: { x: 960, y: 850, s: 1.8, v: true },
-  awayLights: { x: 960, y: 620, s: 1.5, v: true },
+  awayPossession: { x: 960, y: 850, s: 1.8, v: false },
+  awayLights: { ...DEFAULTS_P1.awayLights, v: false },
+  // Sólo el reloj de posesión, a pantalla completa — mismo criterio que P2.
+  possession: { x: 960, y: 540, s: 2.6, v: true },
   homePenalties: { x: 310, y: 880, s: 0.8, v: false },
   awayPenalties: { x: 1610, y: 880, s: 0.8, v: false },
   homeSanctions: { x: 300, y: 850, s: 1, v: false },
@@ -143,6 +152,7 @@ const DEFAULTS_P4 = {
   homeSanctions: { x: 960, y: 540, s: 2.5, v: true }, 
   awaySanctions: { ...DEFAULTS_P1.awaySanctions, v: false },
   skaters: { ...DEFAULTS_P1.skaters, v: false },
+  possession: { ...DEFAULTS_P1.possession, v: false },
 }
 
 const DEFAULTS_P5 = {
@@ -166,6 +176,7 @@ const DEFAULTS_P5 = {
   homeSanctions: { ...DEFAULTS_P1.homeSanctions, v: false },
   awaySanctions: { x: 960, y: 540, s: 2.5, v: true }, 
   skaters: { ...DEFAULTS_P1.skaters, v: false },
+  possession: { ...DEFAULTS_P1.possession, v: false },
 }
 
 const getInitialBoardId = (propId?: number) => {
@@ -717,6 +728,54 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
     return () => clearTimeout(t)
   }, [state.isMatchEnded, finalOn, ov.final.showFicha, ov.final.winnerSeconds]);
 
+  /**
+   * SONIDO DEL RELOJ DE POSESIÓN UNIFICADO — sólo en la proyección real
+   * (nunca en las tarjetas de previsualización de la página de control, que
+   * ya tienen de sobra con el sonido propio de esa página).
+   *
+   * Un tic corto por cada segundo dentro de la zona roja (10 a 1), al mismo
+   * compás del parpadeo visual — "al unísono" — y un tono más largo y grave
+   * cuando llega a 0, además de la bocina que ya dispara el hook de estado.
+   * Detecta el cruce comparando contra el valor anterior, así que nunca
+   * repite el mismo sonido en renders que no cambiaron nada.
+   */
+  const possessionAudioCtx = useRef<AudioContext | null>(null)
+  const prevPossessionRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (isPreview) return
+    const running = state.isPossessionLeftRunning || state.isPossessionRightRunning
+    const value = state.isPossessionLeftRunning
+      ? state.possessionClockLeft
+      : state.isPossessionRightRunning
+      ? state.possessionClockRight
+      : Math.min(state.possessionClockLeft ?? 45, state.possessionClockRight ?? 45)
+
+    const prev = prevPossessionRef.current
+    prevPossessionRef.current = value
+    if (!running || prev === null || value >= prev) return // sólo suena bajando, nunca al resetear a 45
+
+    const tone = (freq: number, dur: number, gainLevel: number) => {
+      let ctx = possessionAudioCtx.current
+      if (!ctx) {
+        const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+        if (!Ctx) return
+        ctx = new Ctx()
+        possessionAudioCtx.current = ctx
+      }
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'square'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(gainLevel, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur)
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.start(); osc.stop(ctx.currentTime + dur)
+    }
+
+    if (value === 0) tone(700, 0.7, 0.35)
+    else if (value <= 10) tone(1300, 0.1, 0.25)
+  }, [state.possessionClockLeft, state.possessionClockRight, state.isPossessionLeftRunning, state.isPossessionRightRunning, isPreview])
+
   // A partir de aqui ya no puede declararse ningun hook: hay salida temprana.
   if (!mounted) return <div className="absolute inset-0 bg-black" />
 
@@ -724,6 +783,26 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   const isAwayGreenOn = state.awayTimeoutRequested || state.activeTimeout === 'away'
   const isHomeRedOn = state.isHomeFoul10Active
   const isAwayRedOn = state.isAwayFoul10Active
+
+  /**
+   * RELOJ DE POSESIÓN UNIFICADO — un solo valor para P1, P2 y P3.
+   *
+   * La vista operador sigue midiendo por equipo (dos cronómetros, uno por
+   * lado, mutuamente excluyentes — eso no cambia). Lo que cambia es la
+   * PROYECCIÓN: en vez de mostrar dos cajas (una por equipo, como antes),
+   * se muestra el lado que está corriendo en este momento. Si ninguno corre
+   * (partido detenido, posesión recién repuesta), se muestra el que quedó
+   * más "usado" de los dos — así un reloj recién congelado en cero se sigue
+   * viendo congelado en cero en vez de desaparecer.
+   */
+  const unifiedPossession = state.isPossessionLeftRunning
+    ? state.possessionClockLeft
+    : state.isPossessionRightRunning
+    ? state.possessionClockRight
+    : Math.min(state.possessionClockLeft ?? 45, state.possessionClockRight ?? 45)
+  const possessionRunning = state.isPossessionLeftRunning || state.isPossessionRightRunning
+  const possessionWarning = unifiedPossession <= 10 && unifiedPossession > 0
+  const possessionZero = unifiedPossession === 0
   
   const homeSanctions = state.sanctions?.filter(s => s.team === 'home' && s.remainingTime > 0 && !s.isBench && s.type !== 'yellow') || []
   const awaySanctions = state.sanctions?.filter(s => s.team === 'away' && s.remainingTime > 0 && !s.isBench && s.type !== 'yellow') || []
@@ -819,6 +898,11 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         .animate-sway-3d { animation: sway3d 8s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
         .animate-sway-2d { animation: sway2d 7s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
         .animate-parallax-pan { animation: parallaxPan 15s ease-in-out infinite; }
+        @keyframes possessionWarning {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
+        }
+        .animate-possession-warning { animation: possessionWarning 0.5s step-start infinite; }
       `}} />
 
       {isPreview && (
@@ -1007,6 +1091,30 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         <Draggable id="awayScore" pos={positions['awayScore']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[450px] p-4">
           <div className={`leading-none bg-black w-full flex items-center justify-center ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.boardAccentColor || '#dc2626'), borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, boxShadow: `0 0 60px ${liveLogos.boardAccentColor || '#dc2626'}4d`, fontSize: '320px', height: '340px', borderRadius: '40px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
             {(state.awayScore || 0).toString().padStart(2, '0')}
+          </div>
+        </Draggable>
+
+        {/*
+          RELOJ DE POSESIÓN UNIFICADO — el único que se ve por defecto en P1,
+          P2 y P3. Rojo y parpadeando en la zona de 10 a 1; rojo fijo (sin
+          parpadeo, congelado de verdad) al llegar a 0.
+        */}
+        <Draggable id="possession" pos={positions['possession']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[400px] p-4">
+          <div className={`w-full bg-[#0a0a0a] border-[6px] rounded-[30px] p-[24px] shadow-2xl flex flex-col items-center pointer-events-none transition-colors duration-300 ${
+            possessionWarning || possessionZero ? 'border-red-700' : 'border-zinc-900'}`}>
+            <span className="font-bold tracking-widest mb-[8px] text-[34px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>POSESIÓN</span>
+            <div className={`leading-none bg-black flex items-center justify-center w-full h-[170px] rounded-[24px] border-[4px] ${digitFxClass} ${possessionWarning ? 'animate-possession-warning' : ''}`}
+              style={{
+                ...customNumberStyle,
+                ...numFx(
+                  possessionWarning || possessionZero ? '#ef4444' : (liveLogos.possessionColor || '#22c55e'),
+                  `0 0 30px ${possessionWarning || possessionZero ? '#ef4444' : (liveLogos.possessionColor || '#22c55e')}`
+                ),
+                borderColor: `${possessionWarning || possessionZero ? '#ef4444' : (liveLogos.possessionColor || '#22c55e')}4d`,
+                fontSize: '190px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased'
+              }}>
+              {unifiedPossession.toString().padStart(2, '0')}
+            </div>
           </div>
         </Draggable>
 
