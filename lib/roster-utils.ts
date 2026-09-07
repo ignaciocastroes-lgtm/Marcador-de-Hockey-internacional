@@ -5,7 +5,16 @@ import { Player } from '@/hooks/use-game-state'
 const uid = () => crypto.randomUUID()
 
 // ─── 1. Generador de Roster para Modo Express ────────────────────────────────
-export interface ExpressEntry { number: string; isGoalie: boolean }
+export interface ExpressEntry {
+  number: string
+  isGoalie: boolean
+  /** Nombre de pantalla, opcional. Vacio = la animacion muestra el dorsal. */
+  apodo?: string
+  /** Identidad, cuando la ficha viene del plantel del club (ILE-0007). */
+  personId?: string
+  /** Nombre legal, cuando viene del plantel. El acta lo necesita. */
+  nombre?: string
+}
 
 export const generateExpressRoster = (entries?: ExpressEntry[]): Player[] => {
   const players: Player[] = []
@@ -16,8 +25,15 @@ export const generateExpressRoster = (entries?: ExpressEntry[]): Player[] => {
     const hayPortero = entries.some(e => e.isGoalie)
     entries.forEach((e, i) => {
       const esPortero = e.isGoalie || (!hayPortero && i === 0)
+      // La identidad viaja si la ficha vino del plantel del club. Antes se
+      // fabricaba un uuid nuevo en cada partido, asi que la misma persona era
+      // alguien distinto cada sabado y el motor no podia acumularle tarjetas.
       players.push({
-        id: uid(), number: e.number, name: '', rut: '',
+        id: e.personId || uid(),
+        number: e.number,
+        name: e.nombre || '',
+        apodo: e.apodo || '',
+        rut: '',
         position: esPortero ? 'PO' : '',
         role: esPortero ? 'portero' : 'jugador_pista'
       })
@@ -99,8 +115,9 @@ export const processRosterImport = (file: File): Promise<Player[]> =>
             const rawRole = (row['rol'] ?? row['role'] ?? '').trim().toLowerCase().replace(/\s+/g, '_')
 
             players.push({
-              id: uid(),
+              id: (row['id'] ?? '').trim() || uid(),
               number: rawNum,
+              apodo: (row['apodo'] ?? row['alias'] ?? '').trim(),
               name: (row['nombre'] ?? row['name'] ?? '').trim(),
               rut: (row['rut'] ?? row['rut_'] ?? '').trim(),
               position: '',

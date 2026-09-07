@@ -5,12 +5,14 @@
 // Modelo "una URL por club": se clona el proyecto, se cambian estos valores,
 // se despliega en su propio dominio. Nada más hay que tocar.
 //
-// El escudo puede venir de dos lados:
-//   1. URL externa (ImgBB, etc.) — cómodo, pero necesita red la primera vez.
-//   2. Archivo en /public/escudos/ — mismo origen, lo cachea el service worker
-//      y funciona sin internet incluso en una ventana recién abierta.
-// Para un despliegue de cliente conviene la segunda: es la que sobrevive a un
-// gimnasio sin señal.
+// EL ESCUDO VA EN /public/escudos/, NO EN UN HOST EXTERNO.
+// Un escudo servido desde ImgBB (o cualquier CDN de terceros) necesita
+// internet la primera vez que se abre cada ventana, y este producto se usa en
+// gimnasios sin señal. Además lo cachea el service worker sólo si viene del
+// mismo origen. `logoUrlFallback` existe para no romper despliegues que
+// todavía apuntan afuera: si el archivo local no está, se usa el remoto y se
+// sigue viendo igual. En cuanto el .webp esté en su carpeta, la red deja de
+// hacer falta.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ClubBrand {
@@ -18,8 +20,14 @@ export interface ClubBrand {
   name: string
   /** Nombre corto para espacios angostos. */
   shortName: string
-  /** Escudo del club: URL externa o ruta local tipo '/escudos/mi-club.webp'. */
+  /** Escudo del club. Preferir una ruta local tipo '/escudos/mi-club.webp'. */
   logoUrl: string
+  /**
+   * Respaldo si `logoUrl` no carga (típicamente, la URL externa que se usaba
+   * antes de mover el archivo a /public/escudos/). Dejar '' cuando el archivo
+   * local ya esté en su lugar.
+   */
+  logoUrlFallback: string
   /** Rótulo de la barra superior de la mesa de control. */
   appTitle: string
   /**
@@ -32,7 +40,8 @@ export interface ClubBrand {
 export const CLUB_BRAND: ClubBrand = {
   name: 'INTERNACIONAL LO ESPEJO',
   shortName: 'INTERNACIONAL',
-  logoUrl: 'https://i.ibb.co/0jx754rd/Internacional-Lo-Espejo-N.webp',
+  logoUrl: '/escudos/internacional-lo-espejo.webp',
+  logoUrlFallback: 'https://i.ibb.co/0jx754rd/Internacional-Lo-Espejo-N.webp',
   appTitle: 'ARDI Marcador Hockey Patín PRO',
   isDefaultHome: true
 }
@@ -44,3 +53,15 @@ export const defaultHomeName = (): string =>
 /** Escudo local por defecto, si el club es el dueño del despliegue. */
 export const defaultHomeLogo = (): string | null =>
   CLUB_BRAND.isDefaultHome && CLUB_BRAND.logoUrl ? CLUB_BRAND.logoUrl : null
+
+/**
+ * Handler de `onError` para cualquier <img> que muestre el escudo del club:
+ * cae al respaldo una sola vez y no vuelve a intentar, así una ruta rota no
+ * genera un bucle de peticiones fallidas.
+ */
+export const clubLogoFallback = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const img = e.currentTarget
+  if (!CLUB_BRAND.logoUrlFallback || img.dataset.fellBack === '1') return
+  img.dataset.fellBack = '1'
+  img.src = CLUB_BRAND.logoUrlFallback
+}

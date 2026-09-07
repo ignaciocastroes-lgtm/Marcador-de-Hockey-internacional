@@ -33,6 +33,17 @@ export interface Player {
   id: string
   number: string
   name: string
+  /**
+   * Nombre para la PANTALLA. El acta usa siempre `name`.
+   *
+   * Son dos datos distintos a proposito: proyectar el nombre completo de un
+   * menor en un estadio —y a menudo en una transmision— es mas exposicion de
+   * la que el club suele querer. El apodo da el reconocimiento sin el dato
+   * personal, y ademas es lo que el jugador quiere ver cuando marca.
+   *
+   * Se puede editar hasta el pitazo inicial; despues queda congelado.
+   */
+  apodo?: string
   rut: string
   position: 'PO' | 'DEF' | 'MED' | 'DEL' | ''
   role: 'capitan' | 'portero' | 'dt' | 'ay1' | 'ay2' | 'ax1' | 'ax2' | 'jugador_pista' | 'suplente' | ''

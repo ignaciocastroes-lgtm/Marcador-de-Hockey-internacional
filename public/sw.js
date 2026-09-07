@@ -3,7 +3,15 @@
 // Tras la primera visita con conexión, el pabellón puede quedarse sin señal y el
 // operador igual puede recargar o abrir una ventana de tablero nueva.
 
-const CACHE = 'ardi-v1'
+// El nombre del caché ES el número de versión del despliegue. Al cambiarlo, el
+// handler de 'activate' de abajo borra todos los cachés que no coincidan, así
+// que subirlo en cada release es lo que obliga a los navegadores de los clubes
+// a soltar la versión vieja. Quedó en 'ardi-v1' durante toda la 3.x: un club
+// que abrió la app hace meses podía seguir corriendo aquel código, con los
+// bugs ya arreglados, sin manera de enterarse.
+//
+// SUBIR ESTE NÚMERO EN CADA DESPLIEGUE. Es la única línea que hay que tocar.
+const CACHE = 'ardi-v341'
 const CORE = ['/', '/scoreboard']
 
 self.addEventListener('install', event => {

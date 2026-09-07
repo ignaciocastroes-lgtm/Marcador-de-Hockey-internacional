@@ -7,6 +7,12 @@
 
 export const HOTKEYS_STORAGE_KEY = 'ardi-hotkeys-v2'
 
+/** Clave del sistema anterior (6 acciones), sólo para migrar una vez. */
+const LEGACY_HOTKEYS_KEY = 'ardi-hotkeys'
+
+/** Se emite cuando cambia el mapa: cualquier vista que muestre un atajo se entera. */
+export const HOTKEYS_CHANGED_EVENT = 'ardi-hotkeys-changed'
+
 export type HotkeyAction =
   | 'clockSound' | 'clockMute' | 'buzzer'
   | 'possLeftToggle' | 'possLeftReset'
@@ -89,17 +95,70 @@ export function keyMatches(pressed: string, configured: string): boolean {
 /** Teclas que el navegador usa para otra cosa y hay que interceptar. */
 export const KEYS_NEEDING_PREVENT = ['Space', 'PageUp', 'PageDown', 'F5', 'ArrowUp', 'ArrowDown']
 
+/**
+ * Nombres del sistema viejo -> acciones de hoy.
+ *
+ * El panel CONTROL guardaba sus atajos en 'ardi-hotkeys' con seis nombres
+ * propios; PISTA usa 'ardi-hotkeys-v2' con catorce acciones. Eran dos claves
+ * distintas para el mismo teclado. Este mapa existe para que el operador que
+ * ya se acostumbró a sus teclas en CONTROL no las pierda al unificar.
+ */
+const LEGACY_TO_ACTION: Record<string, HotkeyAction> = {
+  mainSound: 'clockSound',
+  mainMute: 'clockMute',
+  homePosToggle: 'possLeftToggle',
+  homePosReset: 'possLeftReset',
+  awayPosToggle: 'possRightToggle',
+  awayPosReset: 'possRightReset',
+}
+
+/**
+ * Trae las teclas del sistema viejo una sola vez.
+ *
+ * Sólo rellena acciones que el mapa nuevo no tenga ya configuradas: si el
+ * operador ya personalizó algo en el sistema nuevo, eso manda. La clave vieja
+ * NO se borra — si algo saliera mal, el dato original sigue ahí para volver.
+ */
+function withLegacyMigration(current: Partial<HotkeyMap>): Partial<HotkeyMap> {
+  try {
+    const raw = localStorage.getItem(LEGACY_HOTKEYS_KEY)
+    if (!raw) return current
+    const legacy = JSON.parse(raw) as Record<string, string>
+    const brought: Partial<HotkeyMap> = {}
+    Object.entries(LEGACY_TO_ACTION).forEach(([oldName, action]) => {
+      const key = legacy[oldName]
+      if (key && !current[action]) brought[action] = key
+    })
+    return { ...brought, ...current }
+  } catch {
+    return current
+  }
+}
+
 export function loadHotkeys(): HotkeyMap {
   if (typeof window === 'undefined') return DEFAULT_HOTKEYS
   try {
     const raw = localStorage.getItem(HOTKEYS_STORAGE_KEY)
-    if (!raw) return DEFAULT_HOTKEYS
-    return { ...DEFAULT_HOTKEYS, ...JSON.parse(raw) }
+    const saved: Partial<HotkeyMap> = raw ? JSON.parse(raw) : {}
+    return { ...DEFAULT_HOTKEYS, ...withLegacyMigration(saved) }
   } catch { return DEFAULT_HOTKEYS }
 }
 
 export function saveHotkeys(map: HotkeyMap): void {
-  try { localStorage.setItem(HOTKEYS_STORAGE_KEY, JSON.stringify(map)) } catch { /* ignorar */ }
+  try {
+    localStorage.setItem(HOTKEYS_STORAGE_KEY, JSON.stringify(map))
+    // Avisa a cualquier vista que esté mostrando una tecla en un tooltip.
+    window.dispatchEvent(new Event(HOTKEYS_CHANGED_EVENT))
+  } catch { /* ignorar */ }
+}
+
+/**
+ * Etiqueta legible de la tecla de una acción, para rótulos y tooltips.
+ * Un solo lugar: si mañana cambia el formato, cambia en toda la app.
+ */
+export function keyLabel(map: HotkeyMap, action: HotkeyAction): string {
+  const k = map[action]
+  return k ? k.toUpperCase() : '—'
 }
 
 /** Devuelve las acciones que comparten una misma tecla. */

@@ -1,13 +1,20 @@
 "use client"
 
-import { useState } from 'react'
-import { Shield, Type, Circle, LayoutDashboard, ExternalLink, Layers, X, ChevronRight } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
+import { Shield, Type, Circle, LayoutDashboard, ExternalLink, Layers, X, ChevronRight, Trash2, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { FINISHES, METAL_PRESETS, FLUOR_PRESETS, finishClass, finishStyle, type Finish } from '@/lib/finishes'
+import { ARDI_SHIELD_HOME, ARDI_SHIELD_AWAY } from '@/lib/generic-shields'
+import { summarizeStored, wipeAll, type StoredGroup } from '@/lib/club-boot'
+import {
+  loadGallery, rememberShield, forgetShield, labelShield,
+  SHIELD_GALLERY_EVENT, type GalleryShield
+} from '@/lib/shield-gallery'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GESTOR PANTALLAS
@@ -48,6 +55,44 @@ export const PANEL_INVENTORY = [
 export function ScreensPanel(props: ScreensPanelProps) {
   const { liveLogos: L, updateLiveLogos: up } = props
   const [panel, setPanel] = useState<PanelId>(null)
+
+  /**
+   * La galería vive en localStorage y la escriben funciones sueltas
+   * (`rememberShield` desde el `onLoad` de la previsualización, `forgetShield`
+   * y `labelShield` desde los botones). Este estado es sólo el reflejo para
+   * pintar: se refresca con el evento que emiten esas funciones, así que la
+   * lista se actualiza sola apenas un escudo nuevo carga bien, sin que nadie
+   * tenga que acordarse de sincronizar nada.
+   */
+  const [gallery, setGallery] = useState<GalleryShield[]>([])
+  const [editingUrl, setEditingUrl] = useState<string | null>(null)
+
+  /**
+   * "Empezar de cero" tiene que vivir DENTRO de la app.
+   *
+   * Ctrl+F5 no sirve: una recarga forzada se salta la caché HTTP pero
+   * localStorage sobrevive intacto, que es donde están los planteles, los
+   * equipos, los atajos y el partido en curso. Quien recargue esperando
+   * empezar limpio se encuentra todo igual, y lo descubre tarde.
+   *
+   * Se muestra qué se va a borrar antes de borrarlo, y al terminar se dice
+   * cuántas claves se fueron: un borrado que no rinde cuentas es
+   * indistinguible de uno que falló a medias.
+   */
+  const [wipeOpen, setWipeOpen] = useState(false)
+  const [grupos, setGrupos] = useState<StoredGroup[]>([])
+  const abrirBorrado = () => { setGrupos(summarizeStored()); setWipeOpen(true) }
+
+  useEffect(() => {
+    const refresh = () => setGallery(loadGallery())
+    refresh()
+    window.addEventListener(SHIELD_GALLERY_EVENT, refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener(SHIELD_GALLERY_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [])
 
   const Color = ({ k, label }: { k: string; label: string }) => (
     <div className="flex flex-col gap-1">
@@ -139,10 +184,16 @@ export function ScreensPanel(props: ScreensPanelProps) {
 
       {/* ── 1. ESCUDOS E IDENTIDAD ──────────────────────────────────────── */}
       <Panel id="identidad" title="Escudos e identidad" icon={<Shield className="w-5 h-5 text-yellow-400" />}>
+        {/* Previsualización de lo que está puesto ahora mismo. El `onLoad` es
+            lo que alimenta la galería: si el escudo se dibujó, la URL sirve, y
+            queda guardada sin que el operador tenga que hacer nada. Si la URL
+            está rota nunca dispara, así que la galería no se ensucia con
+            enlaces muertos. */}
         <div className="flex items-center justify-center gap-6 bg-zinc-900 rounded-xl p-4 border border-zinc-800">
-          {[L.homeUrl, L.awayUrl].map((u, i) => (
-            <div key={i} className="flex flex-col items-center gap-1">
-              {u ? <img src={u} alt="" className="h-20 w-20 object-contain" />
+          {([['home', L.homeUrl], ['away', L.awayUrl]] as const).map(([side, u], i) => (
+            <div key={side} className="flex flex-col items-center gap-1">
+              {u ? <img src={u} alt="" className="h-20 w-20 object-contain"
+                     onLoad={() => rememberShield(u)} />
                  : <div className="h-20 w-20 rounded-lg border-2 border-dashed border-zinc-700" />}
               <span className="text-[9px] font-black text-zinc-500 uppercase">{i === 0 ? 'Local' : 'Visita'}</span>
             </div>
@@ -158,6 +209,86 @@ export function ScreensPanel(props: ScreensPanelProps) {
           <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">URL escudo visita</Label>
           <Input value={L.awayUrl || ''} onChange={e => up({ awayUrl: e.target.value })}
             placeholder="https://ejemplo.com/logo2.png" className="h-10 mt-1 bg-zinc-900 border-zinc-700 text-xs" />
+        </div>
+
+        {/* ── Escudos ARDI: el recurso que siempre está ─────────────────────
+            Para el equipo que llega sin escudo, o para la visita de la que no
+            se consiguió el enlace a tiempo. Un toque y el tablero deja de
+            mostrar un hueco. */}
+        <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3">
+          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Escudos ARDI</p>
+          <div className="grid grid-cols-2 gap-2">
+            {([[ARDI_SHIELD_HOME, 'Local'], [ARDI_SHIELD_AWAY, 'Visita']] as const).map(([url, name]) => (
+              <div key={url} className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-col items-center gap-2">
+                <img src={url} alt={`Escudo ARDI ${name}`} className="h-16 w-16 object-contain" />
+                <span className="text-[9px] font-black text-zinc-500 uppercase">{name}</span>
+                <div className="grid grid-cols-2 gap-1 w-full">
+                  <Button size="sm" onClick={() => up({ homeUrl: url })}
+                    className="h-7 px-0 text-[9px] font-black bg-blue-700 hover:bg-blue-600">LOCAL</Button>
+                  <Button size="sm" onClick={() => up({ awayUrl: url })}
+                    className="h-7 px-0 text-[9px] font-black bg-amber-700 hover:bg-amber-600">VISITA</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Galería ───────────────────────────────────────────────────────
+            Nace vacía y se llena sola con los escudos que este club fue
+            usando. No es un catálogo: son los rivales de verdad de esta liga,
+            así que sirve igual en Chile que en cualquier otro país. */}
+        <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+              Galería {gallery.length > 0 && <span className="text-zinc-600">({gallery.length})</span>}
+            </p>
+            {gallery.length > 0 && (
+              <span className="text-[9px] text-zinc-600">Toca LOCAL o VISITA para usarlo</span>
+            )}
+          </div>
+
+          {gallery.length === 0 ? (
+            <p className="text-[11px] text-zinc-600 leading-snug py-2">
+              Todavía vacía. Cada escudo que cargues por URL y se vea bien queda
+              guardado acá, y la próxima vez está a un toque.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {gallery.map(g => (
+                <div key={g.url} className="bg-zinc-900 border border-zinc-800 rounded-lg p-2 flex flex-col items-center gap-1.5">
+                  <img src={g.url} alt={g.label || ''} className="h-14 w-14 object-contain" />
+
+                  {editingUrl === g.url ? (
+                    <Input autoFocus defaultValue={g.label || ''}
+                      placeholder="Nombre del club"
+                      onBlur={e => { labelShield(g.url, e.target.value.trim()); setEditingUrl(null) }}
+                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                      className="h-6 text-[10px] px-1 bg-zinc-950 border-zinc-700 text-center" />
+                  ) : (
+                    <button onClick={() => setEditingUrl(g.url)}
+                      title="Ponerle el nombre del club"
+                      className="w-full flex items-center justify-center gap-1 text-[10px] font-bold text-zinc-400 hover:text-white truncate">
+                      <span className="truncate">{g.label || 'Sin nombre'}</span>
+                      <Pencil className="w-2.5 h-2.5 shrink-0 opacity-60" />
+                    </button>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-1 w-full">
+                    <Button size="sm" onClick={() => up({ homeUrl: g.url })}
+                      className="h-6 px-0 text-[9px] font-black bg-blue-700 hover:bg-blue-600">LOCAL</Button>
+                    <Button size="sm" onClick={() => up({ awayUrl: g.url })}
+                      className="h-6 px-0 text-[9px] font-black bg-amber-700 hover:bg-amber-600">VISITA</Button>
+                  </div>
+
+                  <button onClick={() => forgetShield(g.url)}
+                    title="Sacar de la galería (no cambia el tablero)"
+                    className="text-[9px] font-bold text-zinc-600 hover:text-red-400 flex items-center gap-1">
+                    <Trash2 className="w-2.5 h-2.5" /> QUITAR
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* La forma y la perspectiva van CON el escudo, no doscientos píxeles abajo */}
@@ -321,7 +452,68 @@ export function ScreensPanel(props: ScreensPanelProps) {
             </Button>
           ))}
         </div>
+        {/* ── EMPEZAR DE CERO ─────────────────────────────────────────── */}
+        <div className="border-t border-zinc-800 pt-3 mt-3">
+          <Label className="text-red-400 text-xs font-black uppercase tracking-widest flex items-center mb-1">
+            <Trash2 className="w-4 h-4 mr-2" /> Empezar de cero
+          </Label>
+          <p className="text-[10px] text-zinc-500 leading-snug mb-2">
+            Deja este equipo como recién instalado. <b>Ctrl+F5 no hace esto</b>:
+            una recarga forzada no borra los datos guardados en el navegador.
+          </p>
+          <Button onClick={abrirBorrado}
+            className="w-full h-10 font-black text-xs bg-red-900 hover:bg-red-800 border border-red-700">
+            <Trash2 className="w-4 h-4 mr-2" /> BORRAR TODOS LOS DATOS
+          </Button>
+        </div>
       </Panel>
+
+      <Dialog open={wipeOpen} onOpenChange={setWipeOpen}>
+        <DialogContent className="bg-zinc-900 border-2 border-red-800 text-white max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-400" /> Borrar todos los datos
+            </DialogTitle>
+            <p className="text-[11px] text-zinc-500 leading-snug">
+              Esto no se puede deshacer. Se borra sólo lo guardado en ESTE
+              equipo; los archivos que hayas exportado no se tocan.
+            </p>
+          </DialogHeader>
+
+          {grupos.length === 0 ? (
+            <p className="text-sm text-zinc-500 py-4 text-center">
+              No hay nada guardado. Este equipo ya está limpio.
+            </p>
+          ) : (
+            <div className="max-h-64 overflow-y-auto space-y-2">
+              {grupos.map(g => (
+                <div key={g.titulo} className="bg-zinc-950 border border-zinc-800 rounded-lg p-2">
+                  <span className="text-[11px] font-black text-zinc-300">{g.titulo}</span>
+                  <span className="text-[10px] text-zinc-600 ml-2">
+                    {g.claves.length} {g.claves.length === 1 ? 'elemento' : 'elementos'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Button onClick={() => setWipeOpen(false)} variant="outline"
+              className="flex-1 h-11 font-bold border-zinc-600">CANCELAR</Button>
+            <Button
+              disabled={grupos.length === 0}
+              onClick={() => {
+                const borradas = wipeAll()
+                setWipeOpen(false)
+                toast.success(`${borradas.length} elementos borrados. Recargando…`)
+                setTimeout(() => window.location.reload(), 900)
+              }}
+              className="flex-1 h-11 font-black bg-red-700 hover:bg-red-600 disabled:opacity-40">
+              BORRAR Y REINICIAR
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

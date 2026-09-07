@@ -4,13 +4,19 @@ import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { Shield, Check, Trash2, Plus, X, Pencil, RotateCcw, Users, AlertTriangle } from 'lucide-react'
 import { SERIES_ORDERED, serieLabel } from '@/lib/series'
-import { squadFor, detectClashes, CLUB_PLAYERS } from '@/lib/club-roster'
 import { CLUB_BRAND } from '@/lib/club-brand'
+import { bootClub, } from '@/lib/club-boot'
+import { squadOf, saveClub, type ClubPerson, type ClubStore } from '@/lib/club-store'
+import { APODO_MAX } from '@/lib/roster-csv'
+import { normalize } from '@/lib/identity'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
-export interface ExpressEntry { number: string; isGoalie: boolean }
+// El tipo vive en roster-utils: estaba declarado TAMBIEN aqui, y las dos
+// copias ya habian empezado a divergir (esta no conocia apodo ni identidad).
+export type { ExpressEntry } from '@/lib/roster-utils'
+import type { ExpressEntry } from '@/lib/roster-utils'
 
 /** Plantel reglamentario de pista: 8 jugadores y 2 porteros. */
 export const MAX_ENTRIES = 10
@@ -38,8 +44,22 @@ interface Props {
   onSave: (entries: ExpressEntry[]) => void
 }
 
+/** Dos personas citadas con el mismo dorsal: hay que resolverlo antes del partido. */
+const detectarChoques = (squad: ClubPerson[]) => {
+  const porDorsal = new Map<string, string[]>()
+  squad.forEach(p => {
+    if (!p.dorsal) return
+    porDorsal.set(p.dorsal, [...(porDorsal.get(p.dorsal) || []), p.nombre])
+  })
+  return [...porDorsal.entries()]
+    .filter(([, nombres]) => nombres.length > 1)
+    .map(([number, nombres]) => ({ number, nombres }))
+}
+
 export function ExpressRosterModal({ open, onClose, teamName, side, value, onSave }: Props) {
+  const [club, setClub] = useState<ClubStore>(() => bootClub())
   const [entries, setEntries] = useState<ExpressEntry[]>([])
+  const [apodoDe, setApodoDe] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -100,6 +120,29 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
   const remove = (num: string) =>
     setEntries(prev => prev.filter(e => e.number !== num))
 
+  /**
+   * El apodo se pide una vez en la vida, no cada fecha: lo que se escriba aca
+   * vuelve al plantel del club. Solo aplica a fichas que tienen identidad
+   * permanente (las de casa); la visita es de la jornada y no deja rastro.
+   */
+  const persistirApodos = () => {
+    const conId = entries.filter(e => e.personId)
+    if (conId.length === 0) return
+    const cambios = new Map(conId.map(e => [e.personId!, e.apodo || '']))
+    let toco = false
+    const personas = club.personas.map(p => {
+      if (!cambios.has(p.id)) return p
+      const nuevo = cambios.get(p.id)!
+      if ((p.apodo || '') === nuevo) return p
+      toco = true
+      return { ...p, apodo: nuevo }
+    })
+    if (!toco) return
+    const actualizado = { ...club, personas }
+    setClub(actualizado)
+    saveClub(actualizado)
+  }
+
   const goalies = entries.filter(e => e.isGoalie).length
 
   return (
@@ -114,33 +157,39 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
           </p>
         </DialogHeader>
 
-        {/* Cargar una serie del club: los números vienen con la persona */}
+        {/* Cargar una serie del club. Las fichas traen la IDENTIDAD de la
+            persona (ILE-0007), no solo su numero: por eso el motor puede
+            acumular tarjetas sobre la misma persona de una fecha a otra.
+            Solo tiene sentido para el equipo de casa; la visita se carga a
+            mano y su identidad es de la jornada. */}
+        {side === 'home' && (
         <div className="flex gap-2 items-center bg-zinc-950 border border-zinc-800 rounded-lg p-2">
           <Users className="w-4 h-4 text-zinc-500 shrink-0" />
           <span className="text-[10px] font-black text-zinc-500 uppercase shrink-0">{CLUB_BRAND.shortName}</span>
           <select
             onChange={e => {
-              const squad = squadFor(e.target.value)
+              const squad = squadOf(club, e.target.value)
               if (squad.length === 0) { toast.info('Esa serie todavía no tiene plantel cargado.'); return }
-              const next = squad.slice(0, MAX_ENTRIES).map(p => ({ number: p.number, isGoalie: !!p.isGoalie }))
-              setEntries(next)
-              const clashes = detectClashes(squad)
-              clashes.forEach(c => {
-                toast.warning(`El número ${c.number} lo comparten ${c.players.map(p => p.name).join(' y ')}. Hay que cambiar uno antes del partido.`, { duration: 8000 })
+              setEntries(squad.slice(0, MAX_ENTRIES).map(p => ({
+                number: p.dorsal, isGoalie: !!p.isGoalie,
+                personId: p.id, nombre: p.nombre, apodo: p.apodo || ''
+              })))
+              detectarChoques(squad).forEach(c => {
+                toast.warning(`El número ${c.number} lo comparten ${c.nombres.join(' y ')}. Hay que cambiar uno antes del partido.`, { duration: 8000 })
               })
-              if (clashes.length === 0) toast.success(`${squad.length} camisetas cargadas`)
+              toast.success(`${squad.length} camisetas cargadas`)
               e.target.value = ''
             }}
             defaultValue=""
             className="flex-1 h-8 bg-zinc-800 border border-zinc-600 rounded text-xs font-bold px-2">
             <option value="" disabled>Cargar serie…</option>
-            {SERIES_ORDERED.map(se => (
-              <option key={se.id} value={se.id}>
-                {serieLabel(se)}{squadFor(se.id).length ? ` (${squadFor(se.id).length})` : ' — vacía'}
-              </option>
-            ))}
+            {SERIES_ORDERED.map(se => {
+              const n = squadOf(club, se.id).length
+              return <option key={se.id} value={se.id}>{serieLabel(se)}{n ? ` (${n})` : ' — vacía'}</option>
+            })}
           </select>
         </div>
+        )}
 
         <div className="flex gap-2">
           <Input
@@ -195,7 +244,15 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
                         title="Tocar: portero · Doble toque o lápiz: cambiar número"
                       >
                         <span className="font-black text-xl leading-none">{e.number}</span>
-                        {e.isGoalie && (
+                        {/* El apodo es lo que va a ver el jugador en la pantalla
+                            cuando marque. Se muestra chico aca solo para saber
+                            quien lo tiene y quien no. */}
+                        {e.apodo && (
+                          <span className="text-[8px] font-bold text-zinc-300 truncate max-w-full px-1 mt-0.5">
+                            {e.apodo}
+                          </span>
+                        )}
+                        {e.isGoalie && !e.apodo && (
                           <span className="flex items-center gap-0.5 text-[8px] font-black text-green-400 mt-0.5">
                             <Shield className="w-2.5 h-2.5" /> PO
                           </span>
@@ -206,6 +263,14 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
                         className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-zinc-700 hover:bg-zinc-600 border border-zinc-400 flex items-center justify-center"
                         title="Cambiar número">
                         <Pencil className="w-2.5 h-2.5 text-white" />
+                      </button>
+                      <button
+                        onClick={() => setApodoDe(e.number)}
+                        className={`absolute -bottom-1.5 -left-1.5 w-5 h-5 rounded-full border flex items-center justify-center text-[8px] font-black ${
+                          e.apodo ? 'bg-emerald-700 border-emerald-400 text-white'
+                                  : 'bg-zinc-800 border-zinc-500 text-zinc-400 hover:bg-zinc-700'}`}
+                        title={e.apodo ? `Apodo: ${e.apodo}` : 'Poner apodo para la pantalla'}>
+                        A
                       </button>
                       <button
                         onClick={() => remove(e.number)}
@@ -260,11 +325,42 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
             className="h-11 font-bold border-red-900 text-red-400 hover:bg-red-950 disabled:opacity-30 text-xs">
             <Trash2 className="w-4 h-4 mr-1.5" /> VACIAR
           </Button>
-          <Button onClick={() => { onSave(entries); onClose() }}
+          <Button onClick={() => { persistirApodos(); onSave(entries); onClose() }}
             className="h-11 font-black bg-green-700 hover:bg-green-600 text-xs">
             <Check className="w-4 h-4 mr-1.5" /> GUARDAR
           </Button>
         </div>
+        {/* ── APODO ────────────────────────────────────────────────────────
+            Se escribe una vez y queda. Es editable hasta el pitazo inicial;
+            despues del play queda congelado para ese partido. */}
+        <Dialog open={!!apodoDe} onOpenChange={o => { if (!o) setApodoDe(null) }}>
+          <DialogContent className="bg-zinc-900 border-2 border-emerald-800 text-white max-w-sm" aria-describedby={undefined}>
+            <DialogHeader>
+              <DialogTitle className="text-base font-black">
+                Apodo del <span className="text-emerald-400">#{apodoDe}</span>
+              </DialogTitle>
+              <p className="text-[11px] text-zinc-500 leading-snug">
+                Es el nombre que aparece en la pantalla cuando marca. El acta
+                sigue usando el nombre completo. Si lo dejas vacío, la
+                animación muestra sólo el dorsal, como siempre.
+              </p>
+            </DialogHeader>
+            <Input
+              autoFocus
+              maxLength={APODO_MAX}
+              defaultValue={entries.find(e => e.number === apodoDe)?.apodo || ''}
+              placeholder="Ej: Pascu"
+              onKeyDown={ev => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
+              onBlur={ev => {
+                const v = ev.target.value.trim().slice(0, APODO_MAX)
+                setEntries(prev => prev.map(e => e.number === apodoDe ? { ...e, apodo: v } : e))
+                setApodoDe(null)
+              }}
+              className="h-12 bg-zinc-800 border-zinc-600 text-center text-lg font-black"
+            />
+            <p className="text-[10px] text-zinc-600 text-center">Máximo {APODO_MAX} caracteres</p>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   )

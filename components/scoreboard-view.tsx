@@ -1,6 +1,7 @@
 "use client"
 
 import { GoalOverlay } from '@/components/scoreboard/GoalOverlay'
+import { GENERIC_SHIELDS } from '@/lib/generic-shields'
 import { loadLayouts, OVERLAY_LAYOUT_EVENT, type AllLayouts } from '@/lib/overlay-layout'
 
 import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
@@ -8,7 +9,7 @@ import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
 import { finishClass, finishStyle, resolveFinish, type Finish } from '@/lib/finishes'
 import { resolveLedFont } from '@/lib/board-look'
 
-import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
+import { defaultHomeName, defaultHomeLogo, CLUB_BRAND, clubLogoFallback } from '@/lib/club-brand'
 
 import { SummaryOverlay } from '@/components/scoreboard/SummaryOverlay'
 import { loadOverlays, showsOn, OVERLAYS_EVENT, DEFAULT_OVERLAYS, type OverlaysConfig } from '@/lib/overlay-config'
@@ -49,10 +50,6 @@ const MIRROR_PAIRS: Record<string, string> = {
 }
 const MIRROR_AXIS = 960
 
-const GENERIC_SHIELDS = [
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E",
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E"
-]
 
 const DEFAULTS_P1 = {
   clock: { x: 960, y: 170, s: 1, v: true },
@@ -356,7 +353,7 @@ const TeamLogo = React.memo(({ team, size = 180, liveUrl, stateUrl, shape, is3D,
        <div style={effectStyle}>
           {OverlayComponent}
           <div className={`absolute inset-0 overflow-hidden ${!isFree ? 'bg-zinc-900/80' : ''}`} style={clipStyle}>
-             <img src={url} alt={`${team} Logo`} className={`absolute inset-0 w-full h-full z-10 ${!isFree ? 'object-cover scale-[1.05]' : 'object-contain drop-shadow-2xl'}`} />
+             <img src={url} alt={`${team} Logo`} onError={clubLogoFallback} className={`absolute inset-0 w-full h-full z-10 ${!isFree ? 'object-cover scale-[1.05]' : 'object-contain drop-shadow-2xl'}`} />
           </div>
        </div>
     </div>

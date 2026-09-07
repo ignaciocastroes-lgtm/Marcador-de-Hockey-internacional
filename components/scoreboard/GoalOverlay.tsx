@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef } from 'react'
+import { GENERIC_SHIELDS } from '@/lib/generic-shields'
 
 import type { GoalOverlayConfig, LayoutConfig } from '@/lib/overlay-config'
 import { Slot, type SlotCtx } from '@/components/scoreboard/OverlaySlot'
@@ -20,11 +21,6 @@ import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } f
  * DENTRO de su caja, o se escapa y cubre la pantalla completa.
  */
 
-/** Escudos genericos, identicos a los del tablero. */
-const GENERIC_SHIELDS = [
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E",
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E"
-]
 
 export interface GoalEvent { id: string; team: 'home' | 'away'; playerNumber: string }
 

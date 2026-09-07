@@ -1,6 +1,10 @@
 "use client"
 
 import { RigidClock } from '@/components/scoreboard/RigidClock'
+import {
+  loadHotkeys, keyLabel, DEFAULT_HOTKEYS, HOTKEYS_CHANGED_EVENT, HOTKEY_EVENT,
+  OPEN_HOTKEYS_EVENT, type HotkeyMap
+} from '@/lib/hotkeys'
 
 import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
 
@@ -74,15 +78,6 @@ const GLOBAL_THEMES: Record<SkinKey, ThemeConfig> = {
   }
 };
 
-const DEFAULT_HOTKEYS = {
-  mainSound: 'Space',
-  mainMute: 'm',
-  homePosToggle: 'a',
-  homePosReset: 's',
-  awayPosToggle: 'l',
-  awayPosReset: 'k'
-};
-
 interface ResumeParams { period: Period; clockTime: number; homeScore: number; awayScore: number; homeFouls: number; awayFouls: number; }
 
 interface OperatorViewProps {
@@ -116,35 +111,6 @@ interface OperatorViewProps {
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60); const secs = seconds % 60;
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-}
-
-// ─── COMPONENTE DE ATAJO DE TECLADO ─────────────────────────
-const HotkeyInput = ({ label, actionKey, hotkeys, saveHotkeys }: { label: string, actionKey: keyof typeof DEFAULT_HOTKEYS, hotkeys: typeof DEFAULT_HOTKEYS, saveHotkeys: (h: any) => void }) => {
-  const [listening, setListening] = useState(false);
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!listening) return;
-    e.preventDefault();
-    e.stopPropagation(); // 🛡️ Evita que se active la acción global mientras configuras el teclado
-    const key = e.key === ' ' ? 'Space' : e.key.toLowerCase();
-    saveHotkeys({ ...hotkeys, [actionKey]: key });
-    setListening(false);
-  };
-
-  return (
-    <div className="flex items-center justify-between bg-zinc-800 p-2 rounded border border-zinc-700">
-       <span className="text-zinc-300 text-xs font-bold">{label}</span>
-       <Button
-         variant={listening ? 'default' : 'outline'}
-         className={`h-7 w-20 text-xs font-bold ${listening ? 'bg-yellow-500 text-black' : 'bg-zinc-900 border-zinc-600 text-yellow-400'}`}
-         onClick={() => setListening(true)}
-         onKeyDown={handleKeyDown}
-         onBlur={() => setListening(false)}
-       >
-         {listening ? 'Pulsa...' : hotkeys[actionKey].toUpperCase()}
-       </Button>
-    </div>
-  )
 }
 
 export function OperatorView(props: OperatorViewProps) {
@@ -196,8 +162,64 @@ export function OperatorView(props: OperatorViewProps) {
   const [isTimeEditMode, setIsTimeEditMode] = useState(false)
   const [isTimeResetAllowed, setIsTimeResetAllowed] = useState(false)
 
-  // ⌨️ ATAJOS DE TECLADO (HOTKEYS)
-  const [hotkeys, setHotkeys] = useState(DEFAULT_HOTKEYS)
+  /**
+   * ⌨️ ATAJOS DE TECLADO — LECTURA DEL SISTEMA ÚNICO
+   *
+   * Esta vista sólo MUESTRA las teclas en los tooltips de sus botones; quien
+   * las escucha es `app/page`, y quien las edita es el modal de teclas.
+   *
+   * Antes leía de 'ardi-hotkeys' (seis acciones) mientras el resto de la
+   * estación usaba 'ardi-hotkeys-v2' (catorce). Y su editor propio
+   * (`HotkeyInput`) hacía rato que no se renderizaba en ninguna parte, así
+   * que la clave vieja ya no la podía cambiar nadie: si el operador
+   * remapeaba una tecla en el modal, CONTROL seguía mostrando la anterior.
+   * Los tooltips mentían, en silencio y sin manera de notarlo.
+   *
+   * Ahora lee del mismo lugar que todos y se refresca con el evento de
+   * cambio, así que lo que dice el botón es lo que hace la tecla.
+   */
+  const [hotkeys, setHotkeys] = useState<HotkeyMap>(DEFAULT_HOTKEYS)
+
+  useEffect(() => {
+    const refresh = () => setHotkeys(loadHotkeys())
+    refresh()
+    window.addEventListener(HOTKEYS_CHANGED_EVENT, refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener(HOTKEYS_CHANGED_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [])
+
+  /**
+   * ACCIONES DE VISTA — la otra mitad del teclado universal.
+   *
+   * `app/page` escucha el teclado y resuelve solo lo que es del estado del
+   * partido (reloj, goles, faltas, posesión). Dos acciones no puede
+   * resolverlas desde afuera, porque dependen de qué diálogo tiene abierto la
+   * vista: cerrar lo abierto y abrir el selector de descanso. Para esas emite
+   * un evento que atiende la vista que esté montada.
+   *
+   * PISTA lo escuchaba desde el principio; CONTROL no. Resultado: en el panel
+   * clásico las teclas de descanso y de cerrar diálogo no hacían nada, sin
+   * ningún aviso — el mismo atajo funcionaba o no según el modo, que es justo
+   * lo que la homologación tiene que terminar.
+   */
+  useEffect(() => {
+    const onHotkey = (e: Event) => {
+      const action = (e as CustomEvent).detail as string
+      if (action === 'undo') {
+        setShowIntermissionSelector(false); setShowEndConfirm(false)
+        setShowResetConfirm(false); setShowOfficialSheet(false)
+        setShowHistory(false); setPosModalOpen(false); setBenchModalOpen(false)
+        setShowAdminMenu(false)
+      } else if (action === 'intermission' && !matchEnded) {
+        setShowIntermissionSelector(true)
+      }
+    }
+    window.addEventListener(HOTKEY_EVENT, onHotkey)
+    return () => window.removeEventListener(HOTKEY_EVENT, onHotkey)
+  }, [matchEnded])
 
   // 🤖 CONTROL DE SILENCIO (Bypass Chicharra)
   const skipNextClockStartBuzzer = useRef(false)
@@ -221,11 +243,6 @@ export function OperatorView(props: OperatorViewProps) {
     
     const savedTimeReset = localStorage.getItem('ardi-time-reset')
     if (savedTimeReset) setIsTimeResetAllowed(savedTimeReset === 'true')
-
-    const savedHotkeys = localStorage.getItem('ardi-hotkeys')
-    if (savedHotkeys) {
-      try { setHotkeys(JSON.parse(savedHotkeys)) } catch(e){}
-    }
   }, [])
 
   const handleThemeChange = (val: SkinKey) => {
@@ -260,11 +277,6 @@ export function OperatorView(props: OperatorViewProps) {
   const handleTimeResetChange = (val: boolean) => {
     setIsTimeResetAllowed(val)
     localStorage.setItem('ardi-time-reset', String(val))
-  }
-
-  const saveHotkeys = (newH: typeof DEFAULT_HOTKEYS) => {
-    setHotkeys(newH)
-    localStorage.setItem('ardi-hotkeys', JSON.stringify(newH))
   }
 
   // ─── LISTENER GLOBAL DE TECLADO (HOTKEYS) ─────────────────
@@ -621,7 +633,7 @@ export function OperatorView(props: OperatorViewProps) {
                 onClick={() => { skipNextClockStartBuzzer.current = true; props.toggleMainClock(); }} 
                 disabled={matchEnded} 
                 className={`flex-1 text-2xl sm:text-3xl font-black ${theme.btn.shape} ${state.isMainClockRunning ? theme.btn.danger : 'bg-green-700 hover:bg-green-600 text-white shadow-md'}`}
-                title={`Iniciar/Pausar (SIN Chicharra) [Atajo: ${hotkeys.mainMute.toUpperCase()}]`}
+                title={`Iniciar/Pausar (SIN Chicharra) [Atajo: ${keyLabel(hotkeys, 'clockMute')}]`}
               >
                 {state.isMainClockRunning ? <Pause className="w-6 h-6 sm:w-10 sm:h-10" /> : <div className="flex items-center"><Play className="w-6 h-6 sm:w-8 sm:h-8" /><VolumeX className="w-4 h-4 ml-2 opacity-60"/></div>}
               </Button>
@@ -670,7 +682,7 @@ export function OperatorView(props: OperatorViewProps) {
                 onClick={() => { skipNextClockStartBuzzer.current = false; props.toggleMainClock(); }} 
                 disabled={matchEnded} 
                 className={`flex-1 text-2xl sm:text-3xl font-black ${theme.btn.shape} ${state.isMainClockRunning ? theme.btn.danger : theme.btn.primary}`}
-                title={`Iniciar/Pausar (CON Chicharra) [Atajo: ${hotkeys.mainSound.toUpperCase()}]`}
+                title={`Iniciar/Pausar (CON Chicharra) [Atajo: ${keyLabel(hotkeys, 'clockSound')}]`}
               >
                 {state.isMainClockRunning ? <Pause className="w-6 h-6 sm:w-10 sm:h-10" /> : <div className="flex items-center"><Play className="w-6 h-6 sm:w-8 sm:h-8" /><Bell className="w-5 h-5 ml-2 opacity-90"/></div>}
               </Button>
@@ -687,13 +699,14 @@ export function OperatorView(props: OperatorViewProps) {
                     {state.matchConfig.allowPenalties && <SelectItem value="penales">Penales</SelectItem>}
                   </SelectContent>
                 </Select>
-                <Button onClick={props.nextPeriod} disabled={matchEnded} className={`h-full w-10 sm:w-12 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><ChevronRight className="w-5 h-5" /></Button>
+                <Button onClick={props.nextPeriod} disabled={matchEnded} title={`Siguiente periodo [Atajo: ${keyLabel(hotkeys, 'nextPeriod')}]`} className={`h-full w-10 sm:w-12 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><ChevronRight className="w-5 h-5" /></Button>
               </div>
               
               <Button 
                 onPointerDown={handleBuzzerPress}
                 onPointerUp={handleBuzzerRelease}
                 onPointerLeave={handleBuzzerRelease}
+                title={`Chicharra manual [Atajo: ${keyLabel(hotkeys, 'buzzer')}]`}
                 className={`flex-[1.5] h-full px-2 font-black select-none ${theme.btn.shape} ${theme.btn.danger}`}
               >
                 <Bell className="w-4 h-4 sm:w-5 sm:h-5 mr-1" /> CHICHARRA
@@ -747,7 +760,7 @@ export function OperatorView(props: OperatorViewProps) {
 
                       {/* Los atajos se configuran en la barra superior del page:
                           una sola definicion para toda la estacion de trabajo. */}
-                      <button onClick={() => window.dispatchEvent(new Event('ardi-open-hotkeys'))}
+                      <button onClick={() => window.dispatchEvent(new Event(OPEN_HOTKEYS_EVENT))}
                         className="w-full bg-zinc-950 p-3 rounded-lg border border-zinc-800 hover:border-blue-600 text-left transition-colors">
                         <span className="text-amber-400 text-xs font-black uppercase tracking-widest flex items-center">
                           <Keyboard className="w-4 h-4 mr-2"/> Atajos de teclado y mando
@@ -943,7 +956,7 @@ export function OperatorView(props: OperatorViewProps) {
                   </div>
                 </div>
               ) : (
-                <Button onClick={() => setShowIntermissionSelector(true)} disabled={state.isIntermission || matchEnded} className={`font-bold w-full text-[10px] sm:text-xs h-10 sm:h-12 px-2 sm:px-4 ${theme.btn.shape} ${theme.btn.foul}`}>
+                <Button onClick={() => setShowIntermissionSelector(true)} disabled={state.isIntermission || matchEnded} title={`Descanso [Atajo: ${keyLabel(hotkeys, 'intermission')}]`} className={`font-bold w-full text-[10px] sm:text-xs h-10 sm:h-12 px-2 sm:px-4 ${theme.btn.shape} ${theme.btn.foul}`}>
                   <Timer className="w-4 h-4 sm:mb-1 sm:mr-1" /> <span className="hidden sm:inline">DESCANSO</span>
                 </Button>
               )}
@@ -992,10 +1005,10 @@ export function OperatorView(props: OperatorViewProps) {
                       {formatTime(state.possessionClockLeft)}
                     </div>
                     <div className="flex gap-1 sm:gap-2 w-full mt-1">
-                      <Button onClick={props.togglePossessionLeft} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionLeftRunning ? theme.btn.danger : theme.btn.primary}`} title={`Atajo: ${hotkeys.homePosToggle.toUpperCase()}`}>
+                      <Button onClick={props.togglePossessionLeft} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionLeftRunning ? theme.btn.danger : theme.btn.primary}`} title={`Atajo: ${keyLabel(hotkeys, 'possLeftToggle')}`}>
                         {state.isPossessionLeftRunning ? <Pause className="w-4 h-4 sm:w-5 sm:h-5" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5" />}
                       </Button>
-                      <Button onClick={props.resetPossessionLeft} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${theme.btn.secondary}`} title={`Atajo: ${hotkeys.homePosReset.toUpperCase()}`}>
+                      <Button onClick={props.resetPossessionLeft} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${theme.btn.secondary}`} title={`Atajo: ${keyLabel(hotkeys, 'possLeftReset')}`}>
                         <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
                       </Button>
                     </div>
@@ -1040,10 +1053,10 @@ export function OperatorView(props: OperatorViewProps) {
                       {formatTime(state.possessionClockRight)}
                     </div>
                     <div className="flex gap-1 sm:gap-2 w-full mt-1">
-                      <Button onClick={props.togglePossessionRight} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionRightRunning ? theme.btn.danger : theme.btn.primary}`} title={`Atajo: ${hotkeys.awayPosToggle.toUpperCase()}`}>
+                      <Button onClick={props.togglePossessionRight} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionRightRunning ? theme.btn.danger : theme.btn.primary}`} title={`Atajo: ${keyLabel(hotkeys, 'possRightToggle')}`}>
                         {state.isPossessionRightRunning ? <Pause className="w-4 h-4 sm:w-5 sm:h-5" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5" />}
                       </Button>
-                      <Button onClick={props.resetPossessionRight} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${theme.btn.secondary}`} title={`Atajo: ${hotkeys.awayPosReset.toUpperCase()}`}>
+                      <Button onClick={props.resetPossessionRight} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${theme.btn.secondary}`} title={`Atajo: ${keyLabel(hotkeys, 'possRightReset')}`}>
                         <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
                       </Button>
                     </div>
@@ -1096,7 +1109,7 @@ export function OperatorView(props: OperatorViewProps) {
                   <span className={`text-4xl sm:text-5xl font-black tabular-nums block min-w-[60px] mx-auto ${theme.id === 'alto-contraste' ? 'text-white' : 'text-red-500'}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>{score}</span>
                   <div className="flex justify-center gap-1 mt-2">
                     <Button size="sm" onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} disabled={matchEnded || state.isIntermission} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Minus className="w-4 h-4" /></Button>
-                    <Button size="sm" onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} disabled={matchEnded || state.isIntermission} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} disabled={matchEnded || state.isIntermission} title={`Gol ${isHome ? 'local' : 'visita'} [Atajo: ${keyLabel(hotkeys, isHome ? 'homeGoal' : 'awayGoal')}]`} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
                   </div>
                 </div>
                 <div className={`rounded-lg p-3 text-center transition-colors ${foulActive ? (theme.id === 'alto-contraste' ? 'border-4 border-white' : 'bg-red-900/50 border-2 border-red-500 animate-pulse') : 'bg-black/50 border-2 border-transparent'}`}>
@@ -1104,7 +1117,7 @@ export function OperatorView(props: OperatorViewProps) {
                   <span className={`text-4xl sm:text-5xl font-black tabular-nums block min-w-[60px] mx-auto ${foulActive ? (theme.id==='alto-contraste'?'text-white':'text-red-500') : (theme.id==='alto-contraste'?'text-[#FFFF00]':'text-amber-400')}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>{fouls}</span>
                   <div className="flex justify-center gap-1 mt-2">
                     <Button size="sm" onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} disabled={matchEnded || state.isIntermission} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Minus className="w-4 h-4" /></Button>
-                    <Button size="sm" onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} disabled={matchEnded || state.isIntermission} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} disabled={matchEnded || state.isIntermission} title={`Falta ${isHome ? 'local' : 'visita'} [Atajo: ${keyLabel(hotkeys, isHome ? 'homeFoul' : 'awayFoul')}]`} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
                   </div>
                 </div>
                 {state.matchConfig.allowPenalties && (

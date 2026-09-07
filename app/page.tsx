@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
+import { GENERIC_SHIELDS } from '@/lib/generic-shields'
 import { Monitor, Gamepad2, Maximize, Minimize, ExternalLink, Tv, LayoutDashboard, Settings2, X, Shield, Box, Circle, Type, Users, Layers, Keyboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,17 +20,12 @@ import {
   DEFAULT_HOTKEYS, VIEW_ACTIONS, ALWAYS_ON, dialogIsOpen, emitHotkey,
   OPEN_HOTKEYS_EVENT, type HotkeyMap
 } from '@/lib/hotkeys'
-import { CLUB_BRAND, defaultHomeLogo } from '@/lib/club-brand'
+import { CLUB_BRAND, defaultHomeLogo, clubLogoFallback } from '@/lib/club-brand'
 import { ScoreboardView } from '@/components/scoreboard-view'
 import { toast } from 'sonner'
 
 type ViewMode = 'operator' | 'pista' | 'videowall'
 
-// 🛡️ ESCUDOS GENÉRICOS DE PREVIEW
-const GENERIC_SHIELDS = [
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E",
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E"
-]
 
 // 🛡️ COMPONENTE MAESTRO DE PREVIEW
 const PreviewTeamLogo = React.memo(({ team, url, shape, is3D, isAnim, size = 100 }: any) => {
@@ -340,7 +336,7 @@ export default function HockeyControlPanel() {
         <div className="flex items-center gap-2">
           {/* El escudo del club es el avatar: una sola marca, no dos */}
           {CLUB_BRAND.logoUrl ? (
-            <img src={CLUB_BRAND.logoUrl} alt={CLUB_BRAND.name}
+            <img src={CLUB_BRAND.logoUrl} alt={CLUB_BRAND.name} onError={clubLogoFallback}
               className="w-9 h-9 object-contain rounded-full shrink-0 bg-black/40 border border-amber-400/40 shadow-lg" />
           ) : (
             <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center shadow-lg border border-amber-400/50">
