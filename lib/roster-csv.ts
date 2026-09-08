@@ -26,13 +26,19 @@ export type PersonRole =
   | 'jugador' | 'portero' | 'capitan'
   | 'dt' | 'ay1' | 'ay2' | 'ax1' | 'ax2'
 
+/**
+ * Una persona del club. SIN DORSAL, a proposito.
+ *
+ * El dorsal depende de la serie —la misma jugadora puede ser la 20 en Sub-15 y
+ * otra cosa en Sub-17— asi que no cabe en una ficha de persona. Vive en la
+ * citacion, que es de una serie y una fecha.
+ */
 export interface PersonRow {
   /** '' si la fila no trae id: es alta nueva o hay que emparejarla. */
   id: string
   nombre: string
   /** Nombre corto para la pantalla. El acta siempre usa `nombre`. */
   apodo: string
-  dorsal: string
   rol: PersonRole
   isGoalie: boolean
   /** Fragmento de documento que pide la federación. Opcional, nunca es llave. */
@@ -125,10 +131,10 @@ export function parsePlantelCSV(text: string): ParseResult<PersonRow> {
   const col = mapHeaders(headers)
   const issues: ParseIssue[] = []
 
-  if (!col.nombre && !col.dorsal) {
+  if (!col.nombre) {
     issues.push({
       fila: 0,
-      motivo: `No encuentro ni la columna de nombre ni la de dorsal. Cabeceras leídas: ${headers.join(', ') || '(ninguna)'}`
+      motivo: `No encuentro la columna de nombre. Cabeceras leídas: ${headers.join(', ') || '(ninguna)'}`
     })
     return { rows: [], issues, meta }
   }
@@ -139,17 +145,8 @@ export function parsePlantelCSV(text: string): ParseResult<PersonRow> {
     const get = (campo: string) => (col[campo] ? (raw[col[campo]] ?? '').trim() : '')
 
     const nombre = get('nombre')
-    const dorsal = get('dorsal')
     const rol = asRole(get('rol'), esSi(get('portero')))
-
-    // El cuerpo técnico no tiene dorsal. El importador viejo lo descartaba con
-    // isNaN(parseInt(dorsal)), así que el DT se exportaba y nunca volvía.
-    const esStaff = STAFF.includes(rol)
-    if (!nombre && !dorsal) return
-    if (!esStaff && !dorsal) {
-      issues.push({ fila, motivo: `"${nombre || '(sin nombre)'}" no tiene dorsal` })
-      return
-    }
+    if (!nombre) return
 
     let apodo = get('apodo')
     if (apodo.length > APODO_MAX) {
@@ -158,7 +155,7 @@ export function parsePlantelCSV(text: string): ParseResult<PersonRow> {
     }
 
     rows.push({
-      id: get('id'), nombre, apodo, dorsal, rol,
+      id: get('id'), nombre, apodo, rol,
       isGoalie: rol === 'portero' || esSi(get('portero')),
       doc: get('doc'),
     })
@@ -204,7 +201,7 @@ export function buildPlantelCSV(
   rows: PersonRow[],
   meta: { club: string; clubId: string; incluirDoc?: boolean }
 ): string {
-  const cols = ['id', 'nombre', 'apodo', 'dorsal', 'rol', 'portero']
+  const cols = ['id', 'nombre', 'apodo', 'rol', 'portero']
   if (meta.incluirDoc) cols.push('doc')
 
   const lineas = [
@@ -212,9 +209,10 @@ export function buildPlantelCSV(
     `# club: ${meta.club}`,
     `# clubId: ${meta.clubId}`,
     '# (las lineas con # son datos del archivo; no las edites a mano)',
+    '# el dorsal NO va aqui: depende de la serie, y viaja en la citacion',
     cols.join(','),
     ...rows.map(r => {
-      const base = [r.id, r.nombre, r.apodo, r.dorsal, r.rol, r.isGoalie ? 'si' : 'no']
+      const base = [r.id, r.nombre, r.apodo, r.rol, r.isGoalie ? 'si' : 'no']
       if (meta.incluirDoc) base.push(r.doc || '')
       return base.map(cell).join(',')
     })

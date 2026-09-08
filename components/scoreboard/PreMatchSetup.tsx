@@ -6,6 +6,8 @@ import { ExpressRosterModal, type ExpressEntry } from '@/components/scoreboard/E
 import { SERIES_ORDERED, serieLabel, findSerie } from '@/lib/series'
 import { squadFor } from '@/lib/club-roster'
 import { SavedTeamsModal } from '@/components/scoreboard/SavedTeamsModal'
+import { HomeScreen } from '@/components/scoreboard/HomeScreen'
+import { RosterLabModal } from '@/components/scoreboard/RosterLabModal'
 import { Play, Clock, Settings, X, Users, Upload, Trash2, Save, AlertTriangle, CheckCircle2, PenTool, Shield, User, Download, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +17,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import type { GameState, Period, Team, MatchConfig, Player, RefereeData, SignatureData } from '@/hooks/use-game-state'
-import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
 import { TacticalBoard } from '@/components/scoreboard/TacticalBoard'
 import { generateExpressRoster, downloadRosterCSV, processRosterImport } from '@/lib/roster-utils'
 
@@ -56,6 +57,14 @@ input.split(/[,\s]+/).map(n => n.trim()).filter(n => n && /^\d+$/.test(n))
 export function PreMatchSetup(props: PreMatchSetupProps) {
   const { state, savedTeams, configureMatch, configureMatchWithResume, setSignature, saveTeam, deleteTeam } = props
 
+  /**
+   * La puerta: tres tarjetas. El detalle de jugadores y planteles queda detras
+   * de una de ellas, no delante de todo.
+   */
+  const [puerta, setPuerta] = useState(true)
+  const [showPlanteles, setShowPlanteles] = useState(false)
+  const [showLigas, setShowLigas] = useState(false)
+
   // ─── Configuración del partido ────────────────────────────────────────────
   const [configSeriesName, setConfigSeriesName]     = useState(state.matchConfig.seriesName)
   const [configGender, setConfigGender]             = useState(state.matchConfig.gender)
@@ -91,7 +100,6 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
   const [editingPlayerTeam, setEditingPlayerTeam] = useState<'home' | 'away'>('home')
 
   // ─── Firmas ───────────────────────────────────────────────────────────────
-  const [signingRole, setSigningRole] = useState<keyof SignatureData | null>(null)
 
   // ─── Rosters guardados ────────────────────────────────────────────────────
   const [savedRosters, setSavedRosters] = useState<SavedRoster[]>([])
@@ -238,11 +246,6 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
     reader.readAsText(file)
   }
 
-  const allSignaturesComplete = useMemo(() => {
-    const sigs = state.matchConfig.signatures
-    return sigs?.delegadoLocal && sigs?.delegadoVisita && sigs?.arbitroAuxiliarMesa
-  }, [state.matchConfig.signatures])
-
   // ─── Confirmación Express ─────────────────────────────────────────────────
   /**
    * Equipos de la serie elegida. Los guardados ANTES de la 3.24 no traen serie:
@@ -368,28 +371,53 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
     }
   }
 
-  if (signingRole) {
-    const titles: Record<keyof SignatureData, string> = {
-      delegadoLocal:       `Firma Delegado ${homeTeamNameStr}`,
-      delegadoVisita:      `Firma Delegado ${awayTeamNameStr}`,
-      arbitroAuxiliarMesa: 'Firma Árbitro Auxiliar (Mesa)'
-    }
-    return (
-      <SignatureCanvas
-        title={titles[signingRole]}
-        onSave={(sig) => { setSignature(signingRole, sig); setSigningRole(null) }}
-        onCancel={() => setSigningRole(null)}
-      />
-    )
-  }
-
   return (
-    <div className="h-full bg-zinc-950 p-4 overflow-y-auto">
-      <div className="max-w-4xl mx-auto space-y-6">
+    // Sin relleno cuando se muestra la puerta: HomeScreen trae el suyo y si no
+    // el escudo queda flotando con doble margen.
+    <div className={`h-full bg-zinc-950 overflow-y-auto ${puerta ? '' : 'p-4'}`}>
+      {puerta && (
+        <HomeScreen
+          onExpress={() => setShowExpressDialog(true)}
+          onEquipos={() => setTeamsModalFor('home')}
+          onJugadores={() => setShowPlanteles(true)}
+          onLigas={() => setShowLigas(true)}
+        />
+      )}
+
+      <RosterLabModal open={showPlanteles} onClose={() => setShowPlanteles(false)} />
+
+      <Dialog open={showLigas} onOpenChange={setShowLigas}>
+        <DialogContent className="bg-zinc-900 border-2 border-purple-800 text-white max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black">Ligas y campeonatos</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-zinc-300 leading-relaxed">
+            Esta herramienta dirige los partidos de <b>un club</b>: planteles,
+            marcador, proyección y acta.
+          </p>
+          <p className="text-sm text-zinc-400 leading-relaxed">
+            Llevar la liga completa —fixture, tablas de todas las series, actas
+            de todos los clubes— es un módulo aparte, y todavía no está
+            construido. Cuando exista, los jugadores que cargues hoy se enlazan
+            con la base de la liga: sus identificadores no cambian nunca.
+          </p>
+          <a href="https://www.ardisport.cl" target="_blank" rel="noopener noreferrer"
+            className="block w-full h-11 rounded-md bg-purple-700 hover:bg-purple-600 font-black text-sm flex items-center justify-center">
+            ardisport.cl
+          </a>
+        </DialogContent>
+      </Dialog>
+
+      <div className={`max-w-4xl mx-auto space-y-6 ${puerta ? 'hidden' : ''}`}>
+
+        <Button onClick={() => setPuerta(true)} variant="outline"
+          className="border-zinc-700 text-zinc-300 font-bold">
+          ← Volver al inicio
+        </Button>
 
         <div className="text-center py-6">
-          <h1 className="text-3xl font-black text-yellow-400 mb-2">CERTIFICACION PRE-PARTIDO</h1>
-          <p className="text-zinc-400">Complete la planilla y obtenga las firmas antes de iniciar</p>
+          <h1 className="text-3xl font-black text-yellow-400 mb-2">JUGADORES Y PLANTELES</h1>
+          <p className="text-zinc-400">Datos del partido, equipos y planteles</p>
         </div>
 
         <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4">
@@ -612,45 +640,20 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
           <TacticalBoard homePlayers={homePlayers} awayPlayers={awayPlayers} homeTeamName={homeTeamNameStr} awayTeamName={awayTeamNameStr} />
         )}
 
-        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-4">
-          <h3 className="text-yellow-400 font-bold mb-4 flex items-center"><PenTool className="w-5 h-5 mr-2" /> Firmas de Apertura (Obligatorias)</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {([
-              ['delegadoLocal',       `Delegado Local`],
-              ['delegadoVisita',      `Delegado Visita`],
-              ['arbitroAuxiliarMesa', 'Árbitro Aux. (Mesa)']
-            ] as [keyof SignatureData, string][]).map(([role, label]) => (
-              <div key={role} className={`border-2 rounded-lg p-3 text-center ${state.matchConfig.signatures?.[role] ? 'border-green-600 bg-green-950/20' : 'border-zinc-600'}`}>
-                <p className="text-xs text-zinc-400 mb-2">{label}</p>
-                {state.matchConfig.signatures?.[role] ? (
-                  <div className="flex flex-col items-center">
-                    <CheckCircle2 className="w-8 h-8 text-green-500 mb-1" />
-                    <span className="text-green-400 text-xs font-bold">FIRMADO</span>
-                  </div>
-                ) : (
-                  <Button onClick={() => setSigningRole(role)} variant="outline" className="border-zinc-600">
-                    <PenTool className="w-4 h-4 mr-2" /> Firmar
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
+        {/*
+          LAS 3 FIRMAS DE APERTURA SE ELIMINARON.
+          Bloqueaban el boton de iniciar con "COMPLETE LAS 3 FIRMAS PARA
+          CONTINUAR" en un flujo donde nadie las usaba. Verificado antes de
+          sacarlas: `delegadoLocal`, `delegadoVisita` y `arbitroAuxiliarMesa`
+          no los leia nada mas que esta pantalla. El acta usa las OCHO firmas
+          de cierre, que son otras y viven en la planilla; no pierde ningun
+          campo.
+        */}
         <div className="space-y-3">
-          <Button onClick={handleStartMatch} disabled={!allSignaturesComplete}
-            className={`w-full h-16 text-xl font-black ${allSignaturesComplete ? 'bg-green-600 hover:bg-green-500' : 'bg-zinc-700 cursor-not-allowed'}`}
-          >
-            {allSignaturesComplete
-              ? <><Play className="w-6 h-6 mr-3" /> INICIAR PARTIDO OFICIAL</>
-              : <><AlertTriangle className="w-6 h-6 mr-3" /> COMPLETE LAS 3 FIRMAS PARA CONTINUAR</>
-            }
+          <Button onClick={handleStartMatch}
+            className="w-full h-16 text-xl font-black bg-green-600 hover:bg-green-500">
+            <Play className="w-6 h-6 mr-3" /> INICIAR PARTIDO
           </Button>
-
-          <Button onClick={() => setShowExpressDialog(true)} className="w-full h-14 text-lg font-bold bg-amber-600 hover:bg-amber-500 border-2 border-amber-400">
-            <Clock className="w-5 h-5 mr-2" /> INICIO EXPRESS (Partido Amistoso)
-          </Button>
-          <p className="text-zinc-500 text-xs text-center">El modo Express omite firmas y planillas para partidos amistosos</p>
         </div>
 
         <Dialog>

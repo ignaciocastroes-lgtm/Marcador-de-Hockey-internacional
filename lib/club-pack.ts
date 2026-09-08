@@ -60,7 +60,7 @@ export function parseClubPack(text: string): PackResult {
     club: {
       ...emptyClub(club.nombre),
       ...club,
-      version: 1,
+      version: 2,
       series: club.series || {}
     }
   }

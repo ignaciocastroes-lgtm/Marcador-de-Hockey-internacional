@@ -6,7 +6,7 @@ import { Shield, Check, Trash2, Plus, X, Pencil, RotateCcw, Users, AlertTriangle
 import { SERIES_ORDERED, serieLabel } from '@/lib/series'
 import { CLUB_BRAND } from '@/lib/club-brand'
 import { bootClub, } from '@/lib/club-boot'
-import { squadOf, saveClub, type ClubPerson, type ClubStore } from '@/lib/club-store'
+import { squadOf, saveClub, missingDorsal, assignDorsal, dorsalOwner, type SquadPlayer, type ClubStore } from '@/lib/club-store'
 import { APODO_MAX } from '@/lib/roster-csv'
 import { normalize } from '@/lib/identity'
 import { Button } from '@/components/ui/button'
@@ -44,22 +44,33 @@ interface Props {
   onSave: (entries: ExpressEntry[]) => void
 }
 
-/** Dos personas citadas con el mismo dorsal: hay que resolverlo antes del partido. */
-const detectarChoques = (squad: ClubPerson[]) => {
-  const porDorsal = new Map<string, string[]>()
-  squad.forEach(p => {
-    if (!p.dorsal) return
-    porDorsal.set(p.dorsal, [...(porDorsal.get(p.dorsal) || []), p.nombre])
-  })
-  return [...porDorsal.entries()]
-    .filter(([, nombres]) => nombres.length > 1)
-    .map(([number, nombres]) => ({ number, nombres }))
+/**
+ * Dos citadas con el mismo dorsal. Con el dorsal guardado POR SERIE esto ya no
+ * deberia poder ocurrir desde el plantel, pero se sigue comprobando aqui
+ * porque el operador puede editar numeros a mano en este mismo modal.
+ */
+const detectarChoques = (entries: { number: string }[]) => {
+  const cuenta = new Map<string, number>()
+  entries.forEach(e => { if (e.number) cuenta.set(e.number, (cuenta.get(e.number) || 0) + 1) })
+  return [...cuenta.entries()].filter(([, n]) => n > 1).map(([number]) => number)
 }
 
 export function ExpressRosterModal({ open, onClose, teamName, side, value, onSave }: Props) {
   const [club, setClub] = useState<ClubStore>(() => bootClub())
   const [entries, setEntries] = useState<ExpressEntry[]>([])
   const [apodoDe, setApodoDe] = useState<string | null>(null)
+  /** Serie desde la que se cargaron las fichas, si vinieron del plantel. */
+  const [serieCargada, setSerieCargada] = useState<string | null>(null)
+  /** Del plantel pero sin numero en esa serie: se muestran para poder sumarlas. */
+  const [pendientes, setPendientes] = useState<SquadPlayer[]>([])
+  /**
+   * Escribir en el plantel los numeros de ESTE partido: apagado por defecto.
+   *
+   * En un amistoso entre series los numeros son de la ocasion, y guardarlos
+   * solos ensuciaba la ficha de la persona. El apodo si se guarda solo, porque
+   * es de la persona y no del partido.
+   */
+  const [guardarNumeros, setGuardarNumeros] = useState(false)
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -113,6 +124,18 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
     if (entries.some(e => e.number === n && e.number !== oldNum)) {
       toast.warning(`El ${n} ya está cargado.`); setEditing(null); return
     }
+    // La infraccion real no es "repetir dentro de la serie": es que dos
+    // jugadoras salgan a la pista con el mismo numero EN ESTE PARTIDO. Eso ya
+    // lo cubre la comprobacion de arriba, sobre las fichas citadas. Si el
+    // numero lo usa alguien de la serie que hoy no juega, se avisa sin
+    // bloquear: puede ser exactamente lo que el operador quiere.
+    if (serieCargada) {
+      const ficha = entries.find(e => e.number === oldNum)
+      const duenio = dorsalOwner(club, serieCargada, n, ficha?.personId)
+      if (duenio) {
+        toast.info(`Ojo: en esta serie el ${n} es de ${duenio.nombre}, que hoy no está citada.`, { duration: 6000 })
+      }
+    }
     setEntries(prev => prev.map(e => e.number === oldNum ? { ...e, number: n } : e))
     setEditing(null)
   }
@@ -125,22 +148,44 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
    * vuelve al plantel del club. Solo aplica a fichas que tienen identidad
    * permanente (las de casa); la visita es de la jornada y no deja rastro.
    */
-  const persistirApodos = () => {
+  /**
+   * Lo corregido aca vuelve al plantel: el apodo y, si las fichas vinieron de
+   * una serie, tambien el dorsal en ESA serie. Se pide una vez, no cada fecha.
+   *
+   * El dorsal pasa por `assignDorsal`, que rechaza el numero ya tomado en la
+   * serie. Si alguno se rechaza se avisa y NO se guarda ese: mejor quedarse
+   * sin el cambio que dejar dos jugadoras con el mismo numero.
+   */
+  const persistirCambios = () => {
     const conId = entries.filter(e => e.personId)
     if (conId.length === 0) return
-    const cambios = new Map(conId.map(e => [e.personId!, e.apodo || '']))
+
+    let actual = club
     let toco = false
-    const personas = club.personas.map(p => {
+
+    const cambios = new Map(conId.map(e => [e.personId!, e.apodo || '']))
+    const personas = actual.personas.map(p => {
       if (!cambios.has(p.id)) return p
       const nuevo = cambios.get(p.id)!
       if ((p.apodo || '') === nuevo) return p
       toco = true
       return { ...p, apodo: nuevo }
     })
+    if (toco) actual = { ...actual, personas }
+
+    if (serieCargada && guardarNumeros) {
+      const previos = new Map(squadOf(actual, serieCargada).map(p => [p.id, p.dorsal]))
+      conId.forEach(e => {
+        if (previos.get(e.personId!) === e.number) return
+        const r = assignDorsal(actual, serieCargada, e.personId!, e.number)
+        if (r.ok && r.club) { actual = r.club; toco = true }
+        else if (r.error) toast.warning(r.error, { duration: 7000 })
+      })
+    }
+
     if (!toco) return
-    const actualizado = { ...club, personas }
-    setClub(actualizado)
-    saveClub(actualizado)
+    setClub(actual)
+    saveClub(actual)
   }
 
   const goalies = entries.filter(e => e.isGoalie).length
@@ -168,17 +213,24 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
           <span className="text-[10px] font-black text-zinc-500 uppercase shrink-0">{CLUB_BRAND.shortName}</span>
           <select
             onChange={e => {
-              const squad = squadOf(club, e.target.value)
+              const serieId = e.target.value
+              const squad = squadOf(club, serieId)
+              e.target.value = ''
+              setSerieCargada(serieId)
               if (squad.length === 0) { toast.info('Esa serie todavía no tiene plantel cargado.'); return }
-              setEntries(squad.slice(0, MAX_ENTRIES).map(p => ({
+
+              // Cargar una serie es un PUNTO DE PARTIDA, no una reja. Quien no
+              // tiene numero en esta serie no se descarta: queda a la vista,
+              // abajo, para sumarla con un numero de este partido. En un
+              // amistoso entre series eso es lo normal, y la herramienta no
+              // puede impedirlo mientras no sea federativa.
+              const conNumero = squad.filter(p => p.dorsal.trim())
+              setEntries(conNumero.slice(0, MAX_ENTRIES).map((p: SquadPlayer) => ({
                 number: p.dorsal, isGoalie: !!p.isGoalie,
                 personId: p.id, nombre: p.nombre, apodo: p.apodo || ''
               })))
-              detectarChoques(squad).forEach(c => {
-                toast.warning(`El número ${c.number} lo comparten ${c.nombres.join(' y ')}. Hay que cambiar uno antes del partido.`, { duration: 8000 })
-              })
-              toast.success(`${squad.length} camisetas cargadas`)
-              e.target.value = ''
+              setPendientes(squad.filter(p => !p.dorsal.trim()))
+              toast.success(`${conNumero.length} camisetas cargadas`)
             }}
             defaultValue=""
             className="flex-1 h-8 bg-zinc-800 border border-zinc-600 rounded text-xs font-bold px-2">
@@ -315,6 +367,55 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
           )}
         </div>
 
+        {/* ── DEL PLANTEL, SIN NUMERO EN ESTA SERIE ──────────────────────────
+            No se descartan: se muestran para poder sumarlas con un numero de
+            este partido. Es el caso de una jugadora que sube de categoria. */}
+        {pendientes.length > 0 && (
+          <div className="bg-zinc-950 border border-amber-900/60 rounded-lg p-2">
+            <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1.5">
+              Sin número en esta serie
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {pendientes.map(p => (
+                <button key={p.id}
+                  onClick={() => {
+                    if (entries.length >= MAX_ENTRIES) { toast.warning(`Tope de ${MAX_ENTRIES} fichas`); return }
+                    const libre = String(
+                      Array.from({ length: 99 }, (_, i) => i + 1)
+                        .find(n => !entries.some(e => e.number === String(n))) ?? ''
+                    )
+                    setEntries(prev => [...prev, {
+                      number: libre, isGoalie: !!p.isGoalie,
+                      personId: p.id, nombre: p.nombre, apodo: p.apodo || ''
+                    }])
+                    setPendientes(prev => prev.filter(x => x.id !== p.id))
+                    toast.success(`${p.nombre} entra con el ${libre}. Puedes cambiarlo.`)
+                  }}
+                  className="flex items-center gap-1 bg-zinc-900 border border-zinc-700 hover:border-amber-500 active:scale-95 transition-transform touch-manipulation rounded px-2 py-1">
+                  <Plus className="w-3 h-3 text-amber-500" />
+                  <span className="text-[11px] font-bold text-zinc-200">{p.nombre}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* El numero de este partido no toca la ficha salvo que se pida. */}
+        {serieCargada && (
+          <button onClick={() => setGuardarNumeros(v => !v)}
+            className="w-full flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-left touch-manipulation">
+            <span className={`w-9 h-5 rounded-full shrink-0 relative transition-colors ${guardarNumeros ? 'bg-green-600' : 'bg-zinc-700'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${guardarNumeros ? 'left-[18px]' : 'left-0.5'}`} />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-[11px] font-bold text-zinc-200">Guardar estos números en el plantel</span>
+              <span className="block text-[10px] text-zinc-500 leading-snug">
+                Déjalo apagado para un amistoso: los números quedan sólo en este partido.
+              </span>
+            </span>
+          </button>
+        )}
+
         <div className="grid grid-cols-3 gap-2">
           <Button onClick={() => { setEntries(DEFAULT_ENTRIES.map(e => ({ ...e }))); toast.success('Camisetas por defecto') }}
             variant="outline" className="h-11 font-bold border-zinc-600 text-xs">
@@ -325,7 +426,7 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
             className="h-11 font-bold border-red-900 text-red-400 hover:bg-red-950 disabled:opacity-30 text-xs">
             <Trash2 className="w-4 h-4 mr-1.5" /> VACIAR
           </Button>
-          <Button onClick={() => { persistirApodos(); onSave(entries); onClose() }}
+          <Button onClick={() => { persistirCambios(); onSave(entries); onClose() }}
             className="h-11 font-black bg-green-700 hover:bg-green-600 text-xs">
             <Check className="w-4 h-4 mr-1.5" /> GUARDAR
           </Button>
