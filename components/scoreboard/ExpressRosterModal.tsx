@@ -3,12 +3,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { Shield, Check, Trash2, Plus, X, Pencil, RotateCcw, Users, AlertTriangle } from 'lucide-react'
-import { SERIES_ORDERED, serieLabel } from '@/lib/series'
+import { Label } from '@/components/ui/label'
+import { serieLabel } from '@/lib/series'
 import { CLUB_BRAND } from '@/lib/club-brand'
-import { bootClub, } from '@/lib/club-boot'
-import { squadOf, saveClub, missingDorsal, assignDorsal, dorsalOwner, type SquadPlayer, type ClubStore } from '@/lib/club-store'
+import { bootClub,  } from '@/lib/club-boot'
+import { squadOf, saveClub, assignDorsal, dorsalOwner, seriesOf, type SquadPlayer, type ClubStore } from '@/lib/club-store'
 import { APODO_MAX } from '@/lib/roster-csv'
-import { normalize } from '@/lib/identity'
+ '@/lib/identity'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -19,7 +20,14 @@ export type { ExpressEntry } from '@/lib/roster-utils'
 import type { ExpressEntry } from '@/lib/roster-utils'
 
 /** Plantel reglamentario de pista: 8 jugadores y 2 porteros. */
-export const MAX_ENTRIES = 10
+/**
+ * Tope de fichas de la citacion.
+ *
+ * Estaba en 10 —8 de pista + 2 porteros, el plantel reglamentario EN PISTA—,
+ * pero la citacion incluye la banca. Una serie de 12 se cortaba en 10 y nadie
+ * se enteraba. Se sube a 16 y, si aun asi sobra gente, se dice.
+ */
+export const MAX_ENTRIES = 16
 export const MAX_GOALIES = 2
 
 export const DEFAULT_ENTRIES: ExpressEntry[] = [
@@ -167,9 +175,11 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
     const personas = actual.personas.map(p => {
       if (!cambios.has(p.id)) return p
       const nuevo = cambios.get(p.id)!
-      if ((p.apodo || '') === nuevo) return p
+      const ficha = conId.find(e => e.personId === p.id)!
+      const nombre = (ficha.nombre || '').trim() || p.nombre
+      if ((p.apodo || '') === nuevo && p.nombre === nombre) return p
       toco = true
-      return { ...p, apodo: nuevo }
+      return { ...p, apodo: nuevo, nombre }
     })
     if (toco) actual = { ...actual, personas }
 
@@ -230,12 +240,18 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
                 personId: p.id, nombre: p.nombre, apodo: p.apodo || ''
               })))
               setPendientes(squad.filter(p => !p.dorsal.trim()))
-              toast.success(`${conNumero.length} camisetas cargadas`)
+              const cargadas = Math.min(conNumero.length, MAX_ENTRIES)
+              if (conNumero.length > MAX_ENTRIES) {
+                toast.warning(
+                  `La serie tiene ${conNumero.length} con número y el tope es ${MAX_ENTRIES}: ` +
+                  `quedaron fuera ${conNumero.length - MAX_ENTRIES}.`, { duration: 9000 })
+              }
+              toast.success(`${cargadas} camisetas cargadas`)
             }}
             defaultValue=""
             className="flex-1 h-8 bg-zinc-800 border border-zinc-600 rounded text-xs font-bold px-2">
             <option value="" disabled>Cargar serie…</option>
-            {SERIES_ORDERED.map(se => {
+            {seriesOf(club).map(se => {
               const n = squadOf(club, se.id).length
               return <option key={se.id} value={se.id}>{serieLabel(se)}{n ? ` (${n})` : ' — vacía'}</option>
             })}
@@ -438,28 +454,48 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
           <DialogContent className="bg-zinc-900 border-2 border-emerald-800 text-white max-w-sm" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle className="text-base font-black">
-                Apodo del <span className="text-emerald-400">#{apodoDe}</span>
+                Ficha del <span className="text-emerald-400">#{apodoDe}</span>
               </DialogTitle>
               <p className="text-[11px] text-zinc-500 leading-snug">
-                Es el nombre que aparece en la pantalla cuando marca. El acta
-                sigue usando el nombre completo. Si lo dejas vacío, la
-                animación muestra sólo el dorsal, como siempre.
+                El nombre va al acta; el apodo, a la pantalla cuando marca. Si
+                dejas el apodo vacío, la animación muestra sólo el dorsal.
               </p>
             </DialogHeader>
-            <Input
-              autoFocus
-              maxLength={APODO_MAX}
-              defaultValue={entries.find(e => e.number === apodoDe)?.apodo || ''}
-              placeholder="Ej: Pascu"
-              onKeyDown={ev => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
-              onBlur={ev => {
-                const v = ev.target.value.trim().slice(0, APODO_MAX)
-                setEntries(prev => prev.map(e => e.number === apodoDe ? { ...e, apodo: v } : e))
-                setApodoDe(null)
-              }}
-              className="h-12 bg-zinc-800 border-zinc-600 text-center text-lg font-black"
-            />
-            <p className="text-[10px] text-zinc-600 text-center">Máximo {APODO_MAX} caracteres</p>
+
+            <div className="space-y-2">
+              <div>
+                <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Nombre</Label>
+                <Input
+                  autoFocus
+                  defaultValue={entries.find(e => e.number === apodoDe)?.nombre || ''}
+                  placeholder="Nombre y apellido"
+                  onKeyDown={ev => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
+                  onBlur={ev => {
+                    const v = ev.target.value.trim()
+                    setEntries(prev => prev.map(e => e.number === apodoDe ? { ...e, nombre: v } : e))
+                  }}
+                  className="h-11 mt-1 bg-zinc-800 border-zinc-600 text-sm font-bold"
+                />
+              </div>
+              <div>
+                <Label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                  Apodo <span className="text-zinc-600 font-normal">· máx. {APODO_MAX}</span>
+                </Label>
+                <Input
+                  maxLength={APODO_MAX}
+                  defaultValue={entries.find(e => e.number === apodoDe)?.apodo || ''}
+                  placeholder="Ej: Pascu"
+                  onKeyDown={ev => { if (ev.key === 'Enter') (ev.target as HTMLInputElement).blur() }}
+                  onBlur={ev => {
+                    const v = ev.target.value.trim().slice(0, APODO_MAX)
+                    setEntries(prev => prev.map(e => e.number === apodoDe ? { ...e, apodo: v } : e))
+                  }}
+                  className="h-12 mt-1 bg-zinc-800 border-zinc-600 text-center text-lg font-black"
+                />
+              </div>
+              <Button onClick={() => setApodoDe(null)}
+                className="w-full h-10 font-black bg-emerald-700 hover:bg-emerald-600">LISTO</Button>
+            </div>
           </DialogContent>
         </Dialog>
       </DialogContent>

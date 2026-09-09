@@ -78,7 +78,7 @@ export function getMaxAllowed(sanctions: Sanction[], team: 'home' | 'away'): num
 export function getExpelledKeys(
   cardHistory: CardHistory[], sanctions: Sanction[], team: 'home' | 'away'
 ): string[] {
-  const fromHistory = cardHistory.filter(c => c.team === team && c.cardType === 'red')
+  const fromHistory = cardHistory.filter(c => !c.anulada && c.team === team && c.cardType === 'red')
   const fromSanctions = sanctions.filter(s => s.team === team && s.type === 'red')
   return Array.from(new Set([
     ...fromHistory.map(c => c.playerNumber),
@@ -129,7 +129,7 @@ export function getYellowCount(
     num === p.number || num === display || staffId === p.id
 
   const fromHistory = cardHistory.filter(
-    c => c.team === team && c.cardType === 'yellow' && match(c.playerNumber, c.staffId)
+    c => !c.anulada && c.team === team && c.cardType === 'yellow' && match(c.playerNumber, c.staffId)
   ).length
   const fromSanctions = sanctions.filter(
     s => s.team === team && s.type === 'yellow' && match(s.playerNumber, s.staffId)
@@ -143,7 +143,7 @@ export function getBlueCount(
   p: Player, team: 'home' | 'away', cardHistory: CardHistory[]
 ): number {
   return cardHistory.filter(
-    c => c.team === team && !c.isBench && c.cardType === 'blue' &&
+    c => !c.anulada && c.team === team && !c.isBench && c.cardType === 'blue' &&
          (c.playerNumber === p.number || c.playerNumber === getDisplayNumber(p))
   ).length
 }

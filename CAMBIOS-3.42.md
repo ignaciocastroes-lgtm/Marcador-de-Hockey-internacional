@@ -206,3 +206,399 @@ que los jugadores que se carguen hoy se enlazarán sin perder nada — porque lo
 ## Verificado
 
 `tsc --noEmit` y `next build` limpios. **36 pruebas, 36 pasan.**
+
+---
+
+# LA PLANILLA Y LOS DATOS DEL PARTIDO
+
+## Había dos editores de plantel, y no daban lo mismo
+
+La "Planilla Oficial de Jugadores" tenía su propio Importar CSV y su propia
+alta con RUT. El ambiente de Planteles hace lo mismo, pero con identidad.
+
+**Un jugador cargado en la pantalla vieja no tenía identidad**:
+`processRosterImport` y `addPlayerToRoster` le ponían un `crypto.randomUUID()`
+nuevo, así que sus goles y tarjetas no se acumulaban de una fecha a otra. Dos
+puertas al mismo dato, resultados distintos, y sin manera de que el operador lo
+notara. **Esa duplicación la introduje yo** al agregar el ambiente nuevo sin
+retirar el viejo.
+
+- Se retiró el importador y el alta manual de esa pantalla. En su lugar, un
+  acceso a Planteles: *"¿Falta alguien?"*.
+- Se **eliminaron las dos funciones**, no sólo sus botones: dejarlas sin uso
+  invitaba a volver a cablearlas.
+- De paso, el alta con RUT escribía el documento de un menor en una ficha que
+  después viaja en el CSV.
+
+## Fecha, hora y estadio
+
+No existían. `MatchConfig` guardaba campeonato, serie, rama, periodos y
+duración; la fecha se deducía del reloj al arrancar y el estadio no se
+guardaba en ninguna parte.
+
+- Los tres campos están en los datos del partido y **van al acta**.
+- **En Express se rellenan solos** con el reloj del equipo: el partido se está
+  jugando ahora. Lo escrito a mano manda, que es lo que hace falta al reanudar
+  un suspendido de otra fecha.
+- **El estadio se recuerda**: las canchas de una liga son siempre las mismas,
+  así que se escriben una vez y después se eligen — como los escudos.
+
+## Un bug encontrado de paso: el acta se fechaba mal
+
+La cabecera mostraba `new Date()`, es decir **la fecha de hoy**, no la del
+partido. Reimprimir un acta la semana siguiente la fechaba mal. Ahora usa la
+fecha configurada y, si no hay, la del inicio real del encuentro. Nunca "ahora".
+
+## Sellar entrega el acta con formato
+
+`SELLAR Y EXPORTAR` disparaba el **CSV** — una grilla de comas que como
+documento se ve, literalmente, como blanco, líneas y datos.
+
+La exportación con formato ya existía: `window.print()` sobre la hoja A4
+apaisada definida en `globals.css`. Sólo estaba en segundo plano. Ahora sellar
+entrega **el acta con formato**, la misma planilla que se ve en pantalla, y el
+CSV queda como opción secundaria para quien necesite los datos crudos.
+
+## La planilla ya no se abre sola
+
+Al terminar el partido saltaba encima del operador — justo cuando hay gente
+preguntando el resultado, jugadores saliendo y el árbitro acercándose a la
+mesa— y había que cerrarla para ver el marcador final. Se quitó de los tres
+puntos donde se abría sola (fin normal, gol de oro, y la vista Pista). Se
+genera **sólo con el botón PLANILLA**.
+
+## Sin tocar
+
+Los escudos siguen viviendo en `page` como entidad única, como pediste.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **36 pruebas, 36 pasan.**
+
+---
+
+# EDITOR DE SERIES
+
+## Primero, dos correcciones
+
+Dije tres veces que el motor de series estaba **"probado"**. No lo estaba: no
+había ni una prueba de `saveSerie` ni de `deleteSerie`. Lo repetí sin
+verificarlo.
+
+Y al ir a construir la pantalla apareció algo peor: **cuatro sitios seguían
+leyendo `SERIES_ORDERED`**, la lista compilada, mientras el editor guardaba en
+el almacén. Una serie creada por el operador se habría guardado bien y **no
+habría aparecido en ningún desplegable** — ni para elegirla en un partido, ni
+para cargarle camisetas. El editor habría guardado al vacío.
+
+Es la tercera vez que aparece el mismo patrón —dos fuentes para el mismo dato—
+después de los atajos de teclado y los editores de plantel.
+
+## Los cuatro, conectados
+
+| Dónde | Qué hace |
+|---|---|
+| Modal de camisetas | el desplegable "Cargar serie…" |
+| Crear equipo guardado | arma un plantel vacío por cada serie |
+| Asistente oficial | selector "Serie / Categoría" |
+| Express | selector "Elige la serie…" |
+
+Todos leen ahora `seriesOf(club)`, y `PreMatchSetup` se refresca con el evento
+del almacén: una serie nueva aparece **sin recargar**. La lista compilada queda
+sólo como valor de fábrica para quien nunca editó nada.
+
+## La pantalla
+
+Corta a propósito: una serie son tres datos —nombre, rama y orden— y el resto
+es consecuencia.
+
+- **El identificador se deduce del nombre.** El operador no debería inventarlo
+  ni verlo. Si dos nombres generan el mismo, se numera solo: "Sub 15" y
+  "Sub 15 B" conviven sin que nadie pelee con un campo técnico.
+- **No hay botón de guardar**: lo escrito queda al salir del campo, como en el
+  resto de la app.
+- Subir y bajar para ordenar; el contador de integrantes a la vista.
+- **Renombrar conserva el id**, así que los jugadores no se enteran.
+- **Una serie con gente adentro no se borra**, y el ícono lo dice al pasar por
+  encima.
+
+## Auditoría del recorrido
+
+`tests/flujo.test.mjs` recorre lo que hará el operador: crear una serie
+escribiendo sólo el nombre → que aparezca en los selectores del partido →
+cargarle una jugadora → renombrarla sin perderla → intentar borrarla con gente
+(bloqueado) → vaciarla y borrarla → reordenar sin perder ni duplicar.
+
+Escribiendo esa auditoría **una prueba falló por un error mío al contarla**, no
+del código: había escrito mal el identificador esperado por el corte de 16
+caracteres.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **62 pruebas, 62 pasan**
+(csv 15 · dorsal 13 · boot 8 · series 15 · flujo 11).
+
+## Queda abierto
+
+`MatchConfig.seriesName` guarda el **nombre** como texto y el historial agrupa
+por él. Si mañana renombras "Sub-15 Fem" a "Infantil Femenino", los partidos
+viejos conservan el nombre viejo y la tabla los vería como dos series
+distintas. Lo dejo así —el acta es una foto del día— pero conviene saberlo
+antes de renombrar a mitad de temporada.
+
+---
+
+# AUDITORÍA: CÓDIGO MUERTO Y BUGS
+
+## Bug 1 · El operador podía subir una chicharra que nunca sonaría
+
+Había **dos sistemas de audio**. El que suena es `lib/audio-engine.ts`. El otro
+—`BUZZER_OPTIONS`, `buzzerSound`, `changeBuzzerSound`— seguía cableado a una
+interfaz con selector de tipo y carga de MP3, pero **nadie reproducía ese
+estado**. Además `BUZZER_OPTIONS` era `{ reggaeton: '', hockey: '', buzzer: '' }`:
+las tres opciones, cadenas vacías.
+
+Un operador subía su chicharra, no veía ningún error, y en el partido no sonaba.
+
+**Eliminado por completo**: el estado, la clave de localStorage, el selector y
+el botón de carga. La chicharra manual pasa siempre por el motor real, así que
+respeta lo que se elija en AJUSTES DE AUDIO.
+
+## Bug 2 · Un equipo nuevo nacía con el plantel de Internacional
+
+`rostersPorDefecto()` llamaba a `squadFor()`, que lee `CLUB_PLAYERS` —el
+plantel compilado en git—. Crear un rival llamado "Bata" lo dejaba con las
+jugadoras de Internacional adentro, serie por serie.
+
+Era el último cable a la fuente vieja que R4 debía cortar. Ahora **un equipo
+nuevo nace vacío**: sin jugadores inventados que después haya que borrar uno
+por uno.
+
+## Chicharra de estadio
+
+Se añadió una tercera voz al motor, junto a la sintetizada y al archivo propio.
+Sigue la receta de diseño de sonido: sierra y pulso desafinados 12 cents, ruido
+blanco al 18%, envolvente de tono que entra un 12% más agudo y cae en 35 ms,
+LFO a 12 Hz sobre la afinación, dos filtros paso bajo en cascada (los 24 dB/oct)
+con resonancia alta, saturación por `WaveShaper` y ADSR duro.
+
+**La sintetizada anterior no se tocó**: son dos opciones, no un reemplazo.
+La saturación sube el nivel percibido, así que se compensó la ganancia para que
+cambiar de voz no dispare el volumen en el amplificador del pabellón.
+
+## Express: la ficha completa
+
+- **El nombre ahora se edita** antes del partido, junto al apodo. Antes sólo se
+  podían tocar el dorsal y el apodo.
+- Lo corregido vuelve al plantel del club (para fichas con identidad).
+- **El tope subió de 10 a 16.** Diez era el plantel reglamentario *en pista* (8
+  + 2 porteros), pero la citación incluye la banca: una serie de 12 se cortaba
+  en 10 **sin decir nada**. Ahora, si aun así sobra gente, se avisa cuántas
+  quedaron fuera.
+
+## Limpieza
+
+- **58 imports sin usar** en 11 archivos.
+- Funciones huérfanas ya retiradas en rondas anteriores.
+
+## Lo que NO corté, y por qué
+
+- **`playBuzzer()`** parece muerto: escribe una clave que nadie lee y emite un
+  mensaje que el receptor ignora. Pero el receptor lo ignora **a propósito**,
+  con un comentario que lo dice: *"las ventanas de tablero no reproducen
+  audio"*. Es una decisión, no un descuido, y el gancho sirve si algún día se
+  quiere audio en las pantallas. Lo dejo.
+- **El kit shadcn**: ~5.700 líneas en 43 archivos que nadie importa. **No pesan
+  en el sitio publicado** —Next no incluye lo que no se importa—, así que es
+  peso de repositorio, no de producto.
+- **`lib/club-pack.ts`**: escrito en R4, sin interfaz todavía. Es tu
+  herramienta para entregar clientes; sigue pendiente, no muerta.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **62 pruebas, 62 pasan.**
+
+---
+
+# RONDA DE RELOJES Y POSESIÓN
+
+## 1. El reloj principal "colapsado" (foto 2)
+
+Cada carácter vivía en una caja de **`0.62em` fija**. Si la tipografía elegida
+en el gestor de pantallas es más ancha que eso, los glifos se desbordan de su
+caja y se pisan — que es exactamente el "21:50" con el 5 y el 0 superpuestos.
+
+Ahora la caja mide **`1ch`**: el ancho real de un dígito en la fuente activa,
+sea cual sea. Con `tabular-nums` todos miden igual. Se adapta solo, así que
+cambiar de tipografía no puede volver a romperlo.
+
+## 2. El tiempo muerto secuestraba el reloj principal (foto 1)
+
+`RigidClock seconds={activeTimeout ? timeoutClock : mainClock}` — con un
+timeout activo, el reloj grande dejaba de mostrar el tiempo de juego. El
+operador perdía de vista el minuto del partido justo cuando el árbitro
+pregunta por él, y el timeout ya tiene su propio panel al lado.
+
+Corregido en **las dos vistas**. El rótulo también: decía "TIEMPO MUERTO"
+sobre una cifra que ahora es el tiempo de juego.
+
+## 3. Los 45 ya no corren con el juego detenido
+
+No se puede dar posesión durante el descanso ni durante un tiempo muerto, y
+los botones quedan deshabilitados. Los 45 sólo corren mientras corre el
+partido.
+
+## 4. El play de los 45 sonaba la chicharra
+
+Dar posesión arranca también el reloj de juego, y la vista operador disparaba
+la chicharra en cada arranque de reloj: unas cuarenta veces por partido. La
+vista Pista ya tenía la guarda; aquí faltaba.
+
+## 5. El play de posesión ya no pausa
+
+Pulsar dos veces pausaba los 45. Eso no ocurre en un partido —la bocha siempre
+la tiene alguien— y además convivía con un botón de "reset" al lado: dos gestos
+para una sola cosa.
+
+**Ahora el play fusiona dar y reiniciar.** Cada pulsación pone los 45 de ese
+equipo en 45 y los arranca, repone los del rival y echa a andar el reloj.
+Pulsarlo de nuevo reinicia; nunca pausa. Quien detiene el tiempo es el reloj
+principal, y al pausarlo se reponen los dos medidores — eso ya funcionaba así.
+
+En consecuencia:
+- **Se eliminaron los botones de reinicio** de posesión (uno por equipo).
+- **Se eliminaron los atajos** `possLeftReset` y `possRightReset`, y con ellos
+  el atajo que pausaba la posesión.
+- El icono ya no alterna entre play y pausa: siempre es play.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **62 pruebas, 62 pasan.**
+
+## LO QUE FALTA DE TU LISTA
+
+No lo hice en esta ronda y prefiero decirlo en vez de dejarlo a medias:
+
+1. **Anular tarjetas en el live no descuenta la acumulación**, y las amarillas
+   no se pueden anular.
+2. **La sección de penalizaciones activas** no existe en el live ni en la vista
+   operador.
+3. **En los penales, marcar gol no lanza la pantalla de gol.**
+4. **`club-pack` sigue sin interfaz** (exportar/importar club).
+
+Los tres primeros son del mismo territorio —sanciones y su visualización— y
+conviene hacerlos juntos, con pruebas del motor de tarjetas, que es la parte
+del sistema que más cuesta si se rompe.
+
+---
+
+# ANULAR TARJETAS, PENALIZACIONES ACTIVAS Y GOL DE PENAL
+
+## Una corrección a lo que dábamos por hecho
+
+Creíamos que la cruz del visor de eventos sí borraba la acumulación y que sólo
+fallaba el "anular" de la mesa del live. **No era así: fallaban las dos.**
+
+`removeSanction()` hacía exactamente una cosa:
+
+```ts
+sanctions: prev.sanctions.filter(s => s.id !== id)
+```
+
+Nada tocaba `cardHistory` — verificado: ese arreglo **sólo recibe altas, nunca
+bajas**. La cruz parecía funcionar porque la fila desaparecía de la lista
+activa, pero la tarjeta seguía entera en el historial y la acumulación con
+ella. Un jugador con una amarilla anulada recibía azul en la siguiente.
+
+## Cómo quedó
+
+La tarjeta **no se borra: se marca como anulada**. Así el acta conserva la
+traza de que se mostró y se anuló —que es lo que pide `REGLAMENTO-Y-USO`— y a
+la vez deja de contar para la escalada.
+
+Para eso hizo falta **enlazar la sanción con su tarjeta**: se creaban con
+`uid()` independientes y no había forma de saber cuál correspondía a cuál. La
+sanción lleva ahora `cardId`. Las tarjetas de partidos anteriores no lo tienen,
+así que hay un respaldo por coincidencia de persona, tipo y banca.
+
+Se excluyen las anuladas de **todos** los contadores, en los dos motores: las
+amarillas, las azules, la escalada y **la expulsión** (anular una roja devuelve
+al jugador a la pista). Y queda constancia en el registro: *"Tarjeta AZUL de #7
+ANULADA por la mesa"*.
+
+## Penalizaciones activas en las dos vistas
+
+La mesa del live muestra sólo las azules cumpliendo, porque es el reloj de la
+inferioridad. Una amarilla no tiene tiempo, así que **no aparecía en ninguna
+parte de esa vista**: cargada por error, no había forma de anularla sin cambiar
+de modo.
+
+Se añadió `SanctionsList` —**el mismo componente que ya usaba CONTROL**, no una
+copia— debajo de la mesa. Las tres tarjetas, con su cruz. Una implementación
+para los dos paneles.
+
+## El gol de penal lanza la pantalla
+
+`adjustHomePenalties` / `adjustAwayPenalties` aceptan el dorsal y disparan la
+animación, igual que un gol de juego. **No tocan el marcador del partido** —en
+la tanda los goles no cuentan como goles—: sólo celebran. Un penal que define
+un partido es EL momento del encuentro y la pantalla se quedaba muda.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **75 pruebas, 75 pasan** — 13 nuevas de
+anulación, incluido el caso que motivó todo: tras anular una amarilla, la
+siguiente vuelve a ser amarilla en vez de escalar a azul.
+
+---
+
+# "SÉ EL MARCADOR PARA TU CLUB"
+
+`lib/club-pack.ts` llevaba tres rondas escrito y sin interfaz. Ya la tiene, en
+Planteles, y con ese nombre: no es un botón técnico, es lo que la pieza hace.
+
+## Qué es
+
+El club entero en un archivo: identidad, personas, series y el dorsal de cada
+una en cada serie. Se exporta, se entrega, se importa.
+
+Hasta ahora, montar ARDI en otro club significaba **editar el código fuente y
+recompilar** — el plantel vivía compilado en `lib/club-roster.ts`. Una edición
+de código por cada club, con el riesgo de que uno se lleve el error de otro.
+
+Lo que lo hace funcionar es el `clubId`: un paquete importado en otra máquina
+**sigue siendo el mismo club**, así que los `ILE-0007` conservan su significado
+y el historial no se rompe. Por eso la identidad se diseñó así en R4.
+
+## Corregido: no lleva botón de importar
+
+La primera versión de esta pantalla traía exportar **e importar**. Estaba mal
+pensado: darle a un operador la posibilidad de reemplazar el plantel entero
+desde un botón es un riesgo sin contrapartida —un toque equivocado un sábado a
+las nueve deja al club sin jugadores— y además **no es así como se entrega**.
+
+Montar ARDI para un club es trabajo nuestro: se arma el paquete, se sube al
+hosting y el club recibe su propia web lista.
+
+Así quedó:
+
+- **En la app, la pantalla es una invitación** que enlaza a ardisport.cl. Lo
+  único que un club puede hacer con sus datos es **descargar un respaldo**, que
+  es información suya y no rompe nada.
+- **La entrega es por despliegue.** El paquete se deja como `/public/club.json`
+  y la app lo siembra en la primera apertura. **Ocurre una sola vez**: en
+  cuanto hay club guardado el archivo no se vuelve a mirar, así que las altas
+  del club nunca se pisan con un redespliegue.
+- Si el archivo no existe o es inválido, la app arranca igual y lo dice en
+  consola. Nada a medias.
+
+El procedimiento completo quedó escrito en **`ENTREGA-DE-CLUB.md`**: armar el
+club, exportar, qué tocar en el despliegue (sólo `club-brand.ts`, el escudo y
+`club.json`) y qué no tocar nunca.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **87 pruebas, 87 pasan** — 12 nuevas del
+paquete, incluida la que más importa para tu plan: un club de otro país viaja
+entero, con su prefijo y sus propias series, y no colisiona con el club de casa
+aunque convivan.

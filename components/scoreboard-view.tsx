@@ -9,7 +9,7 @@ import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
 import { finishClass, finishStyle, resolveFinish, type Finish } from '@/lib/finishes'
 import { resolveLedFont } from '@/lib/board-look'
 
-import { defaultHomeName, defaultHomeLogo, CLUB_BRAND, clubLogoFallback } from '@/lib/club-brand'
+import { defaultHomeName, defaultHomeLogo, clubLogoFallback } from '@/lib/club-brand'
 
 import { SummaryOverlay } from '@/components/scoreboard/SummaryOverlay'
 import { loadOverlays, showsOn, OVERLAYS_EVENT, DEFAULT_OVERLAYS, type OverlaysConfig } from '@/lib/overlay-config'

@@ -8,7 +8,7 @@ import type { StatsOverlayConfig } from '@/lib/overlay-config'
 import { DEFAULT_OVERLAYS } from '@/lib/overlay-config'
 import { Slot, type SlotCtx } from '@/components/scoreboard/OverlaySlot'
 import { OverlayCanvas } from '@/components/scoreboard/OverlayCanvas'
-import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
+import { DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
 interface Props {
   state: GameState

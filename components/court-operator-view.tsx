@@ -2,7 +2,7 @@
 
 import { RigidClock } from '@/components/scoreboard/RigidClock'
 
-import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
+import { defaultHomeName } from '@/lib/club-brand'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
@@ -35,6 +35,7 @@ import {
   AUDIO_EVENT, DEFAULT_AUDIO, type AudioConfig
 } from '@/lib/audio-engine'
 import { HOTKEY_EVENT, OPEN_HOTKEYS_EVENT } from '@/lib/hotkeys'
+import { SanctionsList } from '@/components/scoreboard/SanctionsList'
 import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
 
 import {
@@ -82,8 +83,8 @@ export interface CourtOperatorViewProps {
   adjustAwayScore: (delta: number, playerNumber?: string) => void
   adjustHomeFouls: (delta: number) => void
   adjustAwayFouls: (delta: number) => void
-  adjustHomePenalties: (delta: number) => void
-  adjustAwayPenalties: (delta: number) => void
+  adjustHomePenalties: (delta: number, playerNumber?: string) => void
+  adjustAwayPenalties: (delta: number, playerNumber?: string) => void
 
   addSanction: (team: 'home' | 'away', type: 'yellow' | 'blue' | 'red', playerNumber: string, isBench?: boolean, staffId?: string, sanctionType?: 'direct' | 'collective') => void
   addBenchSanction: (team: 'home' | 'away', sentCard: 'yellow' | 'red', directInfractor: { id: string; name: string; role: string; number: string }, collectiveTargets: Array<{ id: string; name: string; role: string; number: string }>) => void
@@ -386,8 +387,9 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     const num = getDisplayNumber(player)
     props.logShootoutShot(shootingTeam, num, scored)
     if (scored) {
-      if (shootingTeam === 'home') props.adjustHomePenalties(1)
-      else props.adjustAwayPenalties(1)
+      // Con el dorsal, el penal convertido lanza la pantalla de gol.
+      if (shootingTeam === 'home') props.adjustHomePenalties(1, num)
+      else props.adjustAwayPenalties(1, num)
       buzz(500)
     }
     toast[scored ? 'success' : 'info'](`#${num} ${scored ? 'convierte' : 'falla'}`, { duration: 1500 })
@@ -525,10 +527,14 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   // ─── Fin / reanudacion ─────────────────────────────────────────────────────
 
   const confirmEndMatch = () => {
+    // La planilla NO se abre sola al terminar. Antes saltaba encima del
+    // operador justo cuando el partido acababa —que es cuando hay gente
+    // preguntando el resultado, jugadores saliendo y el arbitro acercandose a
+    // la mesa— y habia que cerrarla para ver el marcador final. Ahora se
+    // genera solo cuando se pide, con el boton PLANILLA.
     props.setMatchPhase('finalizado' as MatchPhase)
     props.endMatch()
     setShowEndConfirm(false)
-    setShowOfficialSheet(true)
   }
 
   const handleFullReset = () => {
@@ -957,11 +963,19 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
         <div className="flex flex-col items-center px-4">
           <span className={`text-[10px] font-black tracking-widest ${
-            state.activeTimeout ? 'text-cyan-400' : state.isIntermission ? 'text-amber-400' : 'text-zinc-500'}`}>
-            {state.activeTimeout ? 'TIEMPO MUERTO' : state.isIntermission ? 'DESCANSO' : 'TIEMPO DE JUEGO'}
+            state.isIntermission ? 'text-amber-400' : 'text-zinc-500'}`}>
+            {/* Ya no dice TIEMPO MUERTO: este reloj muestra el tiempo de
+                juego incluso durante un timeout, y el rotulo tiene que
+                describir lo que hay debajo. El timeout se rotula en su panel. */}
+            {state.isIntermission ? 'DESCANSO' : 'TIEMPO DE JUEGO'}
           </span>
           <span className="text-4xl sm:text-6xl lg:text-7xl font-black leading-none tabular-nums text-red-500" style={{ fontFamily: 'var(--font-led)' }}>
-            <RigidClock seconds={state.activeTimeout ? state.timeoutClock : state.mainClock} tenthsUnder={state.isMainClockRunning ? 10 : 0} />
+{/* El reloj principal muestra SIEMPRE el tiempo de juego. Antes, con un
+                    tiempo muerto activo, esta misma cifra pasaba a mostrar la
+                    cuenta del timeout: el operador perdia de vista el minuto del
+                    partido justo cuando el arbitro pregunta por el. El timeout
+                    tiene su propio panel, que ya existe. */}
+                <RigidClock seconds={state.mainClock} tenthsUnder={state.isMainClockRunning ? 10 : 0} />
           </span>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-[10px] font-bold text-zinc-500">
@@ -1288,6 +1302,20 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         </div>
       </div>
       </div>
+
+      {/* ── PENALIZACIONES ACTIVAS ─────────────────────────────────────────
+           La mesa de arriba muestra sólo las azules cumpliendo, porque es el
+           reloj de la inferioridad. Pero una amarilla no tiene tiempo y por
+           tanto no aparecía en ninguna parte de esta vista: si se cargaba por
+           error, no había forma de anularla sin cambiar de modo.
+
+           Esta lista es el mismo componente que usa la vista CONTROL, con las
+           tres tarjetas y su cruz para anular. Una sola implementación para
+           los dos paneles. */}
+      <SanctionsList
+        sanctions={sanctions}
+        onRemove={id => { if (!matchEnded) props.removeSanction(id) }}
+      />
 
       {/* ── ADMINISTRACION ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 pb-4">

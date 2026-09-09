@@ -70,6 +70,17 @@ export interface CardHistory {
   period: Period
   gameTime: number
   timestamp: string
+  /**
+   * Tarjeta anulada por error del operador.
+   *
+   * NO se borra del historial: el acta conserva la traza de que se mostro y
+   * se anulo, que es lo que pide `REGLAMENTO-Y-USO`. Lo que cambia es que
+   * deja de contar para la ACUMULACION, y por tanto para la escalada. Antes
+   * `removeSanction` solo sacaba la sancion activa de la lista: la tarjeta
+   * seguia entera en el historial, asi que el jugador arrastraba una
+   * amonestacion que el arbitro habia anulado.
+   */
+  anulada?: boolean
 }
 
 // Cuerpo Arbitral
@@ -148,6 +159,18 @@ export interface MatchConfig {
   periodDuration: number
   campeonato: string
   partidoNumero: string
+  /**
+   * Fecha, hora y sede del encuentro. No existian: el acta deducia la fecha
+   * del reloj del computador al arrancar, y el estadio no se guardaba en
+   * ninguna parte. Los tres van al acta.
+   *
+   * En Express se rellenan solos con la fecha y hora del equipo — el partido
+   * se esta jugando ahora, no hay nada que preguntar — y se pueden corregir
+   * antes de iniciar, que es lo que importa al reanudar un suspendido.
+   */
+  fecha: string
+  hora: string
+  estadio: string
   homeRoster: string[]
   awayRoster: string[]
   homePlayers: Player[]
@@ -173,6 +196,8 @@ export interface Sanction {
   startTime: number
   originalCard?: 'yellow' | 'blue' | 'red'
   wasEscalated?: boolean
+  /** Tarjeta que origino esta sancion. Sin esto, anular no podia encontrarla. */
+  cardId?: string
 }
 
 export interface GameState {
@@ -240,7 +265,10 @@ const TIMEOUT_WARNING = 15
 
 // Sin URLs externas: el sonido lo genera lib/audio-engine y el MP3 propio se
 // carga como archivo local desde el modal de sonido.
-export const BUZZER_OPTIONS = { reggaeton: '', hockey: '', buzzer: '' }
+// `BUZZER_OPTIONS` se elimino. Sus tres valores eran cadenas vacias y el
+// estado que alimentaba (`buzzerSound`) no lo reproducia nadie: el sonido
+// real sale de `lib/audio-engine.ts`. El operador podia subir un MP3, no ver
+// ningun error, y quedarse sin chicharra en el partido.
 
 /**
  * Que periodo sigue. El descanso NO es un periodo: es la pausa entre dos, asi
@@ -281,6 +309,7 @@ const initialConfig: MatchConfig = {
   seriesName: 'Adulta', gender: 'MASCULINA', periodsCount: 2,
   periodDuration: DEFAULT_PERIOD_DURATION,
   campeonato: 'Liga Regular', partidoNumero: '1',
+  fecha: '', hora: '', estadio: '',
   homeRoster: [], awayRoster: [], homePlayers: [], awayPlayers: [],
   referees: initialReferees, signatures: initialSignatures,
   closingSignatures: initialClosingSignatures,
@@ -317,7 +346,6 @@ const initialState: GameState = {
 const TEAMS_STORAGE_KEY      = 'hockey-teams'
 const HISTORY_STORAGE_KEY    = 'hockey-match-history'
 const HISTORY_MAX_RECORDS    = 60
-const BUZZER_STORAGE_KEY     = 'hockey-buzzer-sound'
 const LIVE_GAME_STORAGE_KEY  = 'hockey-live-game-state'
 const BUZZER_TRIGGER_KEY     = 'hockey-buzzer-trigger'
 
@@ -344,7 +372,6 @@ export function useGameState() {
   const [state, setState] = useState<GameState>(initialState)
   const [savedTeams, setSavedTeams]       = useState<Team[]>([])
   const [matchHistory, setMatchHistory]   = useState<MatchRecord[]>([])
-  const [buzzerSound, setBuzzerSound]     = useState<string>(BUZZER_OPTIONS.reggaeton)
 
   const audioRef     = useRef<HTMLAudioElement | null>(null)
   const channelRef   = useRef<BroadcastChannel | null>(null)
@@ -360,9 +387,6 @@ export function useGameState() {
       return { ...t, rosters: { [t.serie]: t.roster } }
     }))
     setMatchHistory(lsGet<MatchRecord[]>(HISTORY_STORAGE_KEY, []))
-    const savedBuzzer = localStorage.getItem(BUZZER_STORAGE_KEY)
-    if (savedBuzzer) setBuzzerSound(savedBuzzer)
-
     const savedLiveGame = localStorage.getItem(LIVE_GAME_STORAGE_KEY)
     if (savedLiveGame) {
       try {
@@ -432,11 +456,6 @@ export function useGameState() {
       channelRef.current?.postMessage({ type: 'PLAY_BUZZER' })
     }
   }, [isReceiver])
-
-  const changeBuzzerSound = useCallback((src: string) => {
-    setBuzzerSound(src)
-    lsSet(BUZZER_STORAGE_KEY, src)
-  }, [])
 
   useEffect(() => {
     if (isReceiver || !state.isMainClockRunning || state.mainClock <= 0) return
@@ -865,8 +884,30 @@ export function useGameState() {
     return { ...prev, awayScore: newScore }
   }), [])
 
-  const adjustHomePenalties = useCallback((delta: number) => setState(prev => ({ ...prev, homePenalties: Math.max(0, (prev.homePenalties || 0) + delta) })), [])
-  const adjustAwayPenalties = useCallback((delta: number) => setState(prev => ({ ...prev, awayPenalties: Math.max(0, (prev.awayPenalties || 0) + delta) })), [])
+  /**
+   * Penal convertido en la tanda.
+   *
+   * Con `playerNumber` dispara ademas la animacion de gol, igual que un gol de
+   * juego. Un penal que define un partido es EL momento del encuentro y la
+   * pantalla se quedaba muda: el marcador de penales subia y nada mas. La
+   * animacion no toca el marcador del partido —en la tanda los goles no
+   * cuentan como goles—, solo celebra.
+   */
+  const adjustHomePenalties = useCallback((delta: number, playerNumber?: string) => setState(prev => ({
+    ...prev,
+    homePenalties: Math.max(0, (prev.homePenalties || 0) + delta),
+    ...(delta > 0 && playerNumber !== undefined
+      ? { goalAnimation: { id: uid(), team: 'home' as const, playerNumber, timestamp: Date.now() } }
+      : {})
+  })), [])
+
+  const adjustAwayPenalties = useCallback((delta: number, playerNumber?: string) => setState(prev => ({
+    ...prev,
+    awayPenalties: Math.max(0, (prev.awayPenalties || 0) + delta),
+    ...(delta > 0 && playerNumber !== undefined
+      ? { goalAnimation: { id: uid(), team: 'away' as const, playerNumber, timestamp: Date.now() } }
+      : {})
+  })), [])
 
   const isFoulWarning    = (fouls: number) => fouls === 9 || (fouls > 10 && (fouls - 9) % 5 === 0)
   const isFoulDirectKick = (fouls: number) => fouls === 10 || (fouls > 10 && (fouls - 10) % 5 === 0)
@@ -955,6 +996,7 @@ export function useGameState() {
     cardHistory: CardHistory[], team: 'home' | 'away', playerNumber: string, cardType?: 'yellow' | 'blue' | 'red'
   ) => {
     return cardHistory.filter(c =>
+      !c.anulada &&
       c.team === team && c.playerNumber === playerNumber && (!cardType || c.cardType === cardType)
     ).length
   }, [])
@@ -963,6 +1005,7 @@ export function useGameState() {
     cardHistory: CardHistory[], team: 'home' | 'away', playerNumber: string
   ) => {
     return cardHistory.filter(c =>
+      !c.anulada &&
       c.team === team && c.playerNumber === playerNumber && c.cardType === 'blue' && !c.isBench
     ).length
   }, [])
@@ -971,12 +1014,14 @@ export function useGameState() {
     cardHistory: CardHistory[], team: 'home' | 'away', playerNumber: string,
     sentCard: 'yellow' | 'blue' | 'red'
   ): { finalCard: 'yellow' | 'blue' | 'red'; duration: number; wasEscalated: boolean; isAlreadyExpelled: boolean } => {
-    const hasRed = cardHistory.some(c => c.team === team && c.playerNumber === playerNumber && c.cardType === 'red')
+    // `!c.anulada` en todos: una tarjeta que el arbitro anulo no puede seguir
+    // empujando la escalada de la siguiente.
+    const hasRed = cardHistory.some(c => !c.anulada && c.team === team && c.playerNumber === playerNumber && c.cardType === 'red')
     if (hasRed) return { finalCard: sentCard, duration: 0, wasEscalated: false, isAlreadyExpelled: true }
 
-    const totalYellows      = cardHistory.filter(c => c.team === team && c.playerNumber === playerNumber && c.cardType === 'yellow' && !c.isBench).length
-    const totalBenchDirectYellows = cardHistory.filter(c => c.team === team && c.playerNumber === playerNumber && c.cardType === 'yellow' && c.isBench && c.sanctionType === 'direct').length
-    const totalBlues        = cardHistory.filter(c => c.team === team && c.playerNumber === playerNumber && c.cardType === 'blue' && !c.isBench).length
+    const totalYellows      = cardHistory.filter(c => !c.anulada && c.team === team && c.playerNumber === playerNumber && c.cardType === 'yellow' && !c.isBench).length
+    const totalBenchDirectYellows = cardHistory.filter(c => !c.anulada && c.team === team && c.playerNumber === playerNumber && c.cardType === 'yellow' && c.isBench && c.sanctionType === 'direct').length
+    const totalBlues        = cardHistory.filter(c => !c.anulada && c.team === team && c.playerNumber === playerNumber && c.cardType === 'blue' && !c.isBench).length
 
     if (sentCard === 'red') return { finalCard: 'red', duration: RED_CARD_DURATION, wasEscalated: false, isAlreadyExpelled: false }
 
@@ -1022,13 +1067,16 @@ export function useGameState() {
 
       if (isAlreadyExpelled) return prev
 
+      // El id de la tarjeta se genera primero para que la sancion pueda
+      // apuntarlo: es lo que permite anular las dos cosas a la vez.
+      const cardId = uid()
       const newSanction: Sanction = {
         id: uid(), team, type: finalCard, playerNumber: playerNumber || '?',
         staffId, isBench, sanctionType, remainingTime: duration, startTime: duration,
-        originalCard: type, wasEscalated
+        originalCard: type, wasEscalated, cardId
       }
       const newCardHistory: CardHistory = {
-        id: uid(), team, playerNumber: playerNumber || '?', staffId, isBench,
+        id: cardId, team, playerNumber: playerNumber || '?', staffId, isBench,
         cardType: finalCard, sanctionType: sanctionType || 'direct',
         period: prev.period, gameTime: prev.mainClock, timestamp: now
       }
@@ -1144,13 +1192,15 @@ export function useGameState() {
           if (isTargetAlreadyRed) return
 
           const targetPrevCards = prev.cardHistory.filter(c => c.team === team && c.staffId === target.id && c.isBench)
+          const colectivaCardId = uid()
           newSanctions.push({
             id: uid(), team, type: 'yellow', playerNumber: target.number,
             staffId: target.id, isBench: true, sanctionType: 'collective',
-            remainingTime: 0, startTime: 0, originalCard: 'yellow', wasEscalated: false
+            remainingTime: 0, startTime: 0, originalCard: 'yellow', wasEscalated: false,
+            cardId: colectivaCardId
           })
           newCardHistory.push({
-            id: uid(), team, playerNumber: target.number, staffId: target.id,
+            id: colectivaCardId, team, playerNumber: target.number, staffId: target.id,
             isBench: true, cardType: 'yellow', sanctionType: 'collective',
             period: prev.period, gameTime: prev.mainClock, timestamp: now
           })
@@ -1320,7 +1370,43 @@ export function useGameState() {
     })
   }, [])
 
-  const removeSanction  = useCallback((id: string) => setState(prev => ({ ...prev, sanctions: prev.sanctions.filter(s => s.id !== id) })), [])
+  /**
+   * ANULAR UNA SANCION CARGADA POR ERROR.
+   *
+   * Antes solo filtraba la lista de sanciones activas: la fila desaparecia de
+   * la pantalla y parecia resuelto, pero la tarjeta seguia entera en
+   * `cardHistory`. Como la acumulacion se calcula sobre ese historial, el
+   * jugador arrastraba una amonestacion anulada y la siguiente amarilla le
+   * escalaba a azul sin motivo.
+   *
+   * Ahora: se quita la sancion, se MARCA la tarjeta como anulada —no se
+   * borra, el acta conserva la traza— y queda constancia en el registro.
+   */
+  const removeSanction = useCallback((id: string) => setState(prev => {
+    const sancion = prev.sanctions.find(s => s.id === id)
+    if (!sancion) return prev
+
+    const quien = sancion.isBench && sancion.staffId ? sancion.staffId : `#${sancion.playerNumber}`
+    const evento: MatchEvent = {
+      id: uid(), timestamp: new Date().toISOString(), gameTime: prev.mainClock,
+      period: prev.period, eventType: 'ajuste', team: sancion.team, actor: sancion.playerNumber,
+      details: `Tarjeta ${sancion.type.toUpperCase()} de ${quien} ANULADA por la mesa`
+    }
+
+    return {
+      ...prev,
+      sanctions: prev.sanctions.filter(s => s.id !== id),
+      cardHistory: prev.cardHistory.map(c =>
+        // Por id cuando existe el enlace; las tarjetas de versiones anteriores
+        // no lo tienen, asi que se cae a la coincidencia por persona y momento.
+        (sancion.cardId && c.id === sancion.cardId) ||
+        (!sancion.cardId && c.team === sancion.team && c.cardType === sancion.type &&
+         c.playerNumber === sancion.playerNumber && c.isBench === sancion.isBench && !c.anulada)
+          ? { ...c, anulada: true } : c
+      ),
+      matchLog: [...prev.matchLog, evento]
+    }
+  }), [])
   const clearSanctions  = useCallback((team?: 'home' | 'away') => setState(prev => ({ ...prev, sanctions: team ? prev.sanctions.filter(s => s.team !== team) : [] })), [])
 
   const requestTimeoutHome = useCallback(() => setState(prev =>
@@ -1390,15 +1476,36 @@ export function useGameState() {
     isPossessionLeftRunning: false, isPossessionRightRunning: true, isMainClockRunning: true 
   })), [])
   
-  const togglePossessionLeft  = useCallback(() => setState(prev => prev.isPossessionLeftRunning 
-    ? { ...prev, isPossessionLeftRunning: false } 
-    : { ...prev, isPossessionLeftRunning: true, possessionClockRight: POSSESSION_DURATION, isPossessionRightRunning: false, isMainClockRunning: true }
-  ), [])
-  
-  const togglePossessionRight = useCallback(() => setState(prev => prev.isPossessionRightRunning 
-    ? { ...prev, isPossessionRightRunning: false } 
-    : { ...prev, isPossessionRightRunning: true, possessionClockLeft: POSSESSION_DURATION, isPossessionLeftRunning: false, isMainClockRunning: true }
-  ), [])
+  /**
+   * DAR LA POSESION A UN EQUIPO. No es un interruptor.
+   *
+   * Antes era `toggle`: pulsar dos veces PAUSABA el reloj de 45. Eso no ocurre
+   * en un partido — la bocha siempre la tiene alguien— y ademas convivia con
+   * un boton de "reset" aparte, asi que habia dos gestos para una sola cosa.
+   *
+   * Ahora el play FUSIONA dar y reiniciar: cada pulsacion pone los 45 de ese
+   * equipo en 45 y los arranca, repone los del rival y echa a andar el reloj
+   * de juego. Pulsarlo de nuevo reinicia; nunca pausa. Quien detiene el tiempo
+   * es el reloj principal, y al pausarlo se reponen los dos medidores.
+   *
+   * No se puede dar posesion con el juego detenido —descanso o tiempo muerto—:
+   * los 45 solo corren mientras corre el partido.
+   */
+  const darPosesion = (prev: GameState, lado: 'left' | 'right'): GameState => {
+    if (prev.isIntermission || prev.activeTimeout || prev.isMatchEnded) return prev
+    return lado === 'left'
+      ? { ...prev,
+          possessionClockLeft: POSSESSION_DURATION, isPossessionLeftRunning: true,
+          possessionClockRight: POSSESSION_DURATION, isPossessionRightRunning: false,
+          isMainClockRunning: true }
+      : { ...prev,
+          possessionClockRight: POSSESSION_DURATION, isPossessionRightRunning: true,
+          possessionClockLeft: POSSESSION_DURATION, isPossessionLeftRunning: false,
+          isMainClockRunning: true }
+  }
+
+  const togglePossessionLeft  = useCallback(() => setState(prev => darPosesion(prev, 'left')), [])
+  const togglePossessionRight = useCallback(() => setState(prev => darPosesion(prev, 'right')), [])
   
   const resetAndPausePossession = useCallback(() => setState(prev => ({ 
     ...prev, possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION, 
@@ -1561,6 +1668,5 @@ export function useGameState() {
     setCourtLineup, logShootoutShot, reassignPlayerNumber, setPlayerInjured, designateGoalie, designateCaptain,
     addRosterPlayer, removeRosterPlayer,
     endMatch, saveTeam, deleteTeam, saveMatchToHistory, deleteMatchFromHistory, clearHistory, resetForNewMatch, resetAll, closeMatchEndModal,
-    buzzerSound, changeBuzzerSound
   }
 }

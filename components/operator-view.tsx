@@ -6,23 +6,23 @@ import {
   OPEN_HOTKEYS_EVENT, type HotkeyMap
 } from '@/lib/hotkeys'
 
-import { defaultHomeName, defaultHomeLogo, CLUB_BRAND } from '@/lib/club-brand'
+import { defaultHomeName } from '@/lib/club-brand'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { toast } from 'sonner'
-import { Play, Pause, RotateCcw, Plus, Minus, Bell, Timer, Clock, Settings, X, Users, Upload, Trash2, Save, Hand, Square, Coffee, AlertTriangle, CircleSlash, Goal, AlertCircle, History, Download, FileText, Clipboard, ChevronRight, CheckCircle2, PenTool, Shield, User, Move, LayoutGrid, LayoutDashboard, ZoomIn, ZoomOut, ArrowRightLeft, Palette, Volume2, Lock, Unlock, VolumeX, Keyboard } from 'lucide-react'
+import { Play, Pause, RotateCcw, Plus, Minus, Bell, Timer, Clock, Settings, Upload, Square, Coffee, AlertTriangle, Goal, AlertCircle, History, FileText, ChevronRight, Shield, LayoutGrid, LayoutDashboard, ZoomIn, ZoomOut, Palette, Volume2, Lock, Unlock, VolumeX, Keyboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { BUZZER_OPTIONS, INTERMISSION_DURATION } from '@/hooks/use-game-state'
+ '@/components/ui/tabs'
+import { INTERMISSION_DURATION } from '@/hooks/use-game-state'
 import type { GameState, Period, Team, MatchRecord, MatchConfig, Sanction, Player, RefereeData, MatchEvent, SignatureData, ClosingSignatureData, MatchPhase, CardHistory } from '@/hooks/use-game-state'
 
 import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
-import { TacticalBoard } from '@/components/scoreboard/TacticalBoard'
+ '@/components/scoreboard/TacticalBoard'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
 import { BenchModal, type BenchStaffUI } from '@/components/scoreboard/BenchModal'
 import { PosModal } from '@/components/scoreboard/PosModal'
@@ -104,7 +104,6 @@ interface OperatorViewProps {
   resetAndPausePossession: () => void; endMatch: () => void;
   saveTeam: (team: Team) => void; deleteTeam: (teamId: string) => void; saveMatchToHistory: () => void;
   clearHistory: () => void; deleteMatchFromHistory: (id: string) => void; resetForNewMatch: () => void; resetAll: () => void; closeMatchEndModal: () => void;
-  buzzerSound: string; changeBuzzerSound: (src: string) => void;
   onSaveAndReset?: () => void;
 }
 
@@ -288,11 +287,8 @@ export function OperatorView(props: OperatorViewProps) {
   const theme = GLOBAL_THEMES[currentSkinKey] 
 
   // ─── AUDIO ENGINE NATIVO ──────────────────────────────────
-  const [buzzerType, setBuzzerType] = useState<string>('native-synth') 
   const [buzzerMode, setBuzzerMode] = useState<'click' | 'hold'>('click')
-  const [customBuzzerFile, setCustomBuzzerFile] = useState<string | null>(null)
   
-  const buzzerFileInputRef = useRef<HTMLInputElement>(null)
   const stopSynthTimeout = useRef<NodeJS.Timeout | null>(null)
   const buzzerInterval = useRef<NodeJS.Timeout | null>(null) 
 
@@ -301,7 +297,6 @@ export function OperatorView(props: OperatorViewProps) {
 
   useEffect(() => {
     armAudio()
-    props.changeBuzzerSound('')
   }, [])
 
   // El sonido lo produce lib/audio-engine, el mismo que usa la vista Pista:
@@ -320,28 +315,14 @@ export function OperatorView(props: OperatorViewProps) {
   const handleBuzzerPress = () => {
     if (stopSynthTimeout.current) clearTimeout(stopSynthTimeout.current);
 
-    if (buzzerType === 'native-synth') {
-      startNativeSynth();
-      if (buzzerMode === 'click') {
-         stopSynthTimeout.current = setTimeout(stopNativeSynth, 800);
-      }
-    } else if (buzzerType === 'custom' && customBuzzerFile) {
-      props.playBuzzer();
-      if (buzzerMode === 'hold') {
-         buzzerInterval.current = setInterval(() => props.playBuzzer(), 150);
-      }
+    startNativeSynth();
+    if (buzzerMode === 'click') {
+      stopSynthTimeout.current = setTimeout(stopNativeSynth, 800);
     }
   };
 
   const handleBuzzerRelease = () => {
-    if (buzzerType === 'native-synth') {
-      if (buzzerMode === 'hold') stopNativeSynth();
-    } else {
-      if (buzzerMode === 'hold' && buzzerInterval.current) {
-        clearInterval(buzzerInterval.current);
-        buzzerInterval.current = null;
-      }
-    }
+    if (buzzerMode === 'hold') stopNativeSynth();
   };
 
   // 🤖 AUTOMATIZACIÓN DE LA CHICHARRA Y BEEPS INTELIGENTES 🤖
@@ -375,10 +356,18 @@ export function OperatorView(props: OperatorViewProps) {
     if (prevActiveTimeout.current && !state.activeTimeout) triggerAutoBuzzer(1500); 
     if (prevIntermission.current && !state.isIntermission) triggerAutoBuzzer(1500); 
 
-    // Inicio / Fin de Reloj Principal
+    // Inicio / Fin de Reloj Principal.
+    //
+    // Dar posesion arranca tambien el reloj de juego, asi que sin esta guarda
+    // cada play de los 45 sonaba la chicharra: en un partido son unas cuarenta
+    // veces. La vista Pista ya lo resolvia asi; aqui faltaba.
+    const posesionRecienDada =
+      (!prevPossLRun.current && state.isPossessionLeftRunning) ||
+      (!prevPossRRun.current && state.isPossessionRightRunning)
+
     if (!prevClockRunning.current && state.isMainClockRunning) {
-        if (skipNextClockStartBuzzer.current) skipNextClockStartBuzzer.current = false; 
-        else triggerAutoBuzzer(500); 
+        if (skipNextClockStartBuzzer.current) skipNextClockStartBuzzer.current = false;
+        else if (!posesionRecienDada) triggerAutoBuzzer(500);
     }
     if (prevMainClock.current > 0 && state.mainClock === 0) {
         triggerAutoBuzzer(2000); 
@@ -442,22 +431,10 @@ export function OperatorView(props: OperatorViewProps) {
     }
   }, [stopNativeSynth]);
 
-  const handleBuzzerFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const url = URL.createObjectURL(file)
-      setCustomBuzzerFile(url)
-      props.changeBuzzerSound(url)
-      setBuzzerType('custom')
-    }
-  }
-
-  const handleBuzzerChange = (value: string) => {
-    setBuzzerType(value)
-    if (value === 'native-synth') {
-      props.changeBuzzerSound('') 
-    }
-  }
+  // El selector de tipo de sonido y la carga de MP3 vivian aqui. Escribian en
+  // un estado que nadie reproducia: subir un archivo no daba error y en el
+  // partido no sonaba nada. El sonido —sintetizada, estadio o archivo propio—
+  // se elige en AJUSTES DE AUDIO, que es el que si toca `lib/audio-engine.ts`.
 
   // ─── Reset ────────────────────────────────────────────────────────────────
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -510,7 +487,6 @@ export function OperatorView(props: OperatorViewProps) {
             triggerAutoBuzzer(3000); 
             props.setMatchPhase('finalizado' as MatchPhase);
             props.endMatch();
-            setShowOfficialSheet(true);
           }, 800);
         }
         break
@@ -527,10 +503,14 @@ export function OperatorView(props: OperatorViewProps) {
   }
 
   const confirmEndMatch = () => {
+    // La planilla NO se abre sola al terminar. Antes saltaba encima del
+    // operador justo cuando el partido acababa —que es cuando hay gente
+    // preguntando el resultado, jugadores saliendo y el arbitro acercandose a
+    // la mesa— y habia que cerrarla para ver el marcador final. Ahora se
+    // genera solo cuando se pide, con el boton PLANILLA.
     props.setMatchPhase('finalizado' as MatchPhase)
     props.endMatch()
     setShowEndConfirm(false)
-    setShowOfficialSheet(true)
   }
 
   const handleFullReset = () => {
@@ -664,7 +644,12 @@ export function OperatorView(props: OperatorViewProps) {
                 {state.isIntermission ? 'DESCANSO' : 'TIEMPO DE JUEGO'}
               </span>
               <div className={`w-[220px] sm:w-[320px] lg:w-[420px] mx-auto flex justify-center text-6xl sm:text-8xl lg:text-[7rem] leading-none tabular-nums transition-colors duration-300 ${clockTextColor}`} style={{...clockTextStyle, fontVariantNumeric: 'tabular-nums'}}>
-                <RigidClock seconds={state.activeTimeout ? state.timeoutClock : state.mainClock} tenthsUnder={state.isMainClockRunning ? 10 : 0} />
+{/* El reloj principal muestra SIEMPRE el tiempo de juego. Antes, con un
+                    tiempo muerto activo, esta misma cifra pasaba a mostrar la
+                    cuenta del timeout: el operador perdia de vista el minuto del
+                    partido justo cuando el arbitro pregunta por el. El timeout
+                    tiene su propio panel, que ya existe. */}
+                <RigidClock seconds={state.mainClock} tenthsUnder={state.isMainClockRunning ? 10 : 0} />
               </div>
               <div className="flex items-center justify-center gap-2 mt-2 sm:mt-4">
                 <span className={`text-xs sm:text-sm font-bold transition-colors ${theme.clock.label}`}>
@@ -802,23 +787,6 @@ export function OperatorView(props: OperatorViewProps) {
                           </Select>
                         </div>
                         
-                        <div>
-                          <Label className="text-zinc-400 text-xs">Tipo de Sonido</Label>
-                          <Select value={buzzerType} onValueChange={handleBuzzerChange}>
-                            <SelectTrigger className="bg-zinc-800 border-zinc-600 mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent className="bg-zinc-800 border-zinc-600">
-                              <SelectItem value="native-synth">⚠️ Sintetizador de Mesa (0 Latencia)</SelectItem>
-                              <SelectItem value="custom">📂 Cargar MP3 Personalizado...</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        <div className="pt-2 border-t border-zinc-800">
-                          <input ref={buzzerFileInputRef} type="file" accept="audio/*" onChange={handleBuzzerFileUpload} className="hidden" />
-                          <Button onClick={() => buzzerFileInputRef.current?.click()} variant="outline" size="sm" className="w-full border-zinc-600 text-xs h-8"><Upload className="w-3 h-3 mr-2" /> Seleccionar MP3 Manual</Button>
-                          {customBuzzerFile && <p className="text-green-400 text-[10px] mt-1 text-center font-bold">Audio cargado exitosamente</p>}
-                        </div>
-
                         <Button 
                           onPointerDown={() => { handleBuzzerPress(); if(buzzerMode==='click') setTimeout(handleBuzzerRelease, 800); }} 
                           onPointerUp={handleBuzzerRelease}
@@ -1005,11 +973,11 @@ export function OperatorView(props: OperatorViewProps) {
                       {formatTime(state.possessionClockLeft)}
                     </div>
                     <div className="flex gap-1 sm:gap-2 w-full mt-1">
-                      <Button onClick={props.togglePossessionLeft} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionLeftRunning ? theme.btn.danger : theme.btn.primary}`} title={`Atajo: ${keyLabel(hotkeys, 'possLeftToggle')}`}>
-                        {state.isPossessionLeftRunning ? <Pause className="w-4 h-4 sm:w-5 sm:h-5" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5" />}
-                      </Button>
-                      <Button onClick={props.resetPossessionLeft} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${theme.btn.secondary}`} title={`Atajo: ${keyLabel(hotkeys, 'possLeftReset')}`}>
-                        <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
+                      {/* Un solo boton: da la posesion y reinicia los 45. No
+                          pausa —la bocha siempre la tiene alguien— asi que ya
+                          no hay boton de reset al lado ni icono de pausa. */}
+                      <Button onClick={props.togglePossessionLeft} disabled={matchEnded || state.isIntermission || !!state.activeTimeout} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionLeftRunning ? theme.btn.danger : theme.btn.primary}`} title={`Dar posesión y reiniciar los 45 [${keyLabel(hotkeys, 'possLeftToggle')}]`}>
+                        <Play className="w-4 h-4 sm:w-5 sm:h-5" />
                       </Button>
                     </div>
                   </div>
@@ -1053,11 +1021,11 @@ export function OperatorView(props: OperatorViewProps) {
                       {formatTime(state.possessionClockRight)}
                     </div>
                     <div className="flex gap-1 sm:gap-2 w-full mt-1">
-                      <Button onClick={props.togglePossessionRight} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionRightRunning ? theme.btn.danger : theme.btn.primary}`} title={`Atajo: ${keyLabel(hotkeys, 'possRightToggle')}`}>
-                        {state.isPossessionRightRunning ? <Pause className="w-4 h-4 sm:w-5 sm:h-5" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5" />}
-                      </Button>
-                      <Button onClick={props.resetPossessionRight} disabled={matchEnded} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${theme.btn.secondary}`} title={`Atajo: ${keyLabel(hotkeys, 'possRightReset')}`}>
-                        <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
+                      {/* Un solo boton: da la posesion y reinicia los 45. No
+                          pausa —la bocha siempre la tiene alguien— asi que ya
+                          no hay boton de reset al lado ni icono de pausa. */}
+                      <Button onClick={props.togglePossessionRight} disabled={matchEnded || state.isIntermission || !!state.activeTimeout} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionRightRunning ? theme.btn.danger : theme.btn.primary}`} title={`Dar posesión y reiniciar los 45 [${keyLabel(hotkeys, 'possRightToggle')}]`}>
+                        <Play className="w-4 h-4 sm:w-5 sm:h-5" />
                       </Button>
                     </div>
                   </div>

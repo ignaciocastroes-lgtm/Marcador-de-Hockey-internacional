@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Shield, Type, Circle, LayoutDashboard, ExternalLink, Layers, X, ChevronRight, Trash2, Pencil } from 'lucide-react'
+import { Shield, Type, LayoutDashboard, ExternalLink, Layers, ChevronRight, Trash2, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

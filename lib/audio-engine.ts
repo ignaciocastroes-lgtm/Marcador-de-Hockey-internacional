@@ -24,8 +24,15 @@ export const AUDIO_EVENT = 'ardi-audio-updated'
 /** Tope del MP3 propio. localStorage es finito y lo comparte con el partido. */
 export const MAX_CUSTOM_BYTES = 400_000
 
+export type HornMode = 'synth' | 'estadio' | 'custom'
+
 export interface AudioConfig {
-  hornMode: 'synth' | 'custom'
+  /**
+   * `synth`   dos sierras limpias: la de siempre, sobria y clara.
+   * `estadio` el zumbador metalico de pabellon (ver `playEstadio`).
+   * `custom`  un archivo del club.
+   */
+  hornMode: HornMode
   customName: string
   customData: string          // data URL; '' = no hay
   hornVolume: number          // 0-1
@@ -145,6 +152,10 @@ export function playHorn(durMs = 800, cfg: AudioConfig = loadAudioConfig()): voi
     void playCustom(cfg, durMs)
     return
   }
+  if (cfg.hornMode === 'estadio') {
+    playEstadio(durMs, cfg)
+    return
+  }
 
   stopSynth()
   const master = c.createGain()
@@ -165,6 +176,118 @@ export function playHorn(durMs = 800, cfg: AudioConfig = loadAudioConfig()): voi
     osc.stop(c.currentTime + durMs / 1000 + 0.05)
     liveNodes.push(osc)
   })
+}
+
+/**
+ * CHICHARRA DE ESTADIO
+ *
+ * La bocina `synth` son dos sierras a 110 Hz: limpia y correcta, pero suena a
+ * sintetizador. Una chicharra real es un diafragma metalico vibrando a la
+ * fuerza, y lo que la hace reconocible es el DESORDEN armonico, no la nota.
+ *
+ * La receta, y el porque de cada pieza:
+ *
+ *  · Sierra + pulso desafinado ~12 cents. La sierra trae todos los armonicos;
+ *    el pulso al 40% suma los impares huecos. Desafinados baten entre si, y
+ *    ese batido es lo que se oye como "temblor industrial".
+ *  · Ruido blanco al 18%. Es el aire a presion y el roce del diafragma. Sin
+ *    el, el sonido es afinado y por tanto musical, que es justo lo contrario.
+ *  · Envolvente de tono: entra un 12% mas agudo y cae en 35 ms. Imita el
+ *    golpe de corriente del arranque.
+ *  · LFO a 12 Hz sobre la afinacion, muy leve. Inestabilidad mecanica.
+ *  · Paso bajo 24 dB (dos de 12 en cascada) abierto al 88% con resonancia:
+ *    deja pasar el brillo y marca un pico estridente en medios-altos.
+ *  · Saturacion con `WaveShaper`. Sin ella los armonicos no se rompen y el
+ *    resultado sigue siendo demasiado limpio para un pabellon.
+ *  · Ataque y corte secos: una chicharra es electrica, se enciende y se apaga.
+ */
+function curvaSaturacion(cantidad = 55): Float32Array {
+  const n = 1024
+  const curva = new Float32Array(n)
+  const k = cantidad
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1
+    curva[i] = ((3 + k) * x * 20 * Math.PI / 180) / (Math.PI + k * Math.abs(x))
+  }
+  return curva
+}
+
+function playEstadio(durMs: number, cfg: AudioConfig): void {
+  const c = getCtx()
+  if (!c) return
+  stopSynth()
+
+  const now = c.currentTime
+  const dur = durMs / 1000
+  const fin = now + dur
+
+  const master = c.createGain()
+  const shaper = c.createWaveShaper()
+  shaper.curve = curvaSaturacion(55)
+  shaper.oversample = '4x'
+
+  // Dos filtros de 12 dB en cascada = los 24 dB/octava de la receta.
+  const lp1 = c.createBiquadFilter()
+  const lp2 = c.createBiquadFilter()
+  lp1.type = lp2.type = 'lowpass'
+  lp1.frequency.setValueAtTime(5200, now)
+  lp2.frequency.setValueAtTime(5200, now)
+  lp1.Q.setValueAtTime(4.5, now)   // el pico estridente
+  lp2.Q.setValueAtTime(1.2, now)
+
+  master.connect(shaper); shaper.connect(lp1); lp1.connect(lp2); lp2.connect(c.destination)
+
+  // La saturacion sube el nivel percibido: se compensa para que cambiar de
+  // voz no dispare el volumen en el amplificador del pabellon.
+  const peak = Math.min(0.98, Math.max(0.05, cfg.hornVolume)) * 0.30
+  const g = c.createGain()
+  g.connect(master)
+  master.gain.setValueAtTime(1, now)
+
+  // ADSR duro: golpe instantaneo, sostenido plano, corte en 40 ms.
+  g.gain.setValueAtTime(0.0001, now)
+  g.gain.exponentialRampToValueAtTime(peak, now + 0.004)
+  g.gain.setValueAtTime(peak, Math.max(now + 0.004, fin - 0.04))
+  g.gain.exponentialRampToValueAtTime(0.0001, fin)
+
+  const BASE = 138
+  const detune = [0, 12]   // cents
+
+  ;(['sawtooth', 'square'] as OscillatorType[]).forEach((tipo, i) => {
+    const osc = c.createOscillator()
+    osc.type = tipo
+    osc.detune.setValueAtTime(detune[i], now)
+    // Envolvente de tono: arranca agudo y cae. El golpe de corriente.
+    osc.frequency.setValueAtTime(BASE * 1.12, now)
+    osc.frequency.exponentialRampToValueAtTime(BASE, now + 0.035)
+    osc.connect(g)
+    osc.start(now)
+    osc.stop(fin + 0.05)
+    liveNodes.push(osc)
+
+    // Temblor mecanico: LFO lento en amplitud de modulacion, rapido en Hz.
+    const lfo = c.createOscillator()
+    const lfoGain = c.createGain()
+    lfo.type = 'triangle'
+    lfo.frequency.setValueAtTime(12, now)
+    lfoGain.gain.setValueAtTime(7, now)      // +-7 cents
+    lfo.connect(lfoGain); lfoGain.connect(osc.detune)
+    lfo.start(now); lfo.stop(fin + 0.05)
+    liveNodes.push(lfo)
+  })
+
+  // Ruido: el aire y el roce del diafragma.
+  const largo = Math.ceil(c.sampleRate * (dur + 0.1))
+  const buffer = c.createBuffer(1, largo, c.sampleRate)
+  const datos = buffer.getChannelData(0)
+  for (let i = 0; i < largo; i++) datos[i] = Math.random() * 2 - 1
+  const ruido = c.createBufferSource()
+  const ruidoGain = c.createGain()
+  ruido.buffer = buffer
+  ruidoGain.gain.setValueAtTime(0.18, now)
+  ruido.connect(ruidoGain); ruidoGain.connect(g)
+  ruido.start(now); ruido.stop(fin + 0.05)
+  liveNodes.push(ruido)
 }
 
 export function stopHorn(): void {

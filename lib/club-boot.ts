@@ -68,6 +68,42 @@ export function wipeAll(): string[] {
  * En un despliegue ajeno arranca vacío y se llena importando un paquete de
  * club o cargando el plantel a mano.
  */
+/**
+ * SIEMBRA DESDE EL DESPLIEGUE — el mecanismo real de entrega.
+ *
+ * El club de cada cliente NO se importa desde un boton de la app: eso seria
+ * darle a un operador la posibilidad de reemplazar el plantel entero un sabado
+ * por la manana. El paquete se prepara aparte y se deja como
+ * `/public/club.json` en SU despliegue, con su propio dominio.
+ *
+ * Al abrir por primera vez —almacen vacio— la app busca ese archivo y siembra
+ * desde el. Si no existe, cae en el comportamiento de siempre. Se ejecuta una
+ * sola vez: en cuanto hay club guardado, el archivo ya no se mira, asi que las
+ * altas del club nunca se pisan con un redespliegue.
+ *
+ * Es asincrono a proposito y vive fuera de `bootClub()`, que se llama en siete
+ * lugares de forma sincrona y no puede esperar a una descarga.
+ */
+export async function seedFromDeployment(): Promise<boolean> {
+  if (typeof window === 'undefined') return false
+  if (loadClub()) return false          // ya hay club: no se toca nunca mas
+
+  try {
+    const res = await fetch('/club.json', { cache: 'no-store' })
+    if (!res.ok) return false
+    const { parseClubPack } = await import('@/lib/club-pack')
+    const { club, error } = parseClubPack(await res.text())
+    if (error || !club) {
+      console.warn('[ARDI] /club.json presente pero invalido:', error)
+      return false
+    }
+    saveClub(club)
+    return true
+  } catch {
+    return false                        // sin archivo, o sin red: se sigue igual
+  }
+}
+
 export function bootClub(): ClubStore {
   const guardado = loadClub()
   if (guardado) return guardado

@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from 'react'
 import { GENERIC_SHIELDS } from '@/lib/generic-shields'
-import { Monitor, Gamepad2, Maximize, Minimize, ExternalLink, Tv, LayoutDashboard, Settings2, X, Shield, Box, Circle, Type, Users, Layers, Keyboard } from 'lucide-react'
+import { Monitor, Gamepad2, Maximize, Minimize, ExternalLink, Tv, Settings2, X, Users, Keyboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+ '@/components/ui/input'
+ '@/components/ui/label'
+ '@/components/ui/select'
 import { useGameState } from '@/hooks/use-game-state'
 import { OperatorView } from '@/components/operator-view'
 import { CourtOperatorView } from '@/components/court-operator-view'
@@ -14,15 +14,16 @@ import { useVenueSetup } from '@/hooks/use-venue-setup'
 import { OverlaysModal } from '@/components/scoreboard/OverlaysModal'
 import { ScreensPanel } from '@/components/scoreboard/ScreensPanel'
 import { HotkeysModal } from '@/components/scoreboard/HotkeysModal'
-import { playHorn, playBeep, armAudio, loadAudioConfig } from '@/lib/audio-engine'
+import { playHorn, armAudio, loadAudioConfig } from '@/lib/audio-engine'
 import {
   loadHotkeys, actionForKey, normalizeKey, KEYS_NEEDING_PREVENT,
   DEFAULT_HOTKEYS, VIEW_ACTIONS, ALWAYS_ON, dialogIsOpen, emitHotkey,
   OPEN_HOTKEYS_EVENT, type HotkeyMap
 } from '@/lib/hotkeys'
 import { CLUB_BRAND, defaultHomeLogo, clubLogoFallback } from '@/lib/club-brand'
+import { seedFromDeployment } from '@/lib/club-boot'
 import { ScoreboardView } from '@/components/scoreboard-view'
-import { toast } from 'sonner'
+ 'sonner'
 
 type ViewMode = 'operator' | 'pista' | 'videowall'
 
@@ -118,6 +119,17 @@ PreviewTeamLogo.displayName = 'PreviewTeamLogo';
 export default function HockeyControlPanel() {
   const venue = useVenueSetup()
 
+  /**
+   * Siembra del club desde el propio despliegue.
+   *
+   * Si este dominio trae su `/club.json`, la primera apertura carga ese club
+   * y recarga para que todo lo lea. Es el mecanismo de entrega: el paquete se
+   * prepara aparte y se sube con el sitio, no lo importa el operador.
+   */
+  useEffect(() => {
+    void seedFromDeployment().then(sembrado => { if (sembrado) window.location.reload() })
+  }, [])
+
   // Despliegue de club: precarga su escudo como local la primera vez
   useEffect(() => {
     const logo = defaultHomeLogo()
@@ -189,10 +201,10 @@ export default function HockeyControlPanel() {
         case 'clockSound':      if (!ended) { playHorn(500, cfg); g.toggleMainClock() } break
         case 'clockMute':       if (!ended) g.toggleMainClock(); break
         case 'buzzer':          playHorn(1200, cfg); break
+        // Dar posesion ya reinicia los 45: no hay atajo de reset aparte, ni
+        // atajo que pause la posesion. Detener el tiempo es del reloj principal.
         case 'possLeftToggle':  if (!ended) g.togglePossessionLeft(); break
-        case 'possLeftReset':   if (!ended) g.resetPossessionLeft(); break
         case 'possRightToggle': if (!ended) g.togglePossessionRight(); break
-        case 'possRightReset':  if (!ended) g.resetPossessionRight(); break
         case 'homeGoal':        if (!stopped && !ended) g.adjustHomeScore(1); break
         case 'awayGoal':        if (!stopped && !ended) g.adjustAwayScore(1); break
         case 'homeFoul':        if (!stopped && !ended) g.adjustHomeFouls(1); break

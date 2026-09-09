@@ -1,14 +1,17 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { ExpressRosterModal, type ExpressEntry } from '@/components/scoreboard/ExpressRosterModal'
-import { SERIES_ORDERED, serieLabel, findSerie } from '@/lib/series'
-import { squadFor } from '@/lib/club-roster'
+import { serieLabel, findSerie } from '@/lib/series'
+ '@/lib/club-roster'
 import { SavedTeamsModal } from '@/components/scoreboard/SavedTeamsModal'
 import { HomeScreen } from '@/components/scoreboard/HomeScreen'
+import { bootClub } from '@/lib/club-boot'
+import { seriesOf, CLUB_STORE_EVENT } from '@/lib/club-store'
 import { RosterLabModal } from '@/components/scoreboard/RosterLabModal'
-import { Play, Clock, Settings, X, Users, Upload, Trash2, Save, AlertTriangle, CheckCircle2, PenTool, Shield, User, Download, Plus } from 'lucide-react'
+import { SeriesEditorModal } from '@/components/scoreboard/SeriesEditorModal'
+import { Play, Settings, X, Users, Upload, Trash2, Save, Shield, User, Download, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import type { GameState, Period, Team, MatchConfig, Player, RefereeData, SignatureData } from '@/hooks/use-game-state'
 import { TacticalBoard } from '@/components/scoreboard/TacticalBoard'
-import { generateExpressRoster, downloadRosterCSV, processRosterImport } from '@/lib/roster-utils'
+import { generateExpressRoster, downloadRosterCSV } from '@/lib/roster-utils'
 
 interface ResumeParams {
   period: Period
@@ -62,14 +65,59 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
    * de una de ellas, no delante de todo.
    */
   const [puerta, setPuerta] = useState(true)
+
+  /**
+   * Las series de la liga, no la lista compilada.
+   *
+   * Cuatro pantallas leian `SERIES_ORDERED` —el arreglo escrito en
+   * `lib/series.ts`— mientras el editor guardaba en el almacen. Una serie
+   * creada por el operador se guardaba bien y no aparecia en ningun
+   * desplegable: ni para elegirla en un partido, ni para cargarle camisetas.
+   * Es el mismo patron de dos fuentes que ya mordio con los atajos de teclado
+   * y con los editores de plantel.
+   *
+   * Se refresca con el evento del almacen, asi que una serie nueva aparece sin
+   * recargar.
+   */
+  const [seriesLiga, setSeriesLiga] = useState(() => seriesOf(null))
+  useEffect(() => {
+    const refrescar = () => setSeriesLiga(seriesOf(bootClub()))
+    refrescar()
+    window.addEventListener(CLUB_STORE_EVENT, refrescar)
+    window.addEventListener('storage', refrescar)
+    return () => {
+      window.removeEventListener(CLUB_STORE_EVENT, refrescar)
+      window.removeEventListener('storage', refrescar)
+    }
+  }, [])
   const [showPlanteles, setShowPlanteles] = useState(false)
   const [showLigas, setShowLigas] = useState(false)
+  /** La tarjeta ofrece las dos cosas que promete: equipos y series. */
+  const [showEquipos, setShowEquipos] = useState(false)
+  const [showSeries, setShowSeries] = useState(false)
 
   // ─── Configuración del partido ────────────────────────────────────────────
   const [configSeriesName, setConfigSeriesName]     = useState(state.matchConfig.seriesName)
   const [configGender, setConfigGender]             = useState(state.matchConfig.gender)
   const [configPeriods, setConfigPeriods]           = useState(state.matchConfig.periodsCount.toString())
   const [configDuration, setConfigDuration]         = useState(state.matchConfig.periodDuration.toString())
+  const [configFecha, setConfigFecha] = useState('')
+  const [configHora, setConfigHora] = useState('')
+  const [configEstadio, setConfigEstadio] = useState('')
+  /** Canchas ya usadas. Se escriben una vez y despues se eligen. */
+  const [estadios, setEstadios] = useState<string[]>([])
+  useEffect(() => {
+    try { setEstadios(JSON.parse(localStorage.getItem('ardi-estadios') || '[]')) } catch { /* ignorar */ }
+  }, [])
+  const recordarEstadio = (nombre: string) => {
+    const v = nombre.trim()
+    if (!v) return
+    setEstadios(prev => {
+      const next = [v, ...prev.filter(e => e !== v)].slice(0, 20)
+      try { localStorage.setItem('ardi-estadios', JSON.stringify(next)) } catch { /* ignorar */ }
+      return next
+    })
+  }
   const [configCampeonato, setConfigCampeonato]     = useState(state.matchConfig.campeonato || 'Liga Regular')
   const [configPartidoNumero, setConfigPartidoNumero] = useState(state.matchConfig.partidoNumero || '1')
   const [selectedHomeTeam, setSelectedHomeTeam]     = useState<string>('')
@@ -188,20 +236,9 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
     downloadRosterCSV(players, teamName, configSeriesName, configGender)
   }
 
-  const handleRosterImport = async (e: React.ChangeEvent<HTMLInputElement>, team: 'home' | 'away') => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      const players = await processRosterImport(file)
-      if (team === 'home') setHomePlayers(players)
-      else setAwayPlayers(players)
-      toast.success(`Se importaron ${players.length} jugadores`)
-    } catch (err: unknown) {
-      toast.error((err instanceof Error ? err.message : null) || 'Error al procesar el archivo')
-    } finally {
-      e.target.value = ''
-    }
-  }
+  // `handleRosterImport` y `addPlayerToRoster` se eliminaron: los dos creaban
+  // personas con `crypto.randomUUID()`, sin identidad estable. Quedarse con
+  // las funciones sin usar invitaba a volver a cablearlas por error.
 
   const handleResumeStateImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -315,19 +352,6 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
     }
   }
 
-  const addPlayerToRoster = () => {
-    if (!newPlayerNumber) return
-    const player: Player = {
-      id: crypto.randomUUID(),
-      number: newPlayerNumber, name: newPlayerName, rut: newPlayerRut,
-      position: newPlayerPosition as Player['position'],
-      role: newPlayerRole as Player['role']
-    }
-    if (editingPlayerTeam === 'home') setHomePlayers(prev => [...prev, player])
-    else setAwayPlayers(prev => [...prev, player])
-    setNewPlayerNumber(''); setNewPlayerName(''); setNewPlayerRut(''); setNewPlayerPosition(''); setNewPlayerRole('')
-  }
-
   const removePlayer = (team: 'home' | 'away', playerId: string) => {
     if (team === 'home') setHomePlayers(prev => prev.filter(p => p.id !== playerId))
     else setAwayPlayers(prev => prev.filter(p => p.id !== playerId))
@@ -340,11 +364,20 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
     const awayRosterNumbers = [...parseRoster(configAwayRoster), ...awayPlayers.map(p => p.number)]
       .filter((v, i, a) => a.indexOf(v) === i)
 
+    recordarEstadio(configEstadio)
+
     const config: MatchConfig = {
       seriesName: configSeriesName, gender: configGender,
       periodsCount: parseInt(configPeriods) || 2,
       periodDuration: parseInt(configDuration) || 25,
       campeonato: configCampeonato, partidoNumero: configPartidoNumero,
+      // Si no se escribieron, se toman del reloj del equipo: el partido se
+      // esta jugando ahora. Nadie deberia teclear la fecha de hoy un sabado
+      // por la manana. Lo escrito a mano manda, que es lo que hace falta al
+      // reanudar un suspendido de otra fecha.
+      fecha: configFecha || new Date().toISOString().slice(0, 10),
+      hora: configHora || new Date().toTimeString().slice(0, 5),
+      estadio: configEstadio,
       homeRoster: homeRosterNumbers, awayRoster: awayRosterNumbers,
       homePlayers, awayPlayers, referees,
       signatures: state.matchConfig.signatures,
@@ -378,13 +411,40 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
       {puerta && (
         <HomeScreen
           onExpress={() => setShowExpressDialog(true)}
-          onEquipos={() => setTeamsModalFor('home')}
+          onEquipos={() => setShowEquipos(true)}
           onJugadores={() => setShowPlanteles(true)}
           onLigas={() => setShowLigas(true)}
         />
       )}
 
       <RosterLabModal open={showPlanteles} onClose={() => setShowPlanteles(false)} />
+      <SeriesEditorModal open={showSeries} onClose={() => setShowSeries(false)} />
+
+      {/* La tarjeta decia "Equipos y series" y solo abria equipos. Se pregunta
+          cual de las dos, en vez de elegir por el operador. */}
+      <Dialog open={showEquipos} onOpenChange={setShowEquipos}>
+        <DialogContent className="bg-zinc-900 border-2 border-blue-800 text-white max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black">Equipos y series</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <button onClick={() => { setShowEquipos(false); setTeamsModalFor('home') }}
+              className="w-full text-left rounded-xl border-2 border-zinc-800 hover:border-blue-600 p-3 transition-colors touch-manipulation active:scale-[0.98]">
+              <span className="block font-black text-sm">Equipos</span>
+              <span className="block text-[11px] text-zinc-500 leading-snug">
+                Los clubes con los que juegas, con su escudo y sus planteles.
+              </span>
+            </button>
+            <button onClick={() => { setShowEquipos(false); setShowSeries(true) }}
+              className="w-full text-left rounded-xl border-2 border-zinc-800 hover:border-blue-600 p-3 transition-colors touch-manipulation active:scale-[0.98]">
+              <span className="block font-black text-sm">Series</span>
+              <span className="block text-[11px] text-zinc-500 leading-snug">
+                Las categorías de tu liga: Sub-13, Infantil, Adulta…
+              </span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showLigas} onOpenChange={setShowLigas}>
         <DialogContent className="bg-zinc-900 border-2 border-purple-800 text-white max-w-md" aria-describedby={undefined}>
@@ -432,6 +492,33 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
               <Input value={configPartidoNumero} onChange={e => setConfigPartidoNumero(e.target.value)} placeholder="1" className="bg-zinc-800 border-zinc-600 mt-1" />
             </div>
           </div>
+
+          {/* Fecha, hora y sede. Vacias = las del equipo al iniciar. Se
+              escriben solo cuando NO son las de ahora, que es el caso de un
+              partido suspendido que se reanuda otro dia. */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <Label className="text-zinc-400 text-xs">Fecha</Label>
+              <Input type="date" value={configFecha} onChange={e => setConfigFecha(e.target.value)}
+                className="bg-zinc-800 border-zinc-600 mt-1" />
+            </div>
+            <div>
+              <Label className="text-zinc-400 text-xs">Hora</Label>
+              <Input type="time" value={configHora} onChange={e => setConfigHora(e.target.value)}
+                className="bg-zinc-800 border-zinc-600 mt-1" />
+            </div>
+            <div className="col-span-2">
+              <Label className="text-zinc-400 text-xs">Estadio / Cancha</Label>
+              <Input value={configEstadio} onChange={e => setConfigEstadio(e.target.value)}
+                list="ardi-estadios" placeholder="Gimnasio…"
+                className="bg-zinc-800 border-zinc-600 mt-1" />
+              {/* Las canchas de una liga son siempre las mismas: se recuerdan
+                  al iniciar y despues se eligen, como los escudos. */}
+              <datalist id="ardi-estadios">
+                {estadios.map(e => <option key={e} value={e} />)}
+              </datalist>
+            </div>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <Label className="text-zinc-400 text-xs">Serie / Categoria</Label>
@@ -439,7 +526,7 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
                 <SelectTrigger className="bg-zinc-800 border-zinc-600 mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-zinc-800 border-zinc-600 max-h-60">
                   {/* Mismas series que el modo Express: una sola fuente */}
-                  {SERIES_ORDERED.map(se => (
+                  {seriesLiga.map(se => (
                     <SelectItem key={se.id} value={serieLabel(se).toUpperCase()}>{serieLabel(se)}</SelectItem>
                   ))}
                   <SelectItem value="AMISTOSO">Amistoso</SelectItem>
@@ -580,31 +667,32 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
                           </SelectContent>
                         </Select>
                       )}
-                      <input type="file" accept=".csv,.xlsx,.xls" id={inputId} className="hidden" onChange={e => handleRosterImport(e, side)} />
-                      <Button onClick={() => document.getElementById(inputId)?.click()} variant="outline" size="sm" className="border-zinc-600"><Upload className="w-4 h-4 mr-1" /> Importar CSV</Button>
+                      {/* El importador propio de esta pantalla se retiro.
+                          Creaba a cada persona con un uuid nuevo
+                          (`processRosterImport`), asi que sus goles y tarjetas
+                          no se acumulaban de una fecha a otra. Habia DOS
+                          puertas al mismo dato con resultados distintos y sin
+                          manera de que el operador lo notara. La base de
+                          jugadores se construye en Planteles, que si emite
+                          identidad estable. */}
                       <Button onClick={() => handleExportRoster(side)} variant="outline" size="sm" className="border-zinc-600" disabled={players.length === 0}><Download className="w-4 h-4 mr-1" /> Exportar</Button>
                       <Button onClick={() => setShowSaveRosterDialog(side)} variant="outline" size="sm" className="border-green-700 text-green-400" disabled={players.length === 0}><Save className="w-4 h-4 mr-1" /> Guardar</Button>
                     </div>
 
-                    <div className="grid grid-cols-7 gap-2">
-                      <Input value={newPlayerNumber} onChange={e => setNewPlayerNumber(e.target.value)} placeholder="#" className="bg-zinc-800 border-zinc-600 col-span-1" maxLength={3} />
-                      <Input value={newPlayerRut}    onChange={e => setNewPlayerRut(e.target.value)}    placeholder="RUT" className="bg-zinc-800 border-zinc-600 col-span-2" />
-                      <Input value={newPlayerName}   onChange={e => setNewPlayerName(e.target.value)}   placeholder="Nombre" className="bg-zinc-800 border-zinc-600 col-span-2" />
-                      <Select value={newPlayerRole} onValueChange={setNewPlayerRole}>
-                        <SelectTrigger className="bg-zinc-800 border-zinc-600 col-span-1"><SelectValue placeholder="Rol" /></SelectTrigger>
-                        <SelectContent className="bg-zinc-800 border-zinc-600">
-                          <SelectItem value="capitan">Capitán</SelectItem>
-                          <SelectItem value="portero">Portero</SelectItem>
-                          <SelectItem value="jugador_pista">Jugador de Pista</SelectItem>
-                          <SelectItem value="dt">Director Técnico (DT)</SelectItem>
-                          <SelectItem value="ay1">Ayudante 1 (AY1)</SelectItem>
-                          <SelectItem value="ay2">Ayudante 2 (AY2)</SelectItem>
-                          <SelectItem value="ax1">Auxiliar 1 (AX1)</SelectItem>
-                          <SelectItem value="ax2">Auxiliar 2 (AX2)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button onClick={addPlayerToRoster} className={`bg-${color}-600 hover:bg-${color}-500 col-span-1`}><Plus className="w-4 h-4" /></Button>
-                    </div>
+                    {/* El alta manual con RUT vivia aqui. Se retiro por lo
+                        mismo, y ademas porque escribia el documento de un
+                        menor en una ficha que despues viaja en el CSV. */}
+                    <button
+                      onClick={() => setShowPlanteles(true)}
+                      className="w-full flex items-center gap-2 bg-zinc-950 border border-dashed border-zinc-700 hover:border-amber-600 rounded-lg px-3 py-2.5 text-left transition-colors touch-manipulation">
+                      <Plus className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-[12px] font-bold text-zinc-200">¿Falta alguien?</span>
+                        <span className="block text-[10px] text-zinc-500 leading-snug">
+                          Los jugadores se crean en Planteles, donde reciben su identidad.
+                        </span>
+                      </span>
+                    </button>
 
                     <div className="max-h-40 overflow-y-auto space-y-1">
                       {players.map(p => (
@@ -746,7 +834,7 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
                 <SelectTrigger className="bg-zinc-800 border-zinc-600 mt-1 h-10 font-bold"><SelectValue placeholder="Elige la serie..." /></SelectTrigger>
                 <SelectContent className="bg-zinc-800 border-zinc-600 max-h-72">
                   <SelectItem value="amistoso">Amistoso (sin serie)</SelectItem>
-                  {SERIES_ORDERED.map(se => (
+                  {seriesLiga.map(se => (
                     <SelectItem key={se.id} value={se.id}>{serieLabel(se)}</SelectItem>
                   ))}
                 </SelectContent>

@@ -6,7 +6,7 @@ import type { GameState } from '@/hooks/use-game-state'
 import { buildSummary } from '@/lib/match-summary'
 import { Slot, type SlotCtx } from '@/components/scoreboard/OverlaySlot'
 import { OverlayCanvas } from '@/components/scoreboard/OverlayCanvas'
-import { CANVAS_W, CANVAS_H, DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
+import { DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
 /**
  * PANTALLA DE FIN DE PARTIDO

@@ -15,8 +15,12 @@ export const HOTKEYS_CHANGED_EVENT = 'ardi-hotkeys-changed'
 
 export type HotkeyAction =
   | 'clockSound' | 'clockMute' | 'buzzer'
-  | 'possLeftToggle' | 'possLeftReset'
-  | 'possRightToggle' | 'possRightReset'
+  // `possLeftReset` y `possRightReset` se eliminaron: dar posesion ya reinicia
+  // los 45, asi que eran un segundo gesto para lo mismo. Y el atajo que
+  // pausaba la posesion tampoco existe: la bocha siempre la tiene alguien, y
+  // quien detiene el tiempo es el reloj principal.
+  | 'possLeftToggle'
+  | 'possRightToggle'
   | 'nextPeriod' | 'intermission'
   | 'homeGoal' | 'awayGoal'
   | 'homeFoul' | 'awayFoul'
@@ -36,9 +40,7 @@ export const HOTKEY_DEFS: HotkeyDef[] = [
   { action: 'clockMute',       label: 'Reloj sin chicharra',   group: 'Reloj',     priority: 1 },
   { action: 'buzzer',          label: 'Chicharra manual',      group: 'Reloj',     priority: 1 },
   { action: 'possLeftToggle',  label: 'Posesión local',        group: 'Posesión',  priority: 1 },
-  { action: 'possLeftReset',   label: 'Reset 45 local',        group: 'Posesión',  priority: 1 },
   { action: 'possRightToggle', label: 'Posesión visita',       group: 'Posesión',  priority: 1 },
-  { action: 'possRightReset',  label: 'Reset 45 visita',       group: 'Posesión',  priority: 1 },
   { action: 'homeGoal',        label: 'Gol local',             group: 'Marcador',  priority: 2, hint: 'Sin goleador' },
   { action: 'awayGoal',        label: 'Gol visita',            group: 'Marcador',  priority: 2, hint: 'Sin goleador' },
   { action: 'homeFoul',        label: 'Falta local',           group: 'Marcador',  priority: 2 },
@@ -55,9 +57,7 @@ export const DEFAULT_HOTKEYS: HotkeyMap = {
   clockMute: 'm',
   buzzer: 'b',
   possLeftToggle: 'a',
-  possLeftReset: 's',
   possRightToggle: 'l',
-  possRightReset: 'k',
   homeGoal: 'q',
   awayGoal: 'p',
   homeFoul: 'w',
@@ -75,8 +75,6 @@ export const DEFAULT_HOTKEYS: HotkeyMap = {
 export const CLICKER_HOTKEYS: Partial<HotkeyMap> = {
   clockSound: 'PageDown',
   buzzer: 'PageUp',
-  possLeftReset: 'F5',
-  possRightReset: 'Escape',
 }
 
 /** Normaliza un evento de teclado a la forma en que guardamos las teclas. */
@@ -107,9 +105,7 @@ const LEGACY_TO_ACTION: Record<string, HotkeyAction> = {
   mainSound: 'clockSound',
   mainMute: 'clockMute',
   homePosToggle: 'possLeftToggle',
-  homePosReset: 'possLeftReset',
   awayPosToggle: 'possRightToggle',
-  awayPosReset: 'possRightReset',
 }
 
 /**

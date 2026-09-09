@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Users, Download, Upload, Plus, Trash2, Check, FileText, Pencil } from 'lucide-react'
+import { Users, Download, Upload, Plus, Trash2, Check, FileText, Pencil, ShieldCheck } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,7 @@ import {
   type PersonRow
 } from '@/lib/roster-csv'
 import { issuePersonId } from '@/lib/identity'
+import { ClubPackModal } from '@/components/scoreboard/ClubPackModal'
 
 /**
  * DESARROLLO DE PLANTELES
@@ -52,6 +53,7 @@ export function RosterLabModal({ open, onClose }: Props) {
   const [nuevoDorsal, setNuevoDorsal] = useState('')
   const [editando, setEditando] = useState<string | null>(null)
   const [pendiente, setPendiente] = useState<RowMatch[] | null>(null)
+  const [showPack, setShowPack] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -289,8 +291,23 @@ export function RosterLabModal({ open, onClose }: Props) {
           )}
         </div>
 
+        {/* El club entero en un archivo. Vive aqui porque es donde estan sus
+            datos, y se llama por lo que hace, no por como se llama por dentro. */}
+        <ClubPackModal open={showPack} onClose={() => setShowPack(false)} />
+
         {!pendiente && (
-          <div className="border-t border-zinc-800 p-3 grid grid-cols-3 gap-2 bg-zinc-950">
+          <div className="border-t border-zinc-800 p-3 space-y-2 bg-zinc-950">
+          <button onClick={() => setShowPack(true)}
+            className="w-full flex items-center gap-2 rounded-lg border border-emerald-900 hover:border-emerald-600 px-3 py-2 text-left transition-colors touch-manipulation active:scale-[0.99]">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="flex-1 min-w-0">
+              <span className="block text-[12px] font-black text-zinc-200">Sé el marcador para tu club</span>
+              <span className="block text-[10px] text-zinc-500 leading-snug">
+                Guarda o traslada el club entero: plantel, series y dorsales.
+              </span>
+            </span>
+          </button>
+          <div className="grid grid-cols-3 gap-2">
             <Button onClick={bajarPlantilla} variant="outline" className="h-11 text-[10px] font-bold border-zinc-600">
               <FileText className="w-4 h-4 mr-1" /> PLANTILLA
             </Button>
@@ -302,6 +319,7 @@ export function RosterLabModal({ open, onClose }: Props) {
             <Button onClick={exportar} variant="outline" className="h-11 text-[10px] font-bold border-zinc-600">
               <Download className="w-4 h-4 mr-1" /> EXPORTAR
             </Button>
+          </div>
           </div>
         )}
       </DialogContent>

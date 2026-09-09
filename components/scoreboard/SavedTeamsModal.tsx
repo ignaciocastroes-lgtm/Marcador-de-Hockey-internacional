@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { Team } from '@/hooks/use-game-state'
-import { SERIES_ORDERED, serieLabel, findSerie } from '@/lib/series'
-import { squadFor } from '@/lib/club-roster'
+import { serieLabel, findSerie } from '@/lib/series'
+import { bootClub } from '@/lib/club-boot'
+import { seriesOf } from '@/lib/club-store'
 import { DEFAULT_ENTRIES, MAX_ENTRIES, MAX_GOALIES, type ExpressEntry } from '@/components/scoreboard/ExpressRosterModal'
 
 /**
@@ -36,15 +37,23 @@ interface Props {
   onPick: (name: string, entries: ExpressEntry[]) => void
 }
 
-/** Plantel inicial de cada serie al crear un club. */
+/**
+ * Plantel inicial de cada serie al crear un club.
+ *
+ * BUG QUE ARREGLA: esto llamaba a `squadFor(se.id)`, que lee `CLUB_PLAYERS`
+ * —el plantel de Internacional compilado en git—. Resultado: crear un rival
+ * llamado "Bata" lo dejaba con las jugadoras de Internacional adentro, serie
+ * por serie. Doblemente mal: era el ultimo cable a la fuente vieja que R4
+ * debia cortar, y ademas un rival no tiene por que nacer con el plantel de
+ * la casa.
+ *
+ * Ahora nace VACIO. Un equipo recien creado no tiene jugadores inventados
+ * que despues haya que borrar uno por uno; se le cargan desde Planteles o al
+ * armar el partido.
+ */
 const rostersPorDefecto = (): Record<string, ExpressEntry[]> => {
   const out: Record<string, ExpressEntry[]> = {}
-  SERIES_ORDERED.forEach(se => {
-    const club = squadFor(se.id)
-    out[se.id] = club.length
-      ? club.map(p => ({ number: p.number, isGoalie: !!p.isGoalie }))
-      : DEFAULT_ENTRIES.map(e => ({ ...e }))
-  })
+  seriesOf(bootClub()).forEach(se => { out[se.id] = [] })
   return out
 }
 
@@ -112,7 +121,7 @@ export function SavedTeamsModal({
       rosters: serie ? { ...base, [serie]: entries } : base
     }
     saveTeam(t)
-    toast.success(editing ? `${n} actualizado` : `${n} creado con las ${SERIES_ORDERED.length} series`)
+    toast.success(editing ? `${n} actualizado` : `${n} creado con las ${seriesOf(bootClub()).length} series`)
     setEditing(t)
   }
 

@@ -2,10 +2,10 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import Image from 'next/image'
-import { Download, FileText, X, CheckCircle2, AlertTriangle, Save, RotateCcw, PenTool } from 'lucide-react'
+import { Download, FileText, CheckCircle2, AlertTriangle, Save, RotateCcw, PenTool } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { SignatureCanvas } from './SignatureCanvas'
+ './SignatureCanvas'
 import type { GameState, Player, Period, ClosingSignatureData, CardHistory } from '@/hooks/use-game-state'
 
 const OBS_KEY = 'ardi-planilla-observaciones'
@@ -110,6 +110,18 @@ export function OfficialSheetModal({
     return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t
   }
 
+  /**
+   * La fecha y la hora del ENCUENTRO. Se prefiere lo que se escribio al
+   * configurarlo; si no hay nada, el reloj de cuando arranco. Nunca "ahora":
+   * el acta se puede abrir e imprimir cualquier dia posterior.
+   */
+  const inicio = state.timestamps?.matchStart ? new Date(state.timestamps.matchStart) : null
+  const fechaPartido = state.matchConfig.fecha
+    ? new Date(`${state.matchConfig.fecha}T00:00:00`).toLocaleDateString('es-CL')
+    : (inicio ?? new Date()).toLocaleDateString('es-CL')
+  const horaPartido = state.matchConfig.hora
+    || (inicio ? inicio.toTimeString().slice(0, 5) : '')
+
   // ─── Exportar CSV ─────────────────────────────────────────────────────────
   const exportCSV = () => {
     const allGoals = (state.matchLog || []).filter(e => e.eventType === 'gol').sort((a, b) => {
@@ -139,7 +151,9 @@ export function OfficialSheetModal({
     const matchDate = state.timestamps?.matchStart ? new Date(state.timestamps.matchStart) : new Date()
     csv += `Campeonato,${q(state.matchConfig.campeonato || 'Liga Regular')}\n`
     csv += `Partido N,${q(state.matchConfig.partidoNumero || '1')}\n`
-    csv += `Fecha,${matchDate.toLocaleDateString('es-CL')}\n`
+    csv += `Fecha,${q(fechaPartido)}\n`
+    csv += `Hora,${q(horaPartido)}\n`
+    csv += `Estadio,${q(state.matchConfig.estadio || '')}\n`
     csv += `Hora Inicio,${fmtStamp(state.timestamps?.matchStart)}\n`
     csv += `Serie,${q(state.matchConfig.seriesName)}\n`
     csv += `Rama,${q(state.matchConfig.gender)}\n\n`
@@ -278,7 +292,7 @@ export function OfficialSheetModal({
             <p className="text-zinc-400 text-xs sm:text-sm">Federación Hockey Patín Chile 2026</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={exportCSV} className="bg-green-600 hover:bg-green-500 font-bold h-9">
+            <Button onClick={exportCSV} variant="outline" className="border-zinc-600 font-bold h-9">
               <Download className="w-4 h-4 mr-2" /> CSV
             </Button>
             <Button onClick={() => window.print()} variant="outline" className="border-zinc-600 h-9">
@@ -298,9 +312,15 @@ export function OfficialSheetModal({
                 <p className="font-bold text-yellow-400">{state.matchConfig.campeonato || 'Liga Regular'}</p>
               </div>
               <div><span className="text-zinc-500 text-xs block">PARTIDO N°</span><p className="font-bold">{state.matchConfig.partidoNumero || '1'}</p></div>
-              <div><span className="text-zinc-500 text-xs block">FECHA</span><p className="font-bold">{new Date().toLocaleDateString('es-CL')}</p></div>
+              {/* Antes decia `new Date()`: la fecha de HOY, no la del partido.
+                  Reimprimir el acta una semana despues la fechaba mal. */}
+              <div><span className="text-zinc-500 text-xs block">FECHA</span><p className="font-bold">{fechaPartido}</p></div>
+              <div><span className="text-zinc-500 text-xs block">HORA</span><p className="font-bold">{horaPartido}</p></div>
               <div><span className="text-zinc-500 text-xs block">SERIE</span><p className="font-bold">{state.matchConfig.seriesName}</p></div>
               <div><span className="text-zinc-500 text-xs block">RAMA</span><p className="font-bold">{state.matchConfig.gender}</p></div>
+              {state.matchConfig.estadio && (
+                <div className="md:col-span-2"><span className="text-zinc-500 text-xs block">ESTADIO</span><p className="font-bold">{state.matchConfig.estadio}</p></div>
+              )}
             </div>
             {(state.matchConfig.referees?.principal || state.matchConfig.referees?.cronometrista) && (
               <div className="mt-3 pt-3 border-t border-zinc-700 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
@@ -595,15 +615,22 @@ export function OfficialSheetModal({
 
           {/* Botones de acción */}
           <div className="flex flex-col gap-2 pb-4">
+            {/* Sellar entrega el ACTA CON FORMATO, no el CSV.
+                El CSV es una grilla de comas: sirve para llevar los datos a
+                otro sistema, pero como documento para presentar a la
+                federacion se ve como "blanco, lineas y datos". La hoja de
+                impresion (A4 apaisado, ya definida en globals.css) es la
+                misma planilla que se ve en pantalla. El CSV queda como
+                segunda opcion, para quien necesite los datos crudos. */}
             {!planillaLocked && matchEnded && (
-              <Button onClick={() => { setLocalLocked(true); onLockPlanilla?.(); exportCSV(); }} disabled={!allClosingSignaturesComplete && !forzarCierre} className={`w-full h-12 font-black ${(allClosingSignaturesComplete || forzarCierre) ? 'bg-green-600 hover:bg-green-500' : 'bg-zinc-700 cursor-not-allowed'}`}>
+              <Button onClick={() => { setLocalLocked(true); onLockPlanilla?.(); setTimeout(() => window.print(), 350) }} disabled={!allClosingSignaturesComplete && !forzarCierre} className={`w-full h-12 font-black ${(allClosingSignaturesComplete || forzarCierre) ? 'bg-green-600 hover:bg-green-500' : 'bg-zinc-700 cursor-not-allowed'}`}>
                 {(allClosingSignaturesComplete || forzarCierre) ? <><CheckCircle2 className="w-5 h-5 mr-2" /> SELLAR Y EXPORTAR PLANILLA</> : <><AlertTriangle className="w-5 h-5 mr-2" /> COMPLETE LAS 8 FIRMAS O MARQUE EXCEPCIÓN</>}
               </Button>
             )}
             {planillaLocked && (
               <div className="flex gap-2">
-                <Button onClick={exportCSV} className="flex-1 h-12 bg-green-600 hover:bg-green-500 font-black"><Download className="w-5 h-5 mr-2" /> DESCARGAR CSV</Button>
-                <Button onClick={() => window.print()} className="flex-1 h-12 bg-blue-600 hover:bg-blue-500 font-black"><FileText className="w-5 h-5 mr-2" /> IMPRIMIR PDF</Button>
+                <Button onClick={() => window.print()} className="flex-1 h-12 bg-blue-600 hover:bg-blue-500 font-black"><FileText className="w-5 h-5 mr-2" /> ACTA (PDF)</Button>
+                <Button onClick={exportCSV} variant="outline" className="flex-1 h-12 border-zinc-600 font-bold"><Download className="w-5 h-5 mr-2" /> Datos CSV</Button>
               </div>
             )}
             <div className="flex gap-2">

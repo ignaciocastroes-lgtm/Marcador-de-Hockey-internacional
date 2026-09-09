@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
-import { Volume2, Upload, Trash2, Play, Check, Bell, Zap, AlertTriangle } from 'lucide-react'
+import { Volume2, Upload, Trash2, Check, Bell, Zap, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -71,12 +71,20 @@ export function AudioModal({ open, onClose, onChange }: Props) {
               Fin de periodo, fin de posesión y fin de partido.
             </p>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button onClick={() => apply({ ...cfg, hornMode: 'synth' })}
                 className={`p-3 rounded-lg border-2 text-left transition-colors ${
                   cfg.hornMode === 'synth' ? 'border-blue-500 bg-blue-950/40' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}>
                 <span className="block text-sm font-black">Sintetizada</span>
-                <span className="block text-[10px] text-zinc-500 leading-snug">Sin archivos ni internet</span>
+                <span className="block text-[10px] text-zinc-500 leading-snug">Limpia y sobria</span>
+              </button>
+              {/* La de pabellon: sierra + pulso desafinado, ruido, saturacion.
+                  Suena aspera a proposito — es lo que la hace reconocible. */}
+              <button onClick={() => apply({ ...cfg, hornMode: 'estadio' })}
+                className={`p-3 rounded-lg border-2 text-left transition-colors ${
+                  cfg.hornMode === 'estadio' ? 'border-blue-500 bg-blue-950/40' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}>
+                <span className="block text-sm font-black">Estadio</span>
+                <span className="block text-[10px] text-zinc-500 leading-snug">Zumbador metálico</span>
               </button>
               <button onClick={() => cfg.customData ? apply({ ...cfg, hornMode: 'custom' }) : fileRef.current?.click()}
                 className={`p-3 rounded-lg border-2 text-left transition-colors ${
