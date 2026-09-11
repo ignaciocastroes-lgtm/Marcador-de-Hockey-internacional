@@ -1,4 +1,4 @@
-# ARDI Hockey Patín 3.39 — "Pista Viva"
+# ARDI Hockey Patín 3.5
 
 ## Modo PISTA: la ficha es la mesa de mando
 Tocar un jugador abre su hoja de acciones. El menú de tarjetas lo decide la

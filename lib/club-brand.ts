@@ -23,6 +23,18 @@ export interface ClubBrand {
   /** Escudo del club. Preferir una ruta local tipo '/escudos/mi-club.webp'. */
   logoUrl: string
   /**
+   * Copia PEQUEÑA del escudo, para los sitios donde se dibuja a 36 px: la
+   * barra superior y la pantalla de inicio.
+   *
+   * El escudo bueno pesa lo que tiene que pesar para verse en una proyección
+   * de estadio, y usarlo también para un icono de 36 px obliga al navegador a
+   * descargar y reescalar esa imagen entera antes de pintar la barra. Por eso
+   * demoraba en aparecer.
+   *
+   * Vacío = se usa `logoUrl`, como antes.
+   */
+  logoIconUrl: string
+  /**
    * Respaldo si `logoUrl` no carga (típicamente, la URL externa que se usaba
    * antes de mover el archivo a /public/escudos/). Dejar '' cuando el archivo
    * local ya esté en su lugar.
@@ -41,10 +53,14 @@ export const CLUB_BRAND: ClubBrand = {
   name: 'INTERNACIONAL LO ESPEJO',
   shortName: 'INTERNACIONAL',
   logoUrl: '/escudos/internacional-lo-espejo.webp',
-  logoUrlFallback: 'https://i.ibb.co/0jx754rd/Internacional-Lo-Espejo-N.webp',
+  logoIconUrl: '/escudos/internacional-lo-espejo-64.webp',
+  logoUrlFallback: '',   // el archivo local ya esta en /public/escudos/
   appTitle: 'ARDI Marcador Hockey Patín PRO',
   isDefaultHome: true
 }
+
+/** El escudo para tamaños chicos: el reducido si existe, si no el grande. */
+export const clubIcon = (): string => CLUB_BRAND.logoIconUrl || CLUB_BRAND.logoUrl
 
 /** Nombre a mostrar cuando todavía no hay equipo local configurado. */
 export const defaultHomeName = (): string =>

@@ -116,6 +116,17 @@ export type MatchPhase = 'pre-partido' | 'en-juego' | 'post-partido'
 
 // Motor de Eventos (Logging)
 export interface MatchEvent {
+  /**
+   * Gol cobrado y despues ANULADO POR EL ARBITRO.
+   *
+   * No es lo mismo que un gol cargado por error de la mesa. El arbitro cobro,
+   * el marcador subio, la gente lo vio, y despues se anulo: eso ocurrio y el
+   * acta tiene que consignarlo. Un error de carga nunca paso, y dejarlo
+   * escrito ensucia el registro.
+   *
+   * Dos caminos: `annulGoal` marca esto; la enmienda de la mesa BORRA.
+   */
+  anulado?: boolean
   id: string
   timestamp: string
   gameTime: number
@@ -430,14 +441,67 @@ export function useGameState() {
     }
   }, [isReceiver])
 
+  /**
+   * SINCRONIA CON LAS PANTALLAS — con freno.
+   *
+   * Esto corria en CADA cambio de estado, o sea una vez por segundo mientras
+   * el reloj avanza. Y lo que mandaba era el `GameState` ENTERO: acta,
+   * plantel, registro cronologico y ajustes, serializado a JSON, por
+   * BroadcastChannel y ademas escrito en localStorage.
+   *
+   * Al principio del partido son unos kilobytes. A la hora de juego, con el
+   * acta llena de eventos, cada tick cuesta bastante mas — y ese costo se
+   * paga dentro del segundo, empujando el reloj. El propio peso del partido
+   * hacia el partido mas lento.
+   *
+   * Ahora se agrupa: como maximo cuatro envios por segundo. Es mas que
+   * suficiente para que un tablero se vea al dia —el ojo no distingue 250 ms
+   * en un marcador— y baja el trabajo por tick.
+   *
+   * El ultimo estado NO se pierde: si llega un cambio durante la espera,
+   * queda agendado y se manda al vencer el plazo.
+   */
+  const syncPendiente = useRef<GameState | null>(null)
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const syncUltimo = useRef(0)
+  const SYNC_MS = 250
+
   useEffect(() => {
     if (isReceiver) return
-    lsSet(LIVE_GAME_STORAGE_KEY, state)
     if (!channelRef.current) {
       channelRef.current = new BroadcastChannel('hockey-scoreboard-sync')
     }
-    channelRef.current.postMessage({ type: 'GAME_STATE_UPDATE', state })
+
+    const enviar = (snapshot: GameState) => {
+      syncUltimo.current = Date.now()
+      lsSet(LIVE_GAME_STORAGE_KEY, snapshot)
+      channelRef.current?.postMessage({ type: 'GAME_STATE_UPDATE', state: snapshot })
+    }
+
+    const desde = Date.now() - syncUltimo.current
+    if (desde >= SYNC_MS) {
+      enviar(state)
+      return
+    }
+
+    syncPendiente.current = state
+    if (!syncTimer.current) {
+      syncTimer.current = setTimeout(() => {
+        syncTimer.current = null
+        if (syncPendiente.current) {
+          enviar(syncPendiente.current)
+          syncPendiente.current = null
+        }
+      }, SYNC_MS - desde)
+    }
   }, [state, isReceiver])
+
+  // Al desmontar, lo pendiente se escribe: una recarga no puede perder el
+  // ultimo cuarto de segundo del partido.
+  useEffect(() => () => {
+    if (syncTimer.current) clearTimeout(syncTimer.current)
+    if (syncPendiente.current) lsSet(LIVE_GAME_STORAGE_KEY, syncPendiente.current)
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -457,16 +521,64 @@ export function useGameState() {
     }
   }, [isReceiver])
 
+  /**
+   * EL ANCLA DEL RELOJ — por que el partido duraba de mas.
+   *
+   * El reloj es hibrido: un latido de 250 ms para refrescar, y
+   * `performance.now()` para saber cuanto tiempo paso de verdad. Asi, si el
+   * navegador se congela dos segundos, el siguiente latido lo descuenta
+   * entero en vez de perderlo.
+   *
+   * El defecto estaba en las dependencias: `state.mainClock` estaba entre
+   * ellas, asi que CADA SEGUNDO —al cambiar el valor— React destruia el
+   * intervalo y creaba otro, con `startTs` nuevo. Los milisegundos entre que
+   * el tick calculaba y el efecto volvia a anclarse se tiraban a la basura.
+   * Cada segundo. Son unos milisegundos en una maquina holgada, y decenas en
+   * una lenta con cinco pantallas abiertas.
+   *
+   * No adelantaba: ATRASABA. Un periodo de 20 minutos duraba 20 y pico, y el
+   * exceso crecia a medida que el acta engordaba y cada tick costaba mas.
+   * Cero llegaba tarde, y el arbitro con cronometro de pulsera lo notaba
+   * justo al final.
+   *
+   * Ahora el ancla vive en un `ref` y se pone UNA vez, al arrancar el reloj.
+   * El efecto solo depende de si el reloj corre. Si alguien cambia el minuto
+   * por fuera —ajuste fino, o la reposicion del Art. 30.9— el tick lo detecta
+   * y vuelve a anclar, en vez de pelear contra el cambio.
+   */
+  type Ancla = { ts: number; clock: number } | null
+  const anclaReloj = useRef<Ancla>(null)
+  const anclaTimeout = useRef<Ancla>(null)
+  const anclaLeft = useRef<Ancla>(null)
+  const anclaRight = useRef<Ancla>(null)
+  const ultimoTimeout = useRef<number>(-1)
+  const ultimoLeft = useRef<number>(-1)
+  const ultimoRight = useRef<number>(-1)
+  const ultimoEscrito = useRef<number>(-1)
+
   useEffect(() => {
-    if (isReceiver || !state.isMainClockRunning || state.mainClock <= 0) return
-    const startTs    = performance.now()
-    const startClock = state.mainClock
+    if (isReceiver || !state.isMainClockRunning) return
+
+    anclaReloj.current = { ts: performance.now(), clock: state.mainClock }
+    ultimoEscrito.current = state.mainClock
 
     const interval = setInterval(() => {
-      const elapsed  = (performance.now() - startTs) / 1000
-      const accurate = Math.max(0, startClock - Math.floor(elapsed))
+      const ancla = anclaReloj.current
+      if (!ancla) return
+      const elapsed  = (performance.now() - ancla.ts) / 1000
+      const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
       setState(prev => {
-        if (!prev.isMainClockRunning || accurate === prev.mainClock) return prev
+        if (!prev.isMainClockRunning) return prev
+
+        // El reloj cambio por fuera del latido: se reancla y se deja pasar
+        // este tick. Sin esto, el ajuste fino se desharia solo.
+        if (prev.mainClock !== ultimoEscrito.current) {
+          anclaReloj.current = { ts: performance.now(), clock: prev.mainClock }
+          ultimoEscrito.current = prev.mainClock
+          return prev
+        }
+        if (accurate === prev.mainClock) return prev
+        ultimoEscrito.current = accurate
         
         const delta = prev.mainClock - accurate
         let finalSanctions = [...prev.sanctions]
@@ -512,18 +624,28 @@ export function useGameState() {
       })
     }, 250)
     return () => clearInterval(interval)
-  }, [isReceiver, state.isMainClockRunning, state.mainClock, playBuzzer])
+  }, [isReceiver, state.isMainClockRunning, playBuzzer])
 
   useEffect(() => {
     if (isReceiver || !state.activeTimeout || state.timeoutClock <= 0) return
     const startTs    = performance.now()
-    const startClock = state.timeoutClock
+    anclaTimeout.current = { ts: performance.now(), clock: state.timeoutClock }
+    ultimoTimeout.current = state.timeoutClock
 
     const interval = setInterval(() => {
-      const elapsed  = (performance.now() - startTs) / 1000
-      const accurate = Math.max(0, startClock - Math.floor(elapsed))
+      const ancla = anclaTimeout.current
+      if (!ancla) return
+      const elapsed  = (performance.now() - ancla.ts) / 1000
+      const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
       setState(prev => {
-        if (!prev.activeTimeout || accurate === prev.timeoutClock) return prev
+        if (!prev.activeTimeout) return prev
+        if (prev.timeoutClock !== ultimoTimeout.current) {
+          anclaTimeout.current = { ts: performance.now(), clock: prev.timeoutClock }
+          ultimoTimeout.current = prev.timeoutClock
+          return prev
+        }
+        if (accurate === prev.timeoutClock) return prev
+        ultimoTimeout.current = accurate
         if (accurate <= 0) {
           playBuzzer()
           return { ...prev, timeoutClock: 0, activeTimeout: null }
@@ -535,19 +657,33 @@ export function useGameState() {
       })
     }, 250)
     return () => clearInterval(interval)
-  }, [isReceiver, state.activeTimeout, state.timeoutClock, playBuzzer])
+  }, [isReceiver, state.activeTimeout, playBuzzer])
 
   // 🛡️ REPARADO: Vuelve el reloj a la normalidad cuando termina el descanso.
+  // Mismo ancla que el reloj principal: sin esto el descanso tambien se
+  // alargaba, y un entretiempo de 10 minutos terminaba pasado de hora.
+  const anclaDescanso = useRef<{ ts: number; clock: number } | null>(null)
+  const ultimoDescanso = useRef<number>(-1)
+
   useEffect(() => {
-    if (isReceiver || !state.isIntermission || state.mainClock <= 0) return
-    const startTs    = performance.now()
-    const startClock = state.mainClock
+    if (isReceiver || !state.isIntermission) return
+    anclaDescanso.current = { ts: performance.now(), clock: state.mainClock }
+    ultimoDescanso.current = state.mainClock
 
     const interval = setInterval(() => {
-      const elapsed  = (performance.now() - startTs) / 1000
-      const accurate = Math.max(0, startClock - Math.floor(elapsed))
+      const ancla = anclaDescanso.current
+      if (!ancla) return
+      const elapsed  = (performance.now() - ancla.ts) / 1000
+      const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
       setState(prev => {
-        if (!prev.isIntermission || accurate === prev.mainClock) return prev
+        if (!prev.isIntermission) return prev
+        if (prev.mainClock !== ultimoDescanso.current) {
+          anclaDescanso.current = { ts: performance.now(), clock: prev.mainClock }
+          ultimoDescanso.current = prev.mainClock
+          return prev
+        }
+        if (accurate === prev.mainClock) return prev
+        ultimoDescanso.current = accurate
         if (accurate <= 0) {
           playBuzzer()
           const sig = siguientePeriodo(prev)
@@ -569,18 +705,28 @@ export function useGameState() {
       })
     }, 250)
     return () => clearInterval(interval)
-  }, [isReceiver, state.isIntermission, state.mainClock, playBuzzer])
+  }, [isReceiver, state.isIntermission, playBuzzer])
 
   useEffect(() => {
     if (isReceiver || !state.isPossessionLeftRunning || state.possessionClockLeft <= 0) return
     const startTs    = performance.now()
-    const startClock = state.possessionClockLeft
+    anclaLeft.current = { ts: performance.now(), clock: state.possessionClockLeft }
+    ultimoLeft.current = state.possessionClockLeft
 
     const interval = setInterval(() => {
-      const elapsed  = (performance.now() - startTs) / 1000
-      const accurate = Math.max(0, startClock - Math.floor(elapsed))
+      const ancla = anclaLeft.current
+      if (!ancla) return
+      const elapsed  = (performance.now() - ancla.ts) / 1000
+      const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
       setState(prev => {
-        if (!prev.isPossessionLeftRunning || accurate === prev.possessionClockLeft) return prev
+        if (!prev.isPossessionLeftRunning) return prev
+        if (prev.possessionClockLeft !== ultimoLeft.current) {
+          anclaLeft.current = { ts: performance.now(), clock: prev.possessionClockLeft }
+          ultimoLeft.current = prev.possessionClockLeft
+          return prev
+        }
+        if (accurate === prev.possessionClockLeft) return prev
+        ultimoLeft.current = accurate
         const usado = prev.possessionClockLeft - accurate
         if (accurate <= 0) {
           playBuzzer()
@@ -593,18 +739,28 @@ export function useGameState() {
       })
     }, 250)
     return () => clearInterval(interval)
-  }, [isReceiver, state.isPossessionLeftRunning, state.possessionClockLeft, playBuzzer])
+  }, [isReceiver, state.isPossessionLeftRunning, playBuzzer])
 
   useEffect(() => {
     if (isReceiver || !state.isPossessionRightRunning || state.possessionClockRight <= 0) return
     const startTs    = performance.now()
-    const startClock = state.possessionClockRight
+    anclaRight.current = { ts: performance.now(), clock: state.possessionClockRight }
+    ultimoRight.current = state.possessionClockRight
 
     const interval = setInterval(() => {
-      const elapsed  = (performance.now() - startTs) / 1000
-      const accurate = Math.max(0, startClock - Math.floor(elapsed))
+      const ancla = anclaRight.current
+      if (!ancla) return
+      const elapsed  = (performance.now() - ancla.ts) / 1000
+      const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
       setState(prev => {
-        if (!prev.isPossessionRightRunning || accurate === prev.possessionClockRight) return prev
+        if (!prev.isPossessionRightRunning) return prev
+        if (prev.possessionClockRight !== ultimoRight.current) {
+          anclaRight.current = { ts: performance.now(), clock: prev.possessionClockRight }
+          ultimoRight.current = prev.possessionClockRight
+          return prev
+        }
+        if (accurate === prev.possessionClockRight) return prev
+        ultimoRight.current = accurate
         const usado = prev.possessionClockRight - accurate
         if (accurate <= 0) {
           playBuzzer()
@@ -617,7 +773,7 @@ export function useGameState() {
       })
     }, 250)
     return () => clearInterval(interval)
-  }, [isReceiver, state.isPossessionRightRunning, state.possessionClockRight, playBuzzer])
+  }, [isReceiver, state.isPossessionRightRunning, playBuzzer])
 
   const configureMatch = useCallback((config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null) => {
     const clockSeconds = config.periodDuration * 60
@@ -840,6 +996,82 @@ export function useGameState() {
 
   // ─── Marcador ─────────────────────────────────────────────────────────────
   
+  /** El arbitro anula un gol ya cobrado: baja el marcador y QUEDA en el acta. */
+  const annulGoal = useCallback((team: 'home' | 'away') => setState(prev => {
+    const goles = prev.matchLog.filter(e => e.eventType === 'gol' && e.team === team && !e.anulado)
+    const ultimo = goles[goles.length - 1]
+    if (!ultimo) return prev
+    const aviso: MatchEvent = {
+      id: uid(), timestamp: new Date().toISOString(), gameTime: prev.mainClock,
+      period: prev.period, eventType: 'ajuste', team, actor: ultimo.actor,
+      details: `GOL ANULADO por el árbitro${ultimo.actor && ultimo.actor !== '?' ? ` (#${ultimo.actor})` : ''}`
+    }
+    return {
+      ...prev,
+      homeScore: team === 'home' ? Math.max(0, prev.homeScore - 1) : prev.homeScore,
+      awayScore: team === 'away' ? Math.max(0, prev.awayScore - 1) : prev.awayScore,
+      matchLog: [...prev.matchLog.map(e => e.id === ultimo.id ? { ...e, anulado: true } : e), aviso]
+    }
+  }), [])
+
+  /**
+   * La mesa se equivoco al cargar: ese gol nunca existio, asi que se BORRA
+   * del acta y queda una linea de correccion. Es la diferencia de peso con
+   * una anulacion arbitral.
+   */
+  const correctScore = useCallback((team: 'home' | 'away') => setState(prev => {
+    const actual = team === 'home' ? prev.homeScore : prev.awayScore
+    if (actual <= 0) return prev
+    const goles = prev.matchLog.filter(e => e.eventType === 'gol' && e.team === team && !e.anulado)
+    const ultimo = goles[goles.length - 1]
+    const aviso: MatchEvent = {
+      id: uid(), timestamp: new Date().toISOString(), gameTime: prev.mainClock,
+      period: prev.period, eventType: 'ajuste', team, actor: '',
+      details: 'Marcador corregido por la mesa (gol cargado por error)'
+    }
+    return {
+      ...prev,
+      homeScore: team === 'home' ? actual - 1 : prev.homeScore,
+      awayScore: team === 'away' ? actual - 1 : prev.awayScore,
+      matchLog: [...prev.matchLog.filter(e => !ultimo || e.id !== ultimo.id), aviso]
+    }
+  }), [])
+
+  /**
+   * PENAL CONVERTIDO — la distincion clave:
+   *   EN PARTIDO  -> es GOL, suma al marcador y el acta dice "de penal".
+   *   EN LA TANDA -> NO es gol: va al contador aparte.
+   * Antes el boton mandaba siempre al contador de la tanda, y encima estaba
+   * deshabilitado fuera de ella: en juego no habia forma de registrarlo.
+   */
+  const scorePenalty = useCallback((team: 'home' | 'away', playerNumber?: string) => setState(prev => {
+    const enTanda = prev.period === 'penales'
+    const num = playerNumber || '?'
+    const evento: MatchEvent = {
+      id: uid(), timestamp: new Date().toISOString(), gameTime: prev.mainClock,
+      period: prev.period, eventType: 'gol', team, actor: num,
+      details: enTanda ? 'Penal convertido (tanda)' : 'Gol de penal'
+    }
+    const goalAnimation = { id: uid(), team, playerNumber: num, timestamp: Date.now() }
+    if (enTanda) {
+      return {
+        ...prev,
+        homePenalties: team === 'home' ? (prev.homePenalties || 0) + 1 : prev.homePenalties,
+        awayPenalties: team === 'away' ? (prev.awayPenalties || 0) + 1 : prev.awayPenalties,
+        matchLog: [...prev.matchLog, evento], goalAnimation
+      }
+    }
+    return {
+      ...prev,
+      homeScore: team === 'home' ? prev.homeScore + 1 : prev.homeScore,
+      awayScore: team === 'away' ? prev.awayScore + 1 : prev.awayScore,
+      isMainClockRunning: false,
+      possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION,
+      isPossessionLeftRunning: false, isPossessionRightRunning: false,
+      matchLog: [...prev.matchLog, evento], goalAnimation
+    }
+  }), [])
+
   const adjustHomeScore = useCallback((delta: number, playerNumber?: string) => setState(prev => {
     const newScore = Math.max(0, prev.homeScore + delta)
     if (delta > 0) {
@@ -909,6 +1141,35 @@ export function useGameState() {
       : {})
   })), [])
 
+  /**
+   * ART. 30.9 — REPOSICION DEL CRONOMETRO A CINCO SEGUNDOS
+   *
+   * Ante un tiro libre directo o un penal, si al reloj de juego le quedan
+   * MENOS de cinco segundos, se repone a cinco: es el tiempo previsto para
+   * ejecutar el lanzamiento. Se admite la simulacion, pero no alcanza para un
+   * segundo remate.
+   *
+   * Sin esto, una falta a falta de dos segundos dejaba el lanzamiento sin
+   * tiempo material de ejecutarse, y el operador tenia que estirar el reloj a
+   * mano con los botones de ajuste fino —delante del arbitro y sin respaldo en
+   * el acta—. Estaba listado como pendiente prioritario en REGLAMENTO-Y-USO.
+   *
+   * NUNCA descuenta: si quedan mas de cinco, no se toca.
+   */
+  const REPOSICION_LANZAMIENTO = 5
+
+  const reponerParaLanzamiento = (prev: GameState, motivo: string) => {
+    if (prev.mainClock >= REPOSICION_LANZAMIENTO) return null
+    return {
+      mainClock: REPOSICION_LANZAMIENTO,
+      evento: {
+        id: uid(), timestamp: new Date().toISOString(), gameTime: REPOSICION_LANZAMIENTO,
+        period: prev.period, eventType: 'ajuste' as const, team: null,
+        actor: '', details: `Cronómetro repuesto a 0:05 — ${motivo} (Art. 30.9)`
+      } as MatchEvent
+    }
+  }
+
   const isFoulWarning    = (fouls: number) => fouls === 9 || (fouls > 10 && (fouls - 9) % 5 === 0)
   const isFoulDirectKick = (fouls: number) => fouls === 10 || (fouls > 10 && (fouls - 10) % 5 === 0)
 
@@ -925,6 +1186,9 @@ export function useGameState() {
           actor: playerNumber || '?',
           details: isDirectKick ? `Falta ${newFouls} - TIRO LIBRE DIRECTO` : `Falta ${newFouls}`
         }
+        // Art. 30.9: el tiro libre directo necesita cinco segundos para
+        // ejecutarse. Si quedan menos, se reponen.
+        const reposicion = isDirectKick ? reponerParaLanzamiento(prev, 'tiro libre directo') : null
         return {
           ...prev, homeFouls: newFouls,
           isHomeFoul10Active: warning && !isDirectKick,
@@ -933,7 +1197,8 @@ export function useGameState() {
           isPossessionRightRunning: isDirectKick ? false : prev.isPossessionRightRunning,
           possessionClockLeft: isDirectKick ? POSSESSION_DURATION : prev.possessionClockLeft,
           possessionClockRight: isDirectKick ? POSSESSION_DURATION : prev.possessionClockRight,
-          matchLog: [...prev.matchLog, event]
+          ...(reposicion ? { mainClock: reposicion.mainClock } : {}),
+          matchLog: [...prev.matchLog, event, ...(reposicion ? [reposicion.evento] : [])]
         }
       }
       return { ...prev, homeFouls: newFouls, isHomeFoul10Active: warning }
@@ -953,6 +1218,9 @@ export function useGameState() {
           actor: playerNumber || '?',
           details: isDirectKick ? `Falta ${newFouls} - TIRO LIBRE DIRECTO` : `Falta ${newFouls}`
         }
+        // Art. 30.9: el tiro libre directo necesita cinco segundos para
+        // ejecutarse. Si quedan menos, se reponen.
+        const reposicion = isDirectKick ? reponerParaLanzamiento(prev, 'tiro libre directo') : null
         return {
           ...prev, awayFouls: newFouls,
           isAwayFoul10Active: warning && !isDirectKick,
@@ -961,7 +1229,8 @@ export function useGameState() {
           isPossessionRightRunning: isDirectKick ? false : prev.isPossessionRightRunning,
           possessionClockLeft: isDirectKick ? POSSESSION_DURATION : prev.possessionClockLeft,
           possessionClockRight: isDirectKick ? POSSESSION_DURATION : prev.possessionClockRight,
-          matchLog: [...prev.matchLog, event]
+          ...(reposicion ? { mainClock: reposicion.mainClock } : {}),
+          matchLog: [...prev.matchLog, event, ...(reposicion ? [reposicion.evento] : [])]
         }
       }
       return { ...prev, awayFouls: newFouls, isAwayFoul10Active: warning }
@@ -1660,6 +1929,7 @@ export function useGameState() {
     configureMatch, configureMatchWithResume, setSignature, setClosingSignature, setMatchPhase,
     toggleMainClock, pauseMainClock, resetMainClock, setMainClockTime, adjustMainClock,
     setPeriod, nextPeriod, adjustHomeScore, adjustAwayScore, adjustHomeFouls, adjustAwayFouls, resetFouls,
+    annulGoal, correctScore, scorePenalty,
     adjustHomePenalties, adjustAwayPenalties, startIntermission, endIntermission,
     addYellowCard, resetYellowCards, addSanction, addBenchSanction, removeSanction, clearSanctions,
     requestTimeoutHome, requestTimeoutAway, grantTimeoutHome, grantTimeoutAway,

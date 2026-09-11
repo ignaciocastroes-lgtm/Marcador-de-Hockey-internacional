@@ -1,7 +1,7 @@
 "use client"
 
 import { Play, Users, ClipboardList, ChevronRight, Trophy, Lock } from 'lucide-react'
-import { CLUB_BRAND, clubLogoFallback } from '@/lib/club-brand'
+import { CLUB_BRAND, clubLogoFallback, clubIcon } from '@/lib/club-brand'
 
 /**
  * LO PRIMERO QUE VE EL OPERADOR.
@@ -76,7 +76,8 @@ export function HomeScreen({ onExpress, onEquipos, onJugadores, onLigas }: Props
 
         <div className="flex flex-col items-center text-center pb-2">
           {CLUB_BRAND.logoUrl && (
-            <img src={CLUB_BRAND.logoUrl} alt={CLUB_BRAND.name} onError={clubLogoFallback}
+            <img src={clubIcon()} alt={CLUB_BRAND.name} onError={clubLogoFallback}
+              width={80} height={80} decoding="async"
               className="w-20 h-20 object-contain mb-3" />
           )}
           <h1 className="text-2xl sm:text-3xl font-black text-white">{CLUB_BRAND.name}</h1>

@@ -15,9 +15,24 @@ import '@fontsource/chivo-mono/700.css'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'ARDI Hockey Patín 3.42',
+  title: 'ARDI Hockey Patín 3.5',
   description: 'Sistema profesional de marcador y control de tiempo para Hockey Patín',
   generator: 'v0.app',
+  /**
+   * Iconos de la app. No estaban declarados, asi que el navegador buscaba
+   * `/favicon.ico` —que no existe— y en la pantalla de inicio quedaba el icono
+   * generico. Estos pesan 2 KB y 30 KB, no medio mega como el escudo grande.
+   *
+   * Para un despliegue de club: reemplazar estos tres archivos por el escudo
+   * del club ya reducido a esos tamanos. No apuntar aqui al escudo original.
+   */
+  icons: {
+    icon: [
+      { url: '/icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
 }
 
 export const viewport: Viewport = {

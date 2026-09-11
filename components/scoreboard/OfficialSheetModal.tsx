@@ -116,6 +116,30 @@ export function OfficialSheetModal({
    * el acta se puede abrir e imprimir cualquier dia posterior.
    */
   const inicio = state.timestamps?.matchStart ? new Date(state.timestamps.matchStart) : null
+
+  /**
+   * LO QUE SOLO NOSOTROS SABEMOS.
+   *
+   * La posesion por equipo sale de los relojes de 45: se acumula el tiempo
+   * que cada uno tuvo la bocha, medido de verdad, no estimado. Ninguna
+   * planilla de papel lleva ese dato, y es el que hace que un acta de ARDI
+   * valga mas que una hoja.
+   *
+   * La duracion real es de pared —cuanto duro la jornada con descansos,
+   * tiempos muertos y suspensiones— frente al tiempo de juego reglamentario.
+   * Es lo que un club necesita para programar una fecha.
+   */
+  const posHome = Math.round(state.homePossessionTime || 0)
+  const posAway = Math.round(state.awayPossessionTime || 0)
+  const posTotal = posHome + posAway
+  const pct = (v: number) => posTotal > 0 ? Math.round((v / posTotal) * 100) : 0
+  const mmss = (seg: number) => `${Math.floor(seg / 60)}:${String(Math.round(seg % 60)).padStart(2, '0')}`
+
+  const fin = state.timestamps?.matchEnd ? new Date(state.timestamps.matchEnd) : null
+  const duracionReal = inicio && fin
+    ? Math.max(0, Math.round((fin.getTime() - inicio.getTime()) / 1000))
+    : null
+  const tiempoJuego = (state.matchConfig.periodsCount || 2) * (state.matchConfig.periodDuration || 25) * 60
   const fechaPartido = state.matchConfig.fecha
     ? new Date(`${state.matchConfig.fecha}T00:00:00`).toLocaleDateString('es-CL')
     : (inicio ?? new Date()).toLocaleDateString('es-CL')
@@ -256,6 +280,12 @@ export function OfficialSheetModal({
         })
       }
     })
+
+    csv += '\nPOSESION Y TIEMPOS\n'
+    csv += `Posesion ${q(homeTeamName)},${mmss(posHome)},${pct(posHome)}%\n`
+    csv += `Posesion ${q(awayTeamName)},${mmss(posAway)},${pct(posAway)}%\n`
+    csv += `Duracion real,${duracionReal !== null ? mmss(duracionReal) : ''}\n`
+    csv += `Tiempo de juego,${mmss(tiempoJuego)}\n`
 
     csv += '\nFALTAS ACUMULADAS\n'
     csv += `${q(homeTeamName)},${state.homeFouls}\n${q(awayTeamName)},${state.awayFouls}\n\n`
@@ -545,7 +575,60 @@ export function OfficialSheetModal({
             {(state.matchLog || []).length === 0 && <p className="text-zinc-500 text-xs text-center py-2">Sin incidencias registradas</p>}
           </div>
 
-          {/* 5. Faltas Acumuladas */}
+          {/* 5. Posesión y tiempos — el dato que no trae una planilla de papel */}
+          <div className="bg-zinc-800 border border-zinc-600 rounded-lg p-3">
+            <h3 className="text-yellow-400 font-bold text-sm mb-2">POSESIÓN Y TIEMPOS</h3>
+
+            {posTotal > 0 ? (
+              <>
+                <div className="flex items-center justify-between text-xs font-bold mb-1">
+                  <span className="text-blue-400 truncate max-w-[40%]">{homeTeamName}</span>
+                  <span className="text-zinc-500">POSESIÓN</span>
+                  <span className="text-red-400 truncate max-w-[40%] text-right">{awayTeamName}</span>
+                </div>
+                <div className="flex h-6 rounded overflow-hidden border border-zinc-600">
+                  <div className="bg-blue-600 flex items-center justify-center text-[11px] font-black"
+                    style={{ width: `${pct(posHome)}%` }}>
+                    {pct(posHome) >= 12 && `${pct(posHome)}%`}
+                  </div>
+                  <div className="bg-red-600 flex items-center justify-center text-[11px] font-black"
+                    style={{ width: `${pct(posAway)}%` }}>
+                    {pct(posAway) >= 12 && `${pct(posAway)}%`}
+                  </div>
+                </div>
+                <div className="flex justify-between text-[11px] text-zinc-400 mt-1">
+                  <span>{mmss(posHome)}</span>
+                  <span>{mmss(posAway)}</span>
+                </div>
+              </>
+            ) : (
+              <p className="text-[11px] text-zinc-500">
+                No se registró posesión: los relojes de 45 no se usaron en este partido.
+              </p>
+            )}
+
+            <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+              <div className="bg-zinc-900 rounded p-2">
+                <p className="text-zinc-500 text-[10px]">HORA INICIO</p>
+                <p className="font-black text-sm">{inicio ? inicio.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
+              </div>
+              <div className="bg-zinc-900 rounded p-2">
+                <p className="text-zinc-500 text-[10px]">HORA TÉRMINO</p>
+                <p className="font-black text-sm">{fin ? fin.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
+              </div>
+              <div className="bg-zinc-900 rounded p-2">
+                <p className="text-zinc-500 text-[10px]">DURACIÓN REAL</p>
+                <p className="font-black text-sm">{duracionReal !== null ? mmss(duracionReal) : '—'}</p>
+              </div>
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-1.5">
+              Tiempo de juego reglamentario: {mmss(tiempoJuego)}
+              {duracionReal !== null && duracionReal > tiempoJuego &&
+                ` · en cancha: ${mmss(duracionReal - tiempoJuego)} de más entre descansos, tiempos muertos y detenciones`}
+            </p>
+          </div>
+
+          {/* 6. Faltas Acumuladas */}
           <div className="bg-zinc-800 border border-zinc-600 rounded-lg p-3">
             <h3 className="text-yellow-400 font-bold text-sm mb-2">FALTAS ACUMULADAS</h3>
             <div className="grid grid-cols-2 gap-4 text-center">

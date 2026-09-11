@@ -602,3 +602,95 @@ club, exportar, qué tocar en el despliegue (sólo `club-brand.ts`, el escudo y
 paquete, incluida la que más importa para tu plan: un club de otro país viaja
 entero, con su prefijo y sus propias series, y no colisiona con el club de casa
 aunque convivan.
+
+---
+
+# VISTA LIVE EN TABLET, E ICONOS
+
+## La barra maestra se desarmaba en tablet
+
+Era un `flex-wrap` con siete piezas sueltas. En pantalla de tablet, la ficha de
+GOL/FALTA de **la visita se caía a una segunda línea y quedaba debajo del
+centro** — lejos del reloj de 45 al que pertenece, y con el bloque de periodo y
+chicharra encima.
+
+Ahora la barra son **tres zonas que no se envuelven**: cada equipo con su ficha
+pegada a su propio 45, y el reloj al medio. Los controles de periodo, chicharra
+y giro bajan a **su propia fila**, que es donde ya terminaban de hecho.
+
+## APARIENCIA se fue dentro de AJUSTES
+
+Ocupaba uno de los ocho lugares de la barra inferior, junto a FIN, PLANILLA y
+NUEVO —acciones de cada jornada— cuando es un ajuste que se toca una vez y no
+se vuelve a mirar. Está en el cajón de ajustes, como
+"Apariencia de los jugadores". La rejilla bajó de 8 a 7.
+
+## El icono y el escudo que demoraba
+
+Dos problemas distintos, con la misma raíz: **una sola imagen para todos los
+tamaños**.
+
+**El icono de la app no estaba declarado.** No había `icons` en la metadata,
+así que el navegador buscaba un `/favicon.ico` inexistente y la pantalla de
+inicio quedaba con el icono genérico. Se generaron tres —32, 180 y 192 px— y se
+declararon. Pesan 2 KB y 30 KB.
+
+**El escudo de la barra usaba el archivo de proyección.** El escudo bueno pesa
+lo que tiene que pesar para verse en una pantalla de estadio; usarlo también
+para el icono de 36 px obliga al navegador a descargar y reescalar esa imagen
+entera antes de pintar la barra. Por eso demoraba en aparecer.
+
+`CLUB_BRAND` tiene ahora `logoIconUrl`, una copia reducida que se usa en la
+barra y en la pantalla de inicio. **Si el archivo no está, se usa el grande**:
+funciona igual, sólo más lento. Los dos `<img>` declaran además su tamaño, así
+que el espacio queda reservado y la barra no salta al cargar.
+
+> **PENDIENTE DE TU LADO:** dejar `internacional-lo-espejo-64.webp` en
+> `/public/escudos/` (unos 64 px de lado), y reemplazar los tres iconos por el
+> escudo del club ya reducido. Instrucciones en `/public/escudos/LEEME.txt`.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **87 pruebas, 87 pasan.**
+
+---
+
+# MONTAJES EXPORTABLES, Y LA LÍNEA BASURA
+
+## Montajes: guardar cómo quedó encuadrado
+
+Resuelve "es un tema tener que encuadrar todo para empezar". Dos botones —
+GUARDAR y CARGAR — en el modal de lanzadores y en el de pantallas.
+
+- **Pantallas** se lleva la apariencia, las pantallas visibles y las
+  posiciones, calibración y zoom **de cada uno de los cinco tableros**.
+- **Lanzadores** se lleva la configuración y las posiciones de los tres.
+- **Ninguno se lleva el plantel ni el partido en curso.** Un montaje es cómo
+  se ve la cancha, no quién juega. Eso viaja en el paquete de club.
+
+Guardas puestas, con el error del sábado en mente:
+
+- Importar el archivo cruzado —el de lanzadores en pantallas— se detecta y
+  **dice cuál es**: *"Ese archivo es un montaje de lanzadores. Impórtalo desde
+  ahí."* No aplica nada.
+- Un archivo manipulado que intente escribir claves ajenas (el plantel, el
+  partido) **se rechaza entero**, no a medias.
+- Importar recarga. Las posiciones las leen media docena de componentes al
+  montarse, varios en ventanas distintas; refrescar en caliente dejaría la
+  mitad vieja.
+
+## La línea basura: eran seis, no una
+
+La auditoría externa señaló un import a medio borrar en `PreMatchSetup.tsx`.
+**Tenía razón, y me quedé corto al verificarlo**: al buscar el patrón completo
+aparecieron **seis** líneas iguales en tres archivos, todas dejadas por mi
+script de limpieza de imports.
+
+Donde la auditoría se equivoca es en la consecuencia: decía que el zip no
+arranca y que el changelog mentía. `tsc --noEmit` y `next build` pasaban — una
+cadena suelta es una expresión válida en TypeScript. Era suciedad, no un
+binario roto. Ya no está.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **98 pruebas, 98 pasan.**

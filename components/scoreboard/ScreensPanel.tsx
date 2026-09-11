@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { FINISHES, METAL_PRESETS, FLUOR_PRESETS, finishClass, finishStyle, type Finish } from '@/lib/finishes'
 import { ARDI_SHIELD_HOME, ARDI_SHIELD_AWAY } from '@/lib/generic-shields'
 import { summarizeStored, wipeAll, type StoredGroup } from '@/lib/club-boot'
+import { PresetButtons } from '@/components/scoreboard/PresetButtons'
 import {
   loadGallery, rememberShield, forgetShield, labelShield,
   SHIELD_GALLERY_EVENT, type GalleryShield
@@ -452,6 +453,8 @@ export function ScreensPanel(props: ScreensPanelProps) {
             </Button>
           ))}
         </div>
+        <PresetButtons kind="ardi:pantallas" />
+
         {/* ── EMPEZAR DE CERO ─────────────────────────────────────────── */}
         <div className="border-t border-zinc-800 pt-3 mt-3">
           <Label className="text-red-400 text-xs font-black uppercase tracking-widest flex items-center mb-1">

@@ -36,6 +36,7 @@ import {
 } from '@/lib/audio-engine'
 import { HOTKEY_EVENT, OPEN_HOTKEYS_EVENT } from '@/lib/hotkeys'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
+import { RefereeActions } from '@/components/scoreboard/RefereeActions'
 import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
 
 import {
@@ -84,6 +85,9 @@ export interface CourtOperatorViewProps {
   adjustHomeFouls: (delta: number) => void
   adjustAwayFouls: (delta: number) => void
   adjustHomePenalties: (delta: number, playerNumber?: string) => void
+  scorePenalty: (team: 'home' | 'away', playerNumber?: string) => void
+  annulGoal: (team: 'home' | 'away') => void
+  correctScore: (team: 'home' | 'away') => void
   adjustAwayPenalties: (delta: number, playerNumber?: string) => void
 
   addSanction: (team: 'home' | 'away', type: 'yellow' | 'blue' | 'red', playerNumber: string, isBench?: boolean, staffId?: string, sanctionType?: 'direct' | 'collective') => void
@@ -508,8 +512,10 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         else props.adjustAwayScore(1, num)
         break
       case 'penal':
-        if (team === 'home') props.adjustHomePenalties(1)
-        else props.adjustAwayPenalties(1)
+        // Antes esto sumaba SIEMPRE al contador de la tanda, incluso en
+        // juego. Ahora `scorePenalty` decide segun el periodo: en partido es
+        // gol y suma al marcador; en la tanda va al contador aparte.
+        props.scorePenalty(team, num)
         break
       case 'yellow':
       case 'blue':
@@ -871,7 +877,13 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       <div className="flex flex-col items-center gap-0.5 sm:gap-1 px-1">
         <div className="flex items-center gap-1 sm:gap-2">
           <span className="text-[8px] sm:text-[10px] font-bold text-zinc-500 w-9 sm:w-11 text-right">GOL</span>
-          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
+          {/* El menos es la ENMIENDA de la mesa: un gol cargado por error
+              nunca existio, asi que se borra del acta. Anular un gol que el
+              arbitro cobro es otra cosa y vive en el silbato. */}
+          <Button size="sm" disabled={stopped || matchEnded}
+            title="Corregir: quitar un gol cargado por error"
+            onClick={() => props.correctScore(team)}
+            className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
           <span className="text-3xl sm:text-4xl font-black text-red-500 tabular-nums w-9 sm:w-11 text-center leading-none" style={{ fontFamily: 'var(--font-led)' }}>{score}</span>
           <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
         </div>
@@ -950,16 +962,26 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       />
 
       {/* ── BARRA MAESTRA: reloj, periodo, chicharra ───────────────────────── */}
-      <div className="bg-black border-2 border-zinc-800 rounded-xl p-3 flex flex-wrap items-center justify-center gap-3">
+      {/*
+        BARRA MAESTRA EN TRES ZONAS, SIN ENVOLVER.
+        Era un `flex-wrap` con siete piezas sueltas: en una tablet la ficha de
+        GOL/FALTA de la visita se caia a una segunda linea y quedaba debajo del
+        centro, lejos del 45 al que pertenece. Cada equipo tiene ahora su zona
+        —ficha + su reloj de 45— y el centro es el reloj. Los controles de
+        periodo bajan a su propia fila, que es donde ya terminaban de hecho.
+      */}
+      <div className="bg-black border-2 border-zinc-800 rounded-xl p-2 sm:p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between sm:justify-center gap-1 sm:gap-3">
         {/* Arrancar/pausar sin chicharra ya lo hace el círculo central de la
             pista (sacar del centro), y con chicharra: CHICHARRA + el mismo
             círculo. Los dos botones que estaban aquí eran el mismo gesto dos
             veces, así que ceden el lugar a lo que sí faltaba a mano: goles y
             faltas editables, justo al lado del reloj. */}
-        <ManualScore team="home" />
-
-        {/* 45 del local, pegado al reloj principal */}
-        <PossessionSide side="home" />
+        <div className="flex items-center gap-1 sm:gap-3">
+          <ManualScore team="home" />
+          {/* 45 del local, pegado al reloj principal */}
+          <PossessionSide side="home" />
+        </div>
 
         <div className="flex flex-col items-center px-4">
           <span className={`text-[10px] font-black tracking-widest ${
@@ -985,10 +1007,14 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           </div>
         </div>
 
-        <PossessionSide side="away" />
+        <div className="flex items-center gap-1 sm:gap-3">
+          <PossessionSide side="away" />
+          <ManualScore team="away" />
+        </div>
+      </div>
 
-        <ManualScore team="away" />
-
+      {/* Fila de controles: periodo, chicharra, giro y el estado en curso. */}
+      <div className="flex flex-wrap items-stretch justify-center gap-2">
         <div className="flex flex-col gap-1 min-w-[150px]">
           <div className="flex gap-1">
             <Select value={state.period} onValueChange={v => props.setPeriod(v as Period)} disabled={matchEnded}>
@@ -1039,6 +1065,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
             </span>
           )}
         </div>
+      </div>
       </div>
 
       {/* ── PISTA ───────────────────────────────────────────────────────────── */}
@@ -1318,7 +1345,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       />
 
       {/* ── ADMINISTRACION ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 pb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pb-4">
         <Button onClick={toggleFullscreen} className="h-10 font-bold text-xs bg-zinc-800 hover:bg-zinc-700">
           <Maximize className="w-4 h-4 mr-1" /> PANTALLA
         </Button>
@@ -1333,11 +1360,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           className={`h-10 font-bold text-xs ${showDrawer ? 'bg-blue-600 hover:bg-blue-500' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
           <SlidersHorizontal className="w-4 h-4 mr-1" /> AJUSTES
         </Button>
-        <Button onClick={() => setShowLook(true)}
-          className="h-10 font-bold text-xs bg-zinc-800 hover:bg-zinc-700">
-          <Palette className="w-4 h-4 mr-1" /> APARIENCIA
-        </Button>
-
         {matchEnded ? (
           <Button onClick={resumeMatch} disabled={planillaLocked} className="h-10 font-bold text-xs bg-green-600 hover:bg-green-500 disabled:opacity-40"><Play className="w-4 h-4 mr-1" /> REANUDAR</Button>
         ) : (
@@ -1354,6 +1376,18 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black text-blue-400 tracking-[0.2em] uppercase">Ajustes de partido</span>
             <Button onClick={() => setShowDrawer(false)} variant="ghost" size="sm" className="h-6 text-zinc-500 hover:text-white"><X className="w-4 h-4" /></Button>
+          </div>
+
+          {/* APARIENCIA vivia en la barra inferior, junto a FIN, PLANILLA y
+              NUEVO —acciones de partido— cuando es un ajuste que se toca una
+              vez y no se vuelve a mirar. Ocupaba un lugar de los ocho que se
+              usan cada jornada. */}
+          <div>
+            <span className="text-[9px] font-bold text-zinc-500 uppercase block mb-1">Cómo se ven las fichas</span>
+            <Button onClick={() => setShowLook(true)}
+              className="w-full h-10 text-xs font-bold bg-zinc-800 hover:bg-zinc-700">
+              <Palette className="w-4 h-4 mr-1" /> APARIENCIA DE LOS JUGADORES
+            </Button>
           </div>
 
           <div>
@@ -1470,7 +1504,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                     <Goal className="w-5 h-5 mr-1" /> GOL
                   </Button>
                   {state.matchConfig.allowPenalties && (
-                    <Button onClick={() => handleAction('penal')} disabled={state.period !== 'penales'} className="h-16 font-black bg-purple-700 hover:bg-purple-600 disabled:opacity-30">
+                    <Button onClick={() => handleAction('penal')} disabled={matchEnded} className="h-16 font-black bg-purple-700 hover:bg-purple-600 disabled:opacity-30">
                       PENAL
                     </Button>
                   )}
@@ -1629,7 +1663,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       <Dialog open={refOpen} onOpenChange={setRefOpen}>
         <DialogContent className="bg-zinc-900 border-2 border-zinc-500 text-white max-w-md lg:max-w-xl" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle className="text-lg font-black">Falta de equipo</DialogTitle>
+            <DialogTitle className="text-lg font-black">Decisiones del árbitro</DialogTitle>
             <p className="text-[11px] text-zinc-500 leading-snug">
               En hockey patín la falta se cobra al equipo, no al jugador. El semáforo se
               enciende en la 9ª avisando que la siguiente es tiro libre directo.
@@ -1654,6 +1688,19 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               </button>
             ))}
           </div>
+          {/* El penal y la anulacion son decisiones del arbitro, asi que
+              viven donde vive el silbato. */}
+          <div className="border-t border-zinc-800 pt-3">
+            <RefereeActions
+              homeTeamName={homeTeamName} awayTeamName={awayTeamName}
+              enTanda={state.period === 'penales'}
+              disabled={matchEnded}
+              onPenal={t => props.scorePenalty(t)}
+              onAnular={t => props.annulGoal(t)}
+              onDone={() => setRefOpen(false)}
+            />
+          </div>
+
           <Button onClick={() => setRefOpen(false)} variant="outline" className="w-full h-11 font-bold border-zinc-600">CERRAR</Button>
         </DialogContent>
       </Dialog>

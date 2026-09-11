@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { ExpressRosterModal, type ExpressEntry } from '@/components/scoreboard/ExpressRosterModal'
 import { serieLabel, findSerie } from '@/lib/series'
- '@/lib/club-roster'
+
 import { SavedTeamsModal } from '@/components/scoreboard/SavedTeamsModal'
 import { HomeScreen } from '@/components/scoreboard/HomeScreen'
 import { bootClub } from '@/lib/club-boot'

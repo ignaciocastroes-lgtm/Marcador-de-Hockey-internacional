@@ -23,6 +23,7 @@ import {
 } from '@/lib/overlay-config'
 import { loadBoardLook, resolveLedFont, DEFAULT_LOOK, type BoardLook } from '@/lib/board-look'
 import { finishClass, resolveFinish, finishStyle, type Finish } from '@/lib/finishes'
+import { PresetButtons } from '@/components/scoreboard/PresetButtons'
 
 /** Nombres legibles de cada capa, para no mostrar identificadores tecnicos. */
 const CAPA_NOMBRE: Record<string, string> = {
@@ -485,6 +486,10 @@ export function OverlaysModal({ open, onClose }: Props) {
               <Toggle on={cfg.stats.showPossession} onChange={v => patchStats({ showPossession: v })} label="Posesión" hint="Porcentaje y minutos de los relojes de 45" />
             </>
           )}
+        </div>
+
+        <div className="px-4 pb-1 shrink-0">
+          <PresetButtons kind="ardi:lanzadores" />
         </div>
 
         <div className="border-t border-zinc-800 p-3 flex gap-2 shrink-0 bg-zinc-950">

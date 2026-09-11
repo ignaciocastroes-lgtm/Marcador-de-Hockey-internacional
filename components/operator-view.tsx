@@ -1,5 +1,27 @@
 "use client"
 
+/**
+ * ══════════════════════════════════════════════════════════════════════════
+ * PANEL CONTROL — CONGELADO DESDE LA 3.5
+ * ══════════════════════════════════════════════════════════════════════════
+ *
+ * Esta vista NO se amplia. Se mantiene por una razon concreta: es el panel de
+ * botones grandes, el que usa alguien sin entrenamiento, y el que sigue
+ * corriendo en dos clubes. Tambien es el respaldo cuando PISTA no sirve —sin
+ * plantel cargado, con la tablet muerta, desde un notebook prestado—.
+ *
+ * Congelado significa:
+ *   · Se corrigen BUGS y se aplican cambios de reglamento.
+ *   · NO se agregan funciones nuevas: esas van a PISTA.
+ *   · Todo lo compartido (atajos, motor de tarjetas, relojes, audio) vive
+ *     fuera y lo consumen los dos paneles. Si algo hay que tocar en los dos,
+ *     es senal de que no estaba compartido y hay que sacarlo.
+ *
+ * El motivo de fondo: mantener dos interfaces con funciones propias fue lo
+ * que produjo los atajos duplicados, los dos editores de plantel y las dos
+ * vias de sancion. Una sola crece; la otra sostiene.
+ */
+
 import { RigidClock } from '@/components/scoreboard/RigidClock'
 import {
   loadHotkeys, keyLabel, DEFAULT_HOTKEYS, HOTKEYS_CHANGED_EVENT, HOTKEY_EVENT,
@@ -17,12 +39,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
- '@/components/ui/tabs'
 import { INTERMISSION_DURATION } from '@/hooks/use-game-state'
 import type { GameState, Period, Team, MatchRecord, MatchConfig, Sanction, Player, RefereeData, MatchEvent, SignatureData, ClosingSignatureData, MatchPhase, CardHistory } from '@/hooks/use-game-state'
 
 import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
- '@/components/scoreboard/TacticalBoard'
+import { RefereeActions } from '@/components/scoreboard/RefereeActions'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
 import { BenchModal, type BenchStaffUI } from '@/components/scoreboard/BenchModal'
 import { PosModal } from '@/components/scoreboard/PosModal'
@@ -91,7 +112,10 @@ interface OperatorViewProps {
   adjustMainClock: (seconds: number) => void; setPeriod: (period: Period) => void; nextPeriod: () => void;
   adjustHomeScore: (delta: number, playerNumber?: string) => void; adjustAwayScore: (delta: number, playerNumber?: string) => void;
   adjustHomeFouls: (delta: number) => void; adjustAwayFouls: (delta: number) => void; resetFouls: () => void;
-  adjustHomePenalties: (delta: number) => void; adjustAwayPenalties: (delta: number) => void;
+  adjustHomePenalties: (delta: number) => void;
+  scorePenalty: (team: 'home' | 'away', playerNumber?: string) => void;
+  annulGoal: (team: 'home' | 'away') => void;
+  correctScore: (team: 'home' | 'away') => void; adjustAwayPenalties: (delta: number) => void;
   startIntermission: (durationMinutes?: number) => void; endIntermission: () => void;
   addYellowCard: (team: 'home' | 'away') => void; resetYellowCards: (team: 'home' | 'away') => void;
   addSanction: (team: 'home' | 'away', type: 'yellow' | 'blue' | 'red', playerNumber: string, isBench?: boolean, staffId?: string, sanctionType?: 'direct' | 'collective') => void;
@@ -658,6 +682,19 @@ export function OperatorView(props: OperatorViewProps) {
                 <div className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${state.isMainClockRunning ? 'bg-green-500 animate-pulse' : (theme.id === 'alto-contraste' ? 'bg-white' : 'bg-red-500')}`} />
               </div>
             </div>
+          </div>
+
+          {/* Las decisiones del arbitro, junto al reloj: es el hueco que
+              quedaba libre y es donde el operador ya esta mirando cuando el
+              arbitro señala el punto de penal. */}
+          <div className="w-full lg:w-auto lg:min-w-[230px] order-4 lg:order-2 bg-zinc-900/60 border border-zinc-700 rounded-xl p-2">
+            <RefereeActions
+              homeTeamName={homeTeamName} awayTeamName={awayTeamName}
+              enTanda={state.period === 'penales'}
+              disabled={matchEnded}
+              onPenal={t => props.scorePenalty(t)}
+              onAnular={t => props.annulGoal(t)}
+            />
           </div>
 
           {/* LADO DERECHO: PLAY SONORO, Periodo, Controles Maestros */}

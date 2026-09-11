@@ -17,3 +17,30 @@ Recomendado: .webp, fondo transparente, lado mayor ~512 px.
 
 Al cambiar de club: deja aquí el escudo nuevo, apunta `logoUrl` a él y deja
 `logoUrlFallback` en ''.
+
+---
+
+DOS TAMANOS, NO UNO
+===================
+
+    internacional-lo-espejo.webp       el escudo bueno (proyeccion)
+    internacional-lo-espejo-64.webp    copia reducida, ~64 px de lado
+
+El grande pesa lo que tiene que pesar para verse en una pantalla de estadio.
+Usarlo tambien para el icono de 36 px de la barra obliga al navegador a
+descargar y reescalar esa imagen entera antes de pintar: por eso demoraba en
+aparecer.
+
+`logoIconUrl` en lib/club-brand.ts apunta al chico. Si el archivo no esta, se
+usa el grande y todo funciona igual, solo mas lento.
+
+ICONO DE LA APP (favicon y pantalla de inicio)
+==============================================
+
+    /public/icon-32.png      32x32
+    /public/icon-192.png     192x192
+    /public/apple-icon.png   180x180
+
+Vienen generados desde el escudo ARDI generico. Para un despliegue de club,
+reemplazarlos por el escudo del club YA REDUCIDO a esos tamanos. No apuntar la
+metadata al escudo original.

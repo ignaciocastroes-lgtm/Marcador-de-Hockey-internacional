@@ -4,9 +4,6 @@ import React, { useState, useEffect } from 'react'
 import { GENERIC_SHIELDS } from '@/lib/generic-shields'
 import { Monitor, Gamepad2, Maximize, Minimize, ExternalLink, Tv, Settings2, X, Users, Keyboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
- '@/components/ui/input'
- '@/components/ui/label'
- '@/components/ui/select'
 import { useGameState } from '@/hooks/use-game-state'
 import { OperatorView } from '@/components/operator-view'
 import { CourtOperatorView } from '@/components/court-operator-view'
@@ -20,7 +17,7 @@ import {
   DEFAULT_HOTKEYS, VIEW_ACTIONS, ALWAYS_ON, dialogIsOpen, emitHotkey,
   OPEN_HOTKEYS_EVENT, type HotkeyMap
 } from '@/lib/hotkeys'
-import { CLUB_BRAND, defaultHomeLogo, clubLogoFallback } from '@/lib/club-brand'
+import { CLUB_BRAND, defaultHomeLogo, clubLogoFallback, clubIcon } from '@/lib/club-brand'
 import { seedFromDeployment } from '@/lib/club-boot'
 import { ScoreboardView } from '@/components/scoreboard-view'
  'sonner'
@@ -348,7 +345,8 @@ export default function HockeyControlPanel() {
         <div className="flex items-center gap-2">
           {/* El escudo del club es el avatar: una sola marca, no dos */}
           {CLUB_BRAND.logoUrl ? (
-            <img src={CLUB_BRAND.logoUrl} alt={CLUB_BRAND.name} onError={clubLogoFallback}
+            <img src={clubIcon()} alt={CLUB_BRAND.name} onError={clubLogoFallback}
+              width={36} height={36} decoding="async"
               className="w-9 h-9 object-contain rounded-full shrink-0 bg-black/40 border border-amber-400/40 shadow-lg" />
           ) : (
             <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center shadow-lg border border-amber-400/50">
