@@ -2,7 +2,9 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import Image from 'next/image'
-import { Download, FileText, CheckCircle2, AlertTriangle, Save, RotateCcw, PenTool } from 'lucide-react'
+import { Globe, Download, FileText, CheckCircle2, AlertTriangle, Save, RotateCcw, PenTool } from 'lucide-react'
+import { toast } from 'sonner'
+import { downloadMatchReport, copyMatchArticle } from '@/lib/match-report'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
  './SignatureCanvas'
@@ -115,6 +117,13 @@ export function OfficialSheetModal({
    * configurarlo; si no hay nada, el reloj de cuando arranco. Nunca "ahora":
    * el acta se puede abrir e imprimir cualquier dia posterior.
    */
+  /** Lo que la crónica necesita saber de los equipos. */
+  const reportOpts = {
+    homeTeamName, awayTeamName,
+    homeLogo: state.homeTeam?.logo || undefined,
+    awayLogo: state.awayTeam?.logo || undefined,
+  }
+
   const inicio = state.timestamps?.matchStart ? new Date(state.timestamps.matchStart) : null
 
   /**
@@ -322,6 +331,15 @@ export function OfficialSheetModal({
             <p className="text-zinc-400 text-xs sm:text-sm">Federación Hockey Patín Chile 2026</p>
           </div>
           <div className="flex gap-2">
+            <Button onClick={async () => {
+                const copiado = await copyMatchArticle(state, reportOpts)
+                toast.success(copiado
+                  ? 'Crónica copiada: pégala en la noticia'
+                  : 'Crónica descargada como archivo (el navegador no dejó copiar)')
+              }}
+              className="bg-emerald-700 hover:bg-emerald-600 font-bold h-9">
+              <Globe className="w-4 h-4 mr-2" /> Copiar crónica
+            </Button>
             <Button onClick={exportCSV} variant="outline" className="border-zinc-600 font-bold h-9">
               <Download className="w-4 h-4 mr-2" /> CSV
             </Button>
@@ -713,6 +731,10 @@ export function OfficialSheetModal({
             {planillaLocked && (
               <div className="flex gap-2">
                 <Button onClick={() => window.print()} className="flex-1 h-12 bg-blue-600 hover:bg-blue-500 font-black"><FileText className="w-5 h-5 mr-2" /> ACTA (PDF)</Button>
+                <Button onClick={() => { downloadMatchReport(state, reportOpts); toast.success('Crónica descargada') }}
+                  className="flex-1 h-12 bg-emerald-700 hover:bg-emerald-600 font-black">
+                  <Globe className="w-5 h-5 mr-2" /> CRÓNICA WEB
+                </Button>
                 <Button onClick={exportCSV} variant="outline" className="flex-1 h-12 border-zinc-600 font-bold"><Download className="w-5 h-5 mr-2" /> Datos CSV</Button>
               </div>
             )}

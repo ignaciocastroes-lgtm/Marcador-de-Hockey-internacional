@@ -27,6 +27,13 @@ interface Props {
   awayTeamName: string
   enTanda: boolean
   disabled?: boolean
+  /**
+   * El juego esta detenido: descanso, tiempo muerto o partido suspendido.
+   * El PENAL se bloquea —no se puede convertir uno con el juego parado— pero
+   * ANULAR GOL sigue disponible, que es justo cuando el arbitro se acerca a la
+   * mesa a corregir.
+   */
+  detenido?: boolean
   onPenal: (team: 'home' | 'away') => void
   onAnular: (team: 'home' | 'away') => void
   /** Se cierra el contenedor tras confirmar, si lo hay. */
@@ -36,7 +43,7 @@ interface Props {
 type Pendiente = { accion: 'penal' | 'anular'; team: 'home' | 'away' } | null
 
 export function RefereeActions({
-  homeTeamName, awayTeamName, enTanda, disabled, onPenal, onAnular, onDone
+  homeTeamName, awayTeamName, enTanda, disabled, detenido, onPenal, onAnular, onDone
 }: Props) {
   const [pendiente, setPendiente] = useState<Pendiente>(null)
 
@@ -101,10 +108,11 @@ export function RefereeActions({
       <div>
         <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1 flex items-center gap-1">
           <Target className="w-3 h-3" /> Penal {enTanda ? '(tanda)' : '— cuenta como gol'}
+          {detenido && <span className="text-zinc-600 font-normal normal-case"> · juego detenido</span>}
         </p>
         <div className="grid grid-cols-2 gap-2">
           {equipos.map(e => (
-            <Button key={e.team} disabled={disabled} onClick={() => pedir('penal', e.team)}
+            <Button key={e.team} disabled={disabled || detenido} onClick={() => pedir('penal', e.team)}
               className="h-11 text-xs font-black bg-purple-800 hover:bg-purple-700 disabled:opacity-30">
               <span className="truncate">{e.name}</span>
             </Button>

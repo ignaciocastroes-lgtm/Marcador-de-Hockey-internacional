@@ -172,3 +172,134 @@ hoja de impresión venía de antes y di por hecho que servía.
 Que evolucione a un HTML por partido para la web del club es mejor destino que
 arreglar la hoja de impresión, y se lleva bien con el bloque de posesión y
 tiempos que ya trae el acta.
+
+---
+
+# DESCANSO ≠ SUSPENSIÓN, Y AJUSTES DE LA MESA
+
+## El bug: suspender saltaba de periodo
+
+Todo era "descanso". Suspender en el segundo tiempo **avanzaba al periodo
+siguiente y reponía el reloj entero**: el partido se reanudaba en otro minuto
+del que se había detenido.
+
+Ahora son dos figuras separadas:
+
+| | Reloj | Al reanudar |
+|---|---|---|
+| **Descanso** | cuenta atrás propia | avanza de periodo y repone el juego |
+| **Suspensión** | se congela donde quedó | **mismo periodo, mismo minuto** |
+
+La suspensión y la reanudación **quedan escritas en el acta**, porque son
+hechos del encuentro.
+
+Probado con el caso real: suspender a los 14:22 del segundo tiempo y reanudar
+devuelve 14:22 del segundo tiempo, no 25:00 de un tercero que no existe.
+
+El selector ahora se llama **DETENER EL PARTIDO** y ofrece las dos, con
+SUSPENDER arriba y separado. En la vista operador el botón dice
+**DESCANSO / SUSPENDER**, y el rótulo del reloj distingue "PARTIDO SUSPENDIDO"
+de "DESCANSO".
+
+## Los + y − ya no se bloquean con el juego detenido
+
+En las dos vistas. Es precisamente en el descanso o en un tiempo muerto cuando
+el operador revisa el acta con el árbitro y corrige lo mal cargado; bloquearlo
+ahí era impedir el ajuste justo en el momento en que se hace.
+
+## El penal SÍ se bloquea con el juego detenido
+
+Lo contrario: no se convierte un penal durante un descanso, un tiempo muerto o
+con el partido suspendido. **Anular gol sigue disponible**, que es justo cuando
+el árbitro se acerca a la mesa.
+
+## La pista, más grande
+
+Periodo, chicharra y giro pasaron **al costado del reloj**. Ocupaban una banda
+horizontal entera y esa altura se la quitaban a la pista, que es donde el
+operador trabaja. En pantalla angosta bajan solos.
+
+## Los nombres de los profesores
+
+`generateExpressRoster` creaba el cuerpo técnico con nombres **escritos a
+mano** —"Director Tecnico", "Ayudante 1"— y un id nuevo cada sábado. En la
+banca y en el acta nunca aparecía el nombre real, aunque el plantel lo
+tuviera.
+
+Ahora, al cargar una serie se suma el cuerpo técnico **del club**, con su
+identidad y su nombre. Si no hay ninguno cargado, se completa con el genérico
+de antes para que la banca no quede vacía.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan.**
+
+## NO HECHO EN ESTA RONDA
+
+Lo digo en vez de dejarlo a medias:
+
+1. **El HTML que reemplaza al PDF.** Es el más grande de tu lista y el que
+   tiene destino propio: la web del club. Merece una ronda entera, con el
+   formato pensado para insertarse como noticia.
+2. **Los tres árbitros al inicio del partido**, opcionales.
+3. **Sumar al plantel los de banca que no entran a pista** (suplentes). El
+   cuerpo técnico ya viaja; los suplentes no todavía.
+
+---
+
+# LA CRÓNICA EN HTML
+
+Reemplaza a la impresión como formato de salida. El acta en papel sirve para
+la federación; **esto sirve para el club**: se pega como noticia en la web y
+queda el registro de la temporada.
+
+## Dos botones en la planilla
+
+- **CRÓNICA WEB** — descarga un `.html` completo, listo para abrir o archivar.
+  El nombre sale solo: `2026-09-12-internacional-lo-espejo-vs-cp-bata.html`.
+- **Copiar crónica** — copia sólo el `<article>` al portapapeles, para pegarlo
+  en el gestor de la web. Si el navegador no deja copiar, lo descarga como
+  archivo en vez de fallar en silencio.
+
+## Qué trae
+
+Campeonato, serie, fecha y estadio · marcador con escudos (y penales si hubo)
+· goles con minuto por equipo · tarjetas con su color, marcando las de banca ·
+**posesión en barra y en minutos** · faltas, hora y duración real · marcador
+por periodo · y una **crónica cronológica** de cómo se jugó.
+
+## Las dos figuras, visibles
+
+- Un **gol anulado por el árbitro** aparece **tachado** en la crónica, seguido
+  de la línea que lo anula. No cuenta en el marcador ni en los goleadores,
+  pero se ve: es parte de lo que pasó.
+- Un gol **borrado por error de la mesa** no aparece. Nunca existió.
+- Una **tarjeta anulada** no figura entre las tarjetas.
+- **Suspensión y reanudación** salen en la crónica con su minuto.
+
+## Decisiones de formato
+
+- **Todo en un archivo.** Sin hojas de estilo externas, sin fuentes remotas,
+  sin scripts. Se abre en cualquier parte dentro de diez años y se ve igual.
+  Los escudos son la única excepción, y se ocultan solos si la URL muere.
+- **Estilos con prefijo `ardi-` dentro del `<article>`.** Al pegarlo en un CMS
+  no pelea con el diseño de la página ni se lo lleva por delante.
+- Responsive: en teléfono las cajas se apilan solas.
+
+## Un cabo suelto que apareció al construirlo
+
+`buildSummary` **no excluía los goles anulados**. Lo usa también el lanzador de
+estadísticas de la proyección, así que un gol anulado por el árbitro seguía
+apareciendo en la pantalla del estadio y en la tabla de goleadores. Corregido
+ahí, en los parciales por periodo y en las tarjetas.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan.**
+
+Además, generé una crónica con un partido de prueba —3-1, con gol anulado,
+tarjeta anulada, penal y suspensión— y la revisé: HTML bien formado (ninguna
+etiqueta sin cerrar), el marcador ignora el gol anulado, el anulado sale
+tachado, la roja anulada no figura, y no hay un solo recurso externo.
+
+Va de ejemplo en `ejemplo-cronica.html`.

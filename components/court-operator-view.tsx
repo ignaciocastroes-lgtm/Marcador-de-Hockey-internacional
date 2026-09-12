@@ -78,6 +78,7 @@ export interface CourtOperatorViewProps {
   setPeriod: (period: Period) => void
   nextPeriod: () => void
   startIntermission: (durationMinutes?: number) => void
+  suspendMatch: () => void
   endIntermission: () => void
 
   adjustHomeScore: (delta: number, playerNumber?: string) => void
@@ -873,6 +874,9 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     const score = isHome ? state.homeScore : state.awayScore
     const fouls = isHome ? state.homeFouls : state.awayFouls
     const foulActive = isHome ? state.isHomeFoul10Active : state.isAwayFoul10Active
+    // Los ajustes de gol y falta NO se bloquean con el juego detenido: es
+    // precisamente en el descanso o en un tiempo muerto cuando el operador
+    // revisa el acta con el arbitro y corrige lo que quedo mal cargado.
     return (
       <div className="flex flex-col items-center gap-0.5 sm:gap-1 px-1">
         <div className="flex items-center gap-1 sm:gap-2">
@@ -880,18 +884,18 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           {/* El menos es la ENMIENDA de la mesa: un gol cargado por error
               nunca existio, asi que se borra del acta. Anular un gol que el
               arbitro cobro es otra cosa y vive en el silbato. */}
-          <Button size="sm" disabled={stopped || matchEnded}
+          <Button size="sm" disabled={matchEnded}
             title="Corregir: quitar un gol cargado por error"
             onClick={() => props.correctScore(team)}
             className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
           <span className="text-3xl sm:text-4xl font-black text-red-500 tabular-nums w-9 sm:w-11 text-center leading-none" style={{ fontFamily: 'var(--font-led)' }}>{score}</span>
-          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
+          <Button size="sm" disabled={matchEnded} onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
         </div>
         <div className="flex items-center gap-1 sm:gap-2">
           <span className="text-[8px] sm:text-[10px] font-bold text-zinc-500 w-9 sm:w-11 text-right">FALTA</span>
-          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
+          <Button size="sm" disabled={matchEnded} onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Minus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
           <span className={`text-3xl sm:text-4xl font-black tabular-nums w-9 sm:w-11 text-center leading-none ${foulActive ? 'text-red-500 animate-pulse' : 'text-amber-400'}`} style={{ fontFamily: 'var(--font-led)' }}>{fouls}</span>
-          <Button size="sm" disabled={stopped || matchEnded} onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
+          <Button size="sm" disabled={matchEnded} onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} className="h-7 w-7 sm:h-9 sm:w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><Plus className="w-3 h-3 sm:w-4 sm:h-4" /></Button>
         </div>
       </div>
     )
@@ -971,7 +975,10 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         periodo bajan a su propia fila, que es donde ya terminaban de hecho.
       */}
       <div className="bg-black border-2 border-zinc-800 rounded-xl p-2 sm:p-3 flex flex-col gap-2">
-      <div className="flex items-center justify-between sm:justify-center gap-1 sm:gap-3">
+      {/* Periodo, chicharra y giro van al COSTADO, no debajo del reloj.
+          Ocupaban una banda horizontal entera y esa altura se la quitaban a la
+          pista, que es donde el operador trabaja. */}
+      <div className="flex items-center justify-between sm:justify-center gap-1 sm:gap-3 flex-wrap xl:flex-nowrap">
         {/* Arrancar/pausar sin chicharra ya lo hace el círculo central de la
             pista (sacar del centro), y con chicharra: CHICHARRA + el mismo
             círculo. Los dos botones que estaban aquí eran el mismo gesto dos
@@ -1011,11 +1018,9 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <PossessionSide side="away" />
           <ManualScore team="away" />
         </div>
-      </div>
 
-      {/* Fila de controles: periodo, chicharra, giro y el estado en curso. */}
-      <div className="flex flex-wrap items-stretch justify-center gap-2">
-        <div className="flex flex-col gap-1 min-w-[150px]">
+        {/* Controles al costado. En pantalla angosta bajan solos. */}
+        <div className="flex flex-col gap-1 min-w-[150px] xl:ml-2">
           <div className="flex gap-1">
             <Select value={state.period} onValueChange={v => props.setPeriod(v as Period)} disabled={matchEnded}>
               <SelectTrigger className="h-8 text-xs font-bold bg-zinc-900 border-zinc-700"><SelectValue /></SelectTrigger>
@@ -1057,13 +1062,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                 <Button onClick={() => setShowIntermissionSelector(true)} size="sm" className="h-6 flex-1 text-[9px] bg-zinc-800 hover:bg-zinc-700">+ MIN</Button>
               </div>
             </div>
-          ) : (
-            /* El disparador vive ahora en la barra inferior, junto al resto de
-               la administración. Aquí sólo queda el estado en curso. */
-            <span className="text-[10px] text-zinc-700 font-bold uppercase text-center leading-tight">
-              Descanso y suspensión<br />en la barra inferior
-            </span>
-          )}
+          ) : null}
         </div>
       </div>
       </div>
@@ -1695,6 +1694,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               homeTeamName={homeTeamName} awayTeamName={awayTeamName}
               enTanda={state.period === 'penales'}
               disabled={matchEnded}
+              detenido={state.isIntermission || !!state.activeTimeout}
               onPenal={t => props.scorePenalty(t)}
               onAnular={t => props.annulGoal(t)}
               onDone={() => setRefOpen(false)}
@@ -1842,8 +1842,31 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       <Dialog open={showIntermissionSelector} onOpenChange={setShowIntermissionSelector}>
         <DialogContent className="bg-zinc-900 border-2 border-amber-600 text-white max-w-md lg:max-w-xl" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle className="text-amber-400 text-xl font-black text-center">TIEMPO DE DESCANSO</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="text-amber-400 text-xl font-black text-center">DETENER EL PARTIDO</DialogTitle>
+          </DialogHeader>
           <div className="p-4 space-y-4">
+
+            {/* Dos figuras distintas, y la diferencia importa:
+                el descanso AVANZA de periodo al terminar; la suspension vuelve
+                al mismo periodo y al mismo minuto. Antes todo era descanso, asi
+                que suspender en el segundo tiempo saltaba de periodo y reponia
+                el reloj entero. */}
+            <div className="bg-zinc-950 border-2 border-red-800 rounded-xl p-3">
+              <p className="text-[11px] text-zinc-400 leading-snug mb-2">
+                <b className="text-red-300">Partido suspendido</b> — el reloj queda
+                congelado en {formatTime(state.mainClock)} y al reanudar se sigue
+                en este mismo periodo y minuto. Queda en el acta.
+              </p>
+              <Button onClick={() => { props.suspendMatch(); setShowIntermissionSelector(false) }}
+                className="w-full h-12 font-black bg-red-800 hover:bg-red-700">
+                SUSPENDER PARTIDO
+              </Button>
+            </div>
+
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest pt-1">
+              Descanso — al terminar pasa al periodo siguiente
+            </p>
             <div className="grid grid-cols-3 gap-2">
               {[2, 5, 10].map(m => (
                 <Button key={m} onClick={() => { props.startIntermission(m); setShowIntermissionSelector(false) }} className="h-16 text-lg font-black bg-amber-700 hover:bg-amber-600">{m} MIN</Button>

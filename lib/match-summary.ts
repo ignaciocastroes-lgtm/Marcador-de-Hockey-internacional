@@ -52,8 +52,10 @@ function teamSummary(
 ): TeamSummary {
   const log: MatchEvent[] = state.matchLog || []
 
+  // `!e.anulado`: un gol que el arbitro anulo no cuenta en el resumen ni en
+  // la tabla de goleadores. Queda en el registro cronologico, marcado.
   const goals: GoalLine[] = log
-    .filter(e => e.eventType === 'gol' && e.team === team && periods.includes(e.period))
+    .filter(e => e.eventType === 'gol' && !e.anulado && e.team === team && periods.includes(e.period))
     .map(e => ({ minute: playedMinute(state, e.gameTime), number: e.actor || '—', team }))
 
   const tally = new Map<string, number>()
@@ -62,8 +64,9 @@ function teamSummary(
     .map(([number, gls]) => ({ number, goals: gls }))
     .sort((a, b) => b.goals - a.goals || a.number.localeCompare(b.number))
 
+  // Igual con las tarjetas anuladas por la mesa.
   const cards: CardLine[] = (state.cardHistory || [])
-    .filter(c => c.team === team && periods.includes(c.period))
+    .filter(c => !c.anulada && c.team === team && periods.includes(c.period))
     .map(c => ({ number: c.playerNumber, type: c.cardType, isBench: c.isBench }))
 
   const own = team === 'home' ? (state.homePossessionTime || 0) : (state.awayPossessionTime || 0)
@@ -90,7 +93,7 @@ export function buildSummary(state: GameState, scope: 'primer_tiempo' | 'complet
     : ['1er_tiempo', '2do_tiempo', 'alargue', 'penales']
 
   const goalsIn = (p: Period, team: 'home' | 'away') =>
-    (state.matchLog || []).filter(e => e.eventType === 'gol' && e.team === team && e.period === p).length
+    (state.matchLog || []).filter(e => e.eventType === 'gol' && !e.anulado && e.team === team && e.period === p).length
 
   const byPeriod = (scope === 'primer_tiempo' ? (['1er_tiempo'] as Period[]) : (['1er_tiempo', '2do_tiempo', 'alargue'] as Period[]))
     .filter(p => p === '1er_tiempo' || p === '2do_tiempo' || goalsIn(p, 'home') + goalsIn(p, 'away') > 0)

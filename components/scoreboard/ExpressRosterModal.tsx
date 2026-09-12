@@ -62,6 +62,8 @@ const detectarChoques = (entries: { number: string }[]) => {
   return [...cuenta.entries()].filter(([, n]) => n > 1).map(([number]) => number)
 }
 
+const STAFF = ['dt', 'ay1', 'ay2', 'ax1', 'ax2']
+
 export function ExpressRosterModal({ open, onClose, teamName, side, value, onSave }: Props) {
   const [club, setClub] = useState<ClubStore>(() => bootClub())
   const [entries, setEntries] = useState<ExpressEntry[]>([])
@@ -70,6 +72,8 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
   const [serieCargada, setSerieCargada] = useState<string | null>(null)
   /** Del plantel pero sin numero en esa serie: se muestran para poder sumarlas. */
   const [pendientes, setPendientes] = useState<SquadPlayer[]>([])
+  /** Cuerpo tecnico del club: viaja aparte de las fichas de pista. */
+  const [staffCitado, setStaffCitado] = useState<ExpressEntry[]>([])
   /**
    * Escribir en el plantel los numeros de ESTE partido: apagado por defecto.
    *
@@ -239,6 +243,15 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
                 personId: p.id, nombre: p.nombre, apodo: p.apodo || ''
               })))
               setPendientes(squad.filter(p => !p.dorsal.trim()))
+
+              // El cuerpo tecnico no pertenece a una serie: es del club. Se
+              // suma aparte para que sus NOMBRES lleguen a la banca y al acta,
+              // en vez del generico "Director Tecnico".
+              const staff = club.personas.filter(p => !p.retirado && STAFF.includes(p.rol))
+              setStaffCitado(staff.map(p => ({
+                number: p.rol.toUpperCase(), isGoalie: false, rol: p.rol,
+                personId: p.id, nombre: p.nombre, apodo: p.apodo || ''
+              })))
               const cargadas = Math.min(conNumero.length, MAX_ENTRIES)
               if (conNumero.length > MAX_ENTRIES) {
                 toast.warning(
@@ -441,7 +454,7 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
             className="h-11 font-bold border-red-900 text-red-400 hover:bg-red-950 disabled:opacity-30 text-xs">
             <Trash2 className="w-4 h-4 mr-1.5" /> VACIAR
           </Button>
-          <Button onClick={() => { persistirCambios(); onSave(entries); onClose() }}
+          <Button onClick={() => { persistirCambios(); onSave([...entries, ...staffCitado]); onClose() }}
             className="h-11 font-black bg-green-700 hover:bg-green-600 text-xs">
             <Check className="w-4 h-4 mr-1.5" /> GUARDAR
           </Button>

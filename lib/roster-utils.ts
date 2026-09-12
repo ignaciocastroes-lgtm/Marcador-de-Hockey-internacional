@@ -8,6 +8,8 @@ const uid = () => crypto.randomUUID()
 export interface ExpressEntry {
   number: string
   isGoalie: boolean
+  /** 'dt' | 'ay1' | … para el cuerpo tecnico; vacio = jugador de pista. */
+  rol?: string
   /** Nombre de pantalla, opcional. Vacio = la animacion muestra el dorsal. */
   apodo?: string
   /** Identidad, cuando la ficha viene del plantel del club (ILE-0007). */
@@ -46,11 +48,33 @@ export const generateExpressRoster = (entries?: ExpressEntry[]): Player[] => {
     }
   }
 
-  players.push({ id: uid(), number: 'DT',  name: 'Director Tecnico', rut: '', position: '', role: 'dt' })
-  players.push({ id: uid(), number: 'AY1', name: 'Ayudante 1',       rut: '', position: '', role: 'ay1' })
-  players.push({ id: uid(), number: 'AY2', name: 'Ayudante 2',       rut: '', position: '', role: 'ay2' })
-  players.push({ id: uid(), number: 'AX1', name: 'Auxiliar 1',       rut: '', position: '', role: 'ax1' })
-  players.push({ id: uid(), number: 'AX2', name: 'Auxiliar 2',       rut: '', position: '', role: 'ax2' })
+  /**
+   * CUERPO TECNICO — con nombre de verdad cuando lo hay.
+   *
+   * Estos cinco se creaban SIEMPRE con nombre generico escrito a mano
+   * ("Director Tecnico", "Ayudante 1") y un id nuevo cada sabado. En la banca
+   * se veia DT, AY1, AX2… y en el acta lo mismo: nunca el nombre del profesor,
+   * aunque el plantel del club lo tuviera guardado.
+   *
+   * Ahora, si la ficha vino del plantel, viajan su identidad y su nombre. Si
+   * no vino ninguna, se completan con el generico de antes para que la banca
+   * nunca quede vacia.
+   */
+  const ROLES_STAFF: [string, string, string][] = [
+    ['dt', 'DT', 'Director Tecnico'], ['ay1', 'AY1', 'Ayudante 1'],
+    ['ay2', 'AY2', 'Ayudante 2'], ['ax1', 'AX1', 'Auxiliar 1'],
+    ['ax2', 'AX2', 'Auxiliar 2'],
+  ]
+  ROLES_STAFF.forEach(([rol, etiqueta, generico]) => {
+    const ficha = entries?.find(e => e.rol === rol)
+    players.push({
+      id: ficha?.personId || uid(),
+      number: etiqueta,
+      name: ficha?.nombre || generico,
+      apodo: ficha?.apodo || '',
+      rut: '', position: '', role: rol as Player['role']
+    })
+  })
 
   return players
 }

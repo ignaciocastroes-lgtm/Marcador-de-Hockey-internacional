@@ -221,6 +221,21 @@ export interface GameState {
   period: Period
   currentPeriodNumber: number
   isIntermission: boolean
+  /**
+   * QUE clase de detencion es. Son dos cosas distintas y se confundian:
+   *
+   *  'descanso'   entretiempo. Corre una cuenta atras y, al llegar a cero,
+   *               AVANZA de periodo y repone el reloj de juego.
+   *  'suspension' el partido se detiene (lluvia, luz, incidente). Al reanudar
+   *               se vuelve al MISMO periodo y al MISMO minuto en que quedo.
+   *
+   * Antes todo era 'descanso': suspender en el segundo tiempo pasaba al
+   * siguiente periodo y reponia el reloj entero. El partido se reanudaba en
+   * otro minuto del que se habia detenido.
+   */
+  pauseKind?: 'descanso' | 'suspension'
+  /** Minuto de juego guardado al suspender, para volver exactamente ahi. */
+  clockBeforePause?: number
   homeScore: number
   awayScore: number
   homeTeam: Team | null
@@ -666,7 +681,9 @@ export function useGameState() {
   const ultimoDescanso = useRef<number>(-1)
 
   useEffect(() => {
-    if (isReceiver || !state.isIntermission) return
+    // Una suspension no tiene cuenta atras: el reloj queda congelado donde
+    // estaba hasta que alguien reanude.
+    if (isReceiver || !state.isIntermission || state.pauseKind === 'suspension') return
     anclaDescanso.current = { ts: performance.now(), clock: state.mainClock }
     ultimoDescanso.current = state.mainClock
 
@@ -691,6 +708,7 @@ export function useGameState() {
             ...prev,
             mainClock: prev.initialClockTime,
             isIntermission: false,
+            pauseKind: undefined,
             isMainClockRunning: false,
             period: sig ?? prev.period,
             possessionClockLeft: POSSESSION_DURATION,
@@ -705,7 +723,7 @@ export function useGameState() {
       })
     }, 250)
     return () => clearInterval(interval)
-  }, [isReceiver, state.isIntermission, playBuzzer])
+  }, [isReceiver, state.isIntermission, state.pauseKind, playBuzzer])
 
   useEffect(() => {
     if (isReceiver || !state.isPossessionLeftRunning || state.possessionClockLeft <= 0) return
@@ -838,23 +856,75 @@ export function useGameState() {
     setState(prev => ({ ...prev, matchPhase: phase }))
   }, [])
 
+  /** ENTRETIEMPO: cuenta atras y, al terminar, siguiente periodo. */
   const startIntermission = useCallback((durationMinutes?: number) => {
     playBuzzer()
     const duration = durationMinutes ? durationMinutes * 60 : INTERMISSION_DURATION
     setState(prev => ({
-      ...prev, isIntermission: true, mainClock: duration, isMainClockRunning: false,
-      isPossessionLeftRunning: false, isPossessionRightRunning: false, 
+      ...prev, isIntermission: true, pauseKind: 'descanso',
+      clockBeforePause: prev.mainClock,
+      mainClock: duration, isMainClockRunning: false,
+      isPossessionLeftRunning: false, isPossessionRightRunning: false,
       possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION,
       activeTimeout: null
     }))
   }, [playBuzzer])
 
+  /**
+   * PARTIDO SUSPENDIDO. No es un entretiempo:
+   *  · no corre ninguna cuenta atras,
+   *  · el reloj de juego se congela donde quedo,
+   *  · al reanudar se sigue en el MISMO periodo y el MISMO minuto.
+   * Queda en el acta, porque una suspension es un hecho del encuentro.
+   */
+  const suspendMatch = useCallback(() => {
+    playBuzzer()
+    setState(prev => {
+      const evento: MatchEvent = {
+        id: uid(), timestamp: new Date().toISOString(), gameTime: prev.mainClock,
+        period: prev.period, eventType: 'ajuste', team: null, actor: '',
+        details: 'PARTIDO SUSPENDIDO'
+      }
+      return {
+        ...prev, isIntermission: true, pauseKind: 'suspension',
+        clockBeforePause: prev.mainClock,
+        isMainClockRunning: false,
+        isPossessionLeftRunning: false, isPossessionRightRunning: false,
+        possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION,
+        activeTimeout: null,
+        matchLog: [...prev.matchLog, evento]
+      }
+    })
+  }, [playBuzzer])
+
   const endIntermission = useCallback(() => {
     setState(prev => {
+      // REANUDAR UNA SUSPENSION: mismo periodo, mismo minuto. No avanza nada.
+      if (prev.pauseKind === 'suspension') {
+        return {
+          ...prev,
+          isIntermission: false,
+          pauseKind: undefined,
+          isMainClockRunning: false,
+          mainClock: prev.clockBeforePause ?? prev.mainClock,
+          possessionClockLeft: POSSESSION_DURATION,
+          possessionClockRight: POSSESSION_DURATION,
+          isPossessionLeftRunning: false,
+          isPossessionRightRunning: false,
+          matchLog: [...prev.matchLog, {
+            id: uid(), timestamp: new Date().toISOString(),
+            gameTime: prev.clockBeforePause ?? prev.mainClock,
+            period: prev.period, eventType: 'ajuste' as const, team: null, actor: '',
+            details: 'Partido REANUDADO'
+          }]
+        }
+      }
+
       const sig = siguientePeriodo(prev)
       return {
         ...prev,
         isIntermission: false,
+        pauseKind: undefined,
         isMainClockRunning: false,
         mainClock: prev.initialClockTime,
         period: sig ?? prev.period,
@@ -1930,7 +2000,7 @@ export function useGameState() {
     toggleMainClock, pauseMainClock, resetMainClock, setMainClockTime, adjustMainClock,
     setPeriod, nextPeriod, adjustHomeScore, adjustAwayScore, adjustHomeFouls, adjustAwayFouls, resetFouls,
     annulGoal, correctScore, scorePenalty,
-    adjustHomePenalties, adjustAwayPenalties, startIntermission, endIntermission,
+    adjustHomePenalties, adjustAwayPenalties, startIntermission, endIntermission, suspendMatch,
     addYellowCard, resetYellowCards, addSanction, addBenchSanction, removeSanction, clearSanctions,
     requestTimeoutHome, requestTimeoutAway, grantTimeoutHome, grantTimeoutAway,
     cancelTimeoutRequest, cancelActiveTimeout, resetTimeouts,

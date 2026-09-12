@@ -116,7 +116,8 @@ interface OperatorViewProps {
   scorePenalty: (team: 'home' | 'away', playerNumber?: string) => void;
   annulGoal: (team: 'home' | 'away') => void;
   correctScore: (team: 'home' | 'away') => void; adjustAwayPenalties: (delta: number) => void;
-  startIntermission: (durationMinutes?: number) => void; endIntermission: () => void;
+  startIntermission: (durationMinutes?: number) => void;
+  suspendMatch: () => void; endIntermission: () => void;
   addYellowCard: (team: 'home' | 'away') => void; resetYellowCards: (team: 'home' | 'away') => void;
   addSanction: (team: 'home' | 'away', type: 'yellow' | 'blue' | 'red', playerNumber: string, isBench?: boolean, staffId?: string, sanctionType?: 'direct' | 'collective') => void;
   addBenchSanction: (team: 'home' | 'away', sentCard: 'yellow' | 'red', directInfractor: { id: string, name: string, role: string, number: string }, collectiveTargets: Array<{ id: string, name: string, role: string, number: string }>) => void;
@@ -665,7 +666,9 @@ export function OperatorView(props: OperatorViewProps) {
           <div className="order-1 lg:order-2 flex-[1.5] flex flex-col items-center justify-center">
             <div className={`relative px-4 sm:px-8 py-6 sm:py-8 w-full max-w-2xl flex flex-col items-center justify-center transition-all duration-300 ${clockContainerClass}`}>
               <span className={`text-xs sm:text-sm font-black tracking-widest block text-center mb-1 sm:mb-2 transition-colors ${state.isIntermission ? (theme.id === 'alto-contraste' ? 'text-white' : 'text-amber-400') : theme.clock.label}`}>
-                {state.isIntermission ? 'DESCANSO' : 'TIEMPO DE JUEGO'}
+                {state.isIntermission
+                  ? (state.pauseKind === 'suspension' ? 'PARTIDO SUSPENDIDO' : 'DESCANSO')
+                  : 'TIEMPO DE JUEGO'}
               </span>
               <div className={`w-[220px] sm:w-[320px] lg:w-[420px] mx-auto flex justify-center text-6xl sm:text-8xl lg:text-[7rem] leading-none tabular-nums transition-colors duration-300 ${clockTextColor}`} style={{...clockTextStyle, fontVariantNumeric: 'tabular-nums'}}>
 {/* El reloj principal muestra SIEMPRE el tiempo de juego. Antes, con un
@@ -692,6 +695,7 @@ export function OperatorView(props: OperatorViewProps) {
               homeTeamName={homeTeamName} awayTeamName={awayTeamName}
               enTanda={state.period === 'penales'}
               disabled={matchEnded}
+              detenido={state.isIntermission || !!state.activeTimeout}
               onPenal={t => props.scorePenalty(t)}
               onAnular={t => props.annulGoal(t)}
             />
@@ -909,7 +913,21 @@ export function OperatorView(props: OperatorViewProps) {
 
       <Dialog open={showIntermissionSelector} onOpenChange={setShowIntermissionSelector}>
         <DialogContent className="bg-zinc-900 border-2 border-amber-600 text-white max-w-md" aria-describedby={undefined}>
-          <DialogHeader><DialogTitle className="text-amber-400 text-xl font-black text-center">TIEMPO DE DESCANSO</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="text-amber-400 text-xl font-black text-center">DETENER EL PARTIDO</DialogTitle>
+          </DialogHeader>
+          {/* Suspender NO es descansar: el descanso avanza de periodo al
+              terminar, la suspension vuelve al mismo periodo y minuto. */}
+          <div className="mx-4 bg-zinc-950 border-2 border-red-800 rounded-xl p-3">
+            <p className="text-[11px] text-zinc-400 leading-snug mb-2">
+              <b className="text-red-300">Partido suspendido</b> — el reloj queda
+              congelado y al reanudar se sigue en este mismo periodo y minuto.
+            </p>
+            <Button onClick={() => { props.suspendMatch(); setShowIntermissionSelector(false) }}
+              className="w-full h-12 font-black bg-red-800 hover:bg-red-700">
+              SUSPENDER PARTIDO
+            </Button>
+          </div>
           <div className="p-4 space-y-4">
             <div className="grid grid-cols-3 gap-2">
               <Button onClick={() => { props.startIntermission(2); setShowIntermissionSelector(false) }} className="h-16 text-lg sm:text-xl font-black bg-amber-800 hover:bg-amber-700">2 MIN</Button>
@@ -962,7 +980,7 @@ export function OperatorView(props: OperatorViewProps) {
                 </div>
               ) : (
                 <Button onClick={() => setShowIntermissionSelector(true)} disabled={state.isIntermission || matchEnded} title={`Descanso [Atajo: ${keyLabel(hotkeys, 'intermission')}]`} className={`font-bold w-full text-[10px] sm:text-xs h-10 sm:h-12 px-2 sm:px-4 ${theme.btn.shape} ${theme.btn.foul}`}>
-                  <Timer className="w-4 h-4 sm:mb-1 sm:mr-1" /> <span className="hidden sm:inline">DESCANSO</span>
+                  <Timer className="w-4 h-4 sm:mb-1 sm:mr-1" /> <span className="hidden sm:inline">DESCANSO / SUSPENDER</span>
                 </Button>
               )}
             </div>
@@ -1113,16 +1131,16 @@ export function OperatorView(props: OperatorViewProps) {
                   <span className={`text-[10px] sm:text-xs font-bold block ${theme.clock.label}`}>GOLES</span>
                   <span className={`text-4xl sm:text-5xl font-black tabular-nums block min-w-[60px] mx-auto ${theme.id === 'alto-contraste' ? 'text-white' : 'text-red-500'}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>{score}</span>
                   <div className="flex justify-center gap-1 mt-2">
-                    <Button size="sm" onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} disabled={matchEnded || state.isIntermission} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Minus className="w-4 h-4" /></Button>
-                    <Button size="sm" onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} disabled={matchEnded || state.isIntermission} title={`Gol ${isHome ? 'local' : 'visita'} [Atajo: ${keyLabel(hotkeys, isHome ? 'homeGoal' : 'awayGoal')}]`} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} disabled={matchEnded} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Minus className="w-4 h-4" /></Button>
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} disabled={matchEnded} title={`Gol ${isHome ? 'local' : 'visita'} [Atajo: ${keyLabel(hotkeys, isHome ? 'homeGoal' : 'awayGoal')}]`} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
                   </div>
                 </div>
                 <div className={`rounded-lg p-3 text-center transition-colors ${foulActive ? (theme.id === 'alto-contraste' ? 'border-4 border-white' : 'bg-red-900/50 border-2 border-red-500 animate-pulse') : 'bg-black/50 border-2 border-transparent'}`}>
                   <span className={`text-[10px] sm:text-xs font-bold block ${theme.clock.label}`}>FALTAS</span>
                   <span className={`text-4xl sm:text-5xl font-black tabular-nums block min-w-[60px] mx-auto ${foulActive ? (theme.id==='alto-contraste'?'text-white':'text-red-500') : (theme.id==='alto-contraste'?'text-[#FFFF00]':'text-amber-400')}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>{fouls}</span>
                   <div className="flex justify-center gap-1 mt-2">
-                    <Button size="sm" onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} disabled={matchEnded || state.isIntermission} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Minus className="w-4 h-4" /></Button>
-                    <Button size="sm" onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} disabled={matchEnded || state.isIntermission} title={`Falta ${isHome ? 'local' : 'visita'} [Atajo: ${keyLabel(hotkeys, isHome ? 'homeFoul' : 'awayFoul')}]`} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} disabled={matchEnded} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Minus className="w-4 h-4" /></Button>
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} disabled={matchEnded} title={`Falta ${isHome ? 'local' : 'visita'} [Atajo: ${keyLabel(hotkeys, isHome ? 'homeFoul' : 'awayFoul')}]`} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
                   </div>
                 </div>
                 {state.matchConfig.allowPenalties && (
@@ -1138,7 +1156,7 @@ export function OperatorView(props: OperatorViewProps) {
               </div>
 
               <div className={`grid ${state.matchConfig.allowPenalties ? 'grid-cols-2' : 'grid-cols-1'} gap-2 sm:gap-3 mb-3 shrink-0`}>
-                <Button onClick={() => openPosModal(side, 'gol')} disabled={matchEnded || state.isIntermission} className={`h-14 sm:h-16 text-xl font-black ${theme.btn.shape} ${theme.btn.primary}`}>
+                <Button onClick={() => openPosModal(side, 'gol')} disabled={matchEnded} className={`h-14 sm:h-16 text-xl font-black ${theme.btn.shape} ${theme.btn.primary}`}>
                   <Goal className="w-6 h-6 mr-2" /> + GOL
                 </Button>
                 {state.matchConfig.allowPenalties && (
