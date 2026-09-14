@@ -67,7 +67,6 @@ export function SeriesEditorModal({ open, onClose }: Props) {
     const order = (series[series.length - 1]?.order ?? 0) + 1
     if (aplicar(saveSerie(club, { id, label, gender: rama, order }))) {
       setNuevo('')
-      toast.success(`${label} agregada`)
     }
   }
 
@@ -88,7 +87,6 @@ export function SeriesEditorModal({ open, onClose }: Props) {
     const r = deleteSerie(club, s.id)
     if (!r.ok) { toast.warning(r.error!, { duration: 7000 }); return }
     guardar(r.club!)
-    toast.success(`${s.label} eliminada`)
   }
 
   return (

@@ -98,17 +98,20 @@ export function OverlayDraggable({
       {editMode && (
         <div className="absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-black/90 border border-white/25 rounded-lg px-1 py-0.5 z-50"
           onPointerDown={e => e.stopPropagation()}>
-          <button onClick={() => onChange(id, { ...pos, s: Math.max(0.3, +(pos.s - 0.1).toFixed(2)) })}
+          <button type="button" onMouseDown={e => e.stopPropagation()}
+            onClick={() => onChange(id, { ...pos, s: Math.max(0.3, +(pos.s - 0.1).toFixed(2)) })}
             className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/15 rounded" title="Reducir">
             <Minus className="w-3.5 h-3.5" />
           </button>
           <span className="text-[10px] font-mono text-white/70 w-9 text-center">{Math.round(pos.s * 100)}%</span>
-          <button onClick={() => onChange(id, { ...pos, s: Math.min(3, +(pos.s + 0.1).toFixed(2)) })}
+          <button type="button" onMouseDown={e => e.stopPropagation()}
+            onClick={() => onChange(id, { ...pos, s: Math.min(3, +(pos.s + 0.1).toFixed(2)) })}
             className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/15 rounded" title="Agrandar">
             <Plus className="w-3.5 h-3.5" />
           </button>
           <span className="w-px h-4 bg-white/20" />
-          <button onClick={() => onChange(id, { ...pos, v: !pos.v })}
+          <button type="button" onMouseDown={e => e.stopPropagation()}
+            onClick={() => onChange(id, { ...pos, v: !pos.v })}
             className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/15 rounded"
             title={pos.v ? 'Ocultar' : 'Mostrar'}>
             {pos.v ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5 opacity-50" />}

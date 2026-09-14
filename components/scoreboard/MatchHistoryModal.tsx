@@ -174,7 +174,6 @@ export function MatchHistoryModal({
       ].join(',') + '\n'
     })
     download(`historial_${serieFilter.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`, csv)
-    toast.success('Historial exportado')
   }
 
   const exportPosiciones = () => {
@@ -193,7 +192,6 @@ export function MatchHistoryModal({
       csv += [i + 1, q(s.number), q(s.name), q(s.team), s.goles].join(',') + '\n'
     })
     download(`posiciones_${serieFilter.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`, csv)
-    toast.success('Tabla y goleadores exportados')
   }
 
   const exportMatch = (m: MatchRecord) => {
@@ -217,7 +215,6 @@ export function MatchHistoryModal({
       ].join(',') + '\n'
     })
     download(`partido_${m.homeTeam}_vs_${m.awayTeam}_${fmtDate(m.date).replace(/\//g, '-')}.csv`, csv)
-    toast.success('Partido exportado')
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -305,7 +302,7 @@ export function MatchHistoryModal({
                       <Button onClick={() => exportMatch(m)} size="sm" variant="outline" className="h-8 border-zinc-700 text-xs shrink-0" title="Exportar este partido">
                         <Download className="w-3.5 h-3.5" />
                       </Button>
-                      <Button onClick={() => { deleteMatchFromHistory(m.id); toast.success('Partido eliminado del historial') }}
+                      <Button onClick={() => { deleteMatchFromHistory(m.id)}}
                         size="sm" variant="outline" className="h-8 border-red-900 text-red-400 hover:bg-red-950 text-xs shrink-0" title="Eliminar del historial">
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
@@ -447,7 +444,7 @@ export function MatchHistoryModal({
               <p className="text-zinc-500 mb-5 text-xs">Exporta el historial antes si necesitas conservarlo.</p>
               <div className="flex gap-3">
                 <Button onClick={() => setConfirmClear(false)} variant="outline" className="flex-1 h-11 font-bold border-zinc-600">CANCELAR</Button>
-                <Button onClick={() => { clearHistory(); setConfirmClear(false); toast.success('Historial borrado') }} className="flex-1 h-11 font-black bg-red-600 hover:bg-red-500">SÍ, BORRAR</Button>
+                <Button onClick={() => { clearHistory(); setConfirmClear(false)}} className="flex-1 h-11 font-black bg-red-600 hover:bg-red-500">SÍ, BORRAR</Button>
               </div>
             </div>
           </DialogContent>

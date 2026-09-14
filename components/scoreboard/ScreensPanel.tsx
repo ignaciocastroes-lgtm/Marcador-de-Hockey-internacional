@@ -183,6 +183,12 @@ export function ScreensPanel(props: ScreensPanelProps) {
         tone="border-blue-800/60 hover:border-blue-600"
         icon={<LayoutDashboard className="w-6 h-6 text-blue-400 shrink-0" />} />
 
+      {/* El montaje estaba DENTRO de "Vistas y proyectores", un panel
+          plegable: había que saber que estaba ahí para encontrarlo. Guardar
+          y cargar el encuadre es de las cosas que más se buscan, así que va
+          en la portada del gestor, a la vista. */}
+      <PresetButtons kind="ardi:pantallas" />
+
       {/* ── 1. ESCUDOS E IDENTIDAD ──────────────────────────────────────── */}
       <Panel id="identidad" title="Escudos e identidad" icon={<Shield className="w-5 h-5 text-yellow-400" />}>
         {/* Previsualización de lo que está puesto ahora mismo. El `onLoad` es
@@ -453,8 +459,6 @@ export function ScreensPanel(props: ScreensPanelProps) {
             </Button>
           ))}
         </div>
-        <PresetButtons kind="ardi:pantallas" />
-
         {/* ── EMPEZAR DE CERO ─────────────────────────────────────────── */}
         <div className="border-t border-zinc-800 pt-3 mt-3">
           <Label className="text-red-400 text-xs font-black uppercase tracking-widest flex items-center mb-1">
@@ -508,7 +512,6 @@ export function ScreensPanel(props: ScreensPanelProps) {
               onClick={() => {
                 const borradas = wipeAll()
                 setWipeOpen(false)
-                toast.success(`${borradas.length} elementos borrados. Recargando…`)
                 setTimeout(() => window.location.reload(), 900)
               }}
               className="flex-1 h-11 font-black bg-red-700 hover:bg-red-600 disabled:opacity-40">

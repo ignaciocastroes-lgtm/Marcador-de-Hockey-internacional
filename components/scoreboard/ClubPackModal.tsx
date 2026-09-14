@@ -66,7 +66,7 @@ export function ClubPackModal({ open, onClose }: Props) {
                 {personas} personas · {seriesOf(club).length} series
               </p>
             </div>
-            <Button onClick={() => { downloadClubPack(club); toast.success('Respaldo descargado') }}
+            <Button onClick={() => { downloadClubPack(club)}}
               variant="outline" className="h-9 text-[10px] font-bold border-zinc-600 shrink-0">
               <Download className="w-3.5 h-3.5 mr-1" /> RESPALDO
             </Button>

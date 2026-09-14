@@ -4,7 +4,8 @@ import { useState, useMemo, useEffect } from 'react'
 import Image from 'next/image'
 import { Globe, Download, FileText, CheckCircle2, AlertTriangle, Save, RotateCcw, PenTool } from 'lucide-react'
 import { toast } from 'sonner'
-import { downloadMatchReport, copyMatchArticle } from '@/lib/match-report'
+import { defaultHomeLogo } from '@/lib/club-brand'
+import { downloadMatchReport, openMatchReport } from '@/lib/match-report'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
  './SignatureCanvas'
@@ -117,11 +118,32 @@ export function OfficialSheetModal({
    * configurarlo; si no hay nada, el reloj de cuando arranco. Nunca "ahora":
    * el acta se puede abrir e imprimir cualquier dia posterior.
    */
-  /** Lo que la crónica necesita saber de los equipos. */
+  /**
+   * Lo que la crónica necesita saber de los equipos.
+   *
+   * Los escudos salen del GESTOR DE PANTALLAS (`ardi-live-logos`), que es
+   * donde el operador los pega de verdad y lo que usa el tablero. Antes se
+   * leía `state.homeTeam?.logo`, que en un partido Express está vacío: la
+   * crónica salía sin escudos aunque en la proyección se vieran.
+   */
+  const [logos, setLogos] = useState<{ home?: string; away?: string }>({})
+  useEffect(() => {
+    if (!open) return
+    const leer = () => {
+      try {
+        const l = JSON.parse(localStorage.getItem('ardi-live-logos') || '{}')
+        setLogos({ home: l.homeUrl || undefined, away: l.awayUrl || undefined })
+      } catch { /* sin escudos, la crónica se ve igual */ }
+    }
+    leer()
+    window.addEventListener('ardi-screens-updated', leer)
+    return () => window.removeEventListener('ardi-screens-updated', leer)
+  }, [open])
+
   const reportOpts = {
     homeTeamName, awayTeamName,
-    homeLogo: state.homeTeam?.logo || undefined,
-    awayLogo: state.awayTeam?.logo || undefined,
+    homeLogo: logos.home || state.homeTeam?.logo || defaultHomeLogo() || undefined,
+    awayLogo: logos.away || state.awayTeam?.logo || undefined,
   }
 
   const inicio = state.timestamps?.matchStart ? new Date(state.timestamps.matchStart) : null
@@ -331,14 +353,9 @@ export function OfficialSheetModal({
             <p className="text-zinc-400 text-xs sm:text-sm">Federación Hockey Patín Chile 2026</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={async () => {
-                const copiado = await copyMatchArticle(state, reportOpts)
-                toast.success(copiado
-                  ? 'Crónica copiada: pégala en la noticia'
-                  : 'Crónica descargada como archivo (el navegador no dejó copiar)')
-              }}
+            <Button onClick={() => openMatchReport(state, reportOpts)}
               className="bg-emerald-700 hover:bg-emerald-600 font-bold h-9">
-              <Globe className="w-4 h-4 mr-2" /> Copiar crónica
+              <Globe className="w-4 h-4 mr-2" /> Ver crónica
             </Button>
             <Button onClick={exportCSV} variant="outline" className="border-zinc-600 font-bold h-9">
               <Download className="w-4 h-4 mr-2" /> CSV
@@ -731,7 +748,7 @@ export function OfficialSheetModal({
             {planillaLocked && (
               <div className="flex gap-2">
                 <Button onClick={() => window.print()} className="flex-1 h-12 bg-blue-600 hover:bg-blue-500 font-black"><FileText className="w-5 h-5 mr-2" /> ACTA (PDF)</Button>
-                <Button onClick={() => { downloadMatchReport(state, reportOpts); toast.success('Crónica descargada') }}
+                <Button onClick={() => { downloadMatchReport(state, reportOpts)}}
                   className="flex-1 h-12 bg-emerald-700 hover:bg-emerald-600 font-black">
                   <Globe className="w-5 h-5 mr-2" /> CRÓNICA WEB
                 </Button>

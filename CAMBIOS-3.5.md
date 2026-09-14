@@ -303,3 +303,215 @@ etiqueta sin cerrar), el marcador ignora el gol anulado, el anulado sale
 tachado, la roja anulada no figura, y no hay un solo recurso externo.
 
 Va de ejemplo en `ejemplo-cronica.html`.
+
+---
+
+# CORRECCIONES DE CANCHA
+
+## 1. Con el partido suspendido se podía seguir jugando
+
+`toggleMainClock` comprobaba el tiempo muerto **pero no el descanso ni la
+suspensión**. El reloj de juego arrancaba igual, corriendo por debajo del
+rótulo "PARTIDO SUSPENDIDO". Ahora, para volver a jugar hay que reanudar.
+
+## 2. La barra maestra: una sola fila, el reloj al centro
+
+Era `flex-wrap`: a poco que faltara ancho, la ficha de la visita se caía a una
+segunda línea y quedaba **debajo del centro**, lejos de su propio reloj de 45.
+
+Los dos lados son ahora columnas de igual peso que empujan hacia el reloj, y
+los controles quedan **anclados a la derecha**, donde los marcaste. No se
+envuelve sobre 1024 px; por debajo baja el bloque de controles entero, nunca
+media ficha.
+
+## 3. Los avisos verdes, fuera
+
+**41 `toast.success` eliminados** en toda la app. No aportaban: confirmaban lo
+que ya se ve en pantalla y tapaban la mesa.
+
+Se conservan los de **advertencia y error**, que son los que dicen por qué el
+sistema rechazó algo — sin ellos, un rechazo vuelve a ser silencioso, que es
+el modo de falla que más costó arreglar.
+
+## 4. "Copiar crónica" ahora la ABRE
+
+Copiar a ciegas no servía: no se veía qué se copiaba, y si el navegador
+bloqueaba el permiso no pasaba nada visible.
+
+**VER CRÓNICA** abre la página en una pestaña nueva, ya dibujada, con dos
+botones propios: copiar el código para la web, e imprimir. Ver la página es la
+comprobación. Si el navegador bloquea la ventana emergente, se descarga el
+archivo en vez de fallar en silencio.
+
+## 5. Impresión en hoja carta
+
+- El acta pasó de **A4 apaisado** a **carta vertical**. En Chile el papel de
+  oficina es carta, y apaisado obligaba a girar la hoja para leer una lista.
+- Nada se parte entre dos hojas: tablas, filas y cajas llevan
+  `page-break-inside: avoid`.
+- **La crónica no tenía estilos de impresión.** Ahora tiene los suyos: fondo
+  blanco, texto negro, tamaño carta. Verificado generando el PDF real —
+  entra en una hoja y se lee en blanco y negro.
+
+Van de ejemplo `ejemplo-cronica.html` y `ejemplo-cronica-carta.pdf`.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan.**
+
+## Queda pendiente
+
+El botón de descanso en la vista operador sigue mal resuelto en pantalla
+(centrado y suelto). Lo miro con una foto de cómo se ve ahora, porque la que
+mandaste está recortada y no alcanzo a ver contra qué está desalineado.
+
+---
+
+# BOTÓN, ESCUDOS, VENTANA LATERAL Y TEMAS EN PISTA
+
+## 1. El botón DESCANSO / SUSPENDER se desbordaba
+
+Lo rompí yo: renombré el botón de "DESCANSO" a "DESCANSO / SUSPENDER" pero su
+bloque mide **140 px fijos**. El texto no cabía, se salía del botón y empujaba
+el icono fuera. Ahora va en dos líneas dentro del botón.
+
+## 2. Los escudos no llegaban a la crónica
+
+Leía `state.homeTeam?.logo`, que **en un partido Express está vacío**. La
+crónica salía sin escudos aunque en la proyección se vieran perfectamente.
+
+Ahora los toma del **GESTOR DE PANTALLAS** (`ardi-live-logos`), que es donde el
+operador los pega y lo que usa el tablero, con respaldo al escudo del club. Se
+actualizan solos si se cambian con la planilla abierta.
+
+## 3. La crónica se abre como ventana lateral
+
+No como pestaña: una pestaña obliga a cambiar de contexto y se pierde de vista
+el marcador justo cuando se quiere comparar. Se abre en una **ventana aparte,
+angosta y anclada a la derecha** (42% del ancho de pantalla, máximo 900 px),
+para dejarla al costado de Chrome o en el segundo monitor.
+
+Trae sus propios botones: copiar el código para la web, e imprimir. Si el
+navegador bloquea las ventanas emergentes, descarga el archivo en vez de no
+hacer nada.
+
+## 4. Los temas llegan a PISTA
+
+Los siete temas visuales vivían **dentro de `operator-view.tsx`**, así que
+PISTA no podía usarlos: se elegía un tema, cambiaba CONTROL, y la vista que se
+usa cada sábado seguía igual.
+
+**Cuarta vez que aparece el mismo patrón** — después de los atajos, los
+editores de plantel y las series: algo compartido declarado dentro de una sola
+vista.
+
+Extraídos a `lib/themes.ts`, con un `useTheme()` que las dos vistas consumen y
+un evento que las avisa: cambiar de tema en CONTROL se ve en PISTA **sin
+recargar**.
+
+En PISTA se aplican a las superficies grandes: barra maestra, reloj (color y
+tipografía), rótulos, mesa de control y los botones principales de la barra
+inferior. **No todos los botones de PISTA están tematizados** — los de la pista
+misma y las fichas conservan su color propio, que es información (rojo/ámbar
+por equipo), no decoración.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan.**
+
+---
+
+# AUDITORÍA DE LOS LANZADORES — ejecutada en un navegador
+
+Llevaba dos rondas "arreglando" esto leyendo código. Esta vez levanté la app,
+la abrí con un navegador de verdad y medí. El diagnóstico es otro.
+
+## Lo que SÍ funcionaba
+
+Medido en pantalla: pulsar `+` en una capa cambia su escala de **100% a 110%**
+y el elemento crece de **472×266 a 519×292 px**. El mecanismo estaba bien.
+
+Y el scroll **no saltaba** en la prueba automatizada. Así que el salto que ves
+es del navegador llevando el foco al botón pulsado, no un remonte del modal.
+
+## Lo que NO funcionaba: nada se guardaba
+
+`setPos` sólo tocaba el estado del modal. `saveLayouts` se llamaba
+**únicamente al pulsar GUARDAR**.
+
+Comprobado: tras mover una capa y verla cambiar en la previsualización, la
+clave `ardi-overlay-layout` **seguía en `null`**. El operador ajustaba, veía el
+cambio, cerraba, y se perdía todo.
+
+**Esa es la sensación de "no hacen nada": funcionaban en el modal y nunca
+llegaban a la proyección.** No era el zoom: era que no persistía.
+
+## Corregido
+
+- **Cada cambio se guarda solo**, como en el resto de la app. Verificado en el
+  navegador: antes `null`, después el ajuste en disco, y **sobrevive a
+  recargar** (`watermark: 1.1`).
+- GUARDAR pasó a llamarse **LISTO**: ya no es lo que guarda, sólo cierra el
+  modo edición. Que un botón prometiera guardar era parte del engaño.
+- Los seis botones de capa (los de la lista y los flotantes sobre cada
+  elemento) llevan `type="button"` y no roban el foco, que es lo que hacía
+  saltar la pantalla al pulsarlos.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan**, más la
+comprobación en navegador descrita arriba.
+
+## Una cosa que quiero decir
+
+Este bug sobrevivió dos rondas porque lo busqué leyendo el código en vez de
+ejecutarlo. El código de la escala **estaba bien** las dos veces que lo
+"arreglé"; el fallo estaba un paso más allá, en que nadie escribía a disco.
+Para lo que queda de interfaz conviene que siga probando así.
+
+---
+
+# PANTALLAS: SELECTOR DE PANTALLA Y MONTAJE A LA VISTA
+
+Auditado ejecutando la app, igual que los lanzadores.
+
+## 1. El montaje estaba escondido
+
+Lo puse dentro de "Vistas y proyectores", que es un **panel plegable**: había
+que saber que estaba ahí para encontrarlo. Ahora está en la portada del gestor,
+junto a las tres tarjetas. Verificado en el navegador: **GUARDAR y CARGAR se
+ven al abrir GESTOR PANTALLAS, sin desplegar nada.**
+
+## 2. Editar una pantalla en un recuadro diminuto
+
+Las cinco previsualizaciones convivían siempre: P1 arriba y las otras cuatro en
+una rejilla debajo. Para ajustar **una** había que hacerlo en un recuadro
+pequeño, con las demás ocupando sitio.
+
+Hay un **selector** arriba: TODAS · P1 · P2 · P3 · P4 · P5 (sólo las
+configuradas). Al elegir una, se ve **sola y a todo el alto**.
+
+Medido en el navegador, ventana de 1500×1000:
+
+| | Antes | Con P1 seleccionada |
+|---|---|---|
+| Alto de P1 | 452 px | **826 px** |
+| Previsualizaciones en pantalla | 5 | 1 |
+
+Casi el doble de alto para ajustar, que era el problema.
+
+## 3. De paso: cinco copias a mano, ahora una
+
+Las cinco previsualizaciones estaban **escritas a mano cinco veces** en el JSX,
+cada una repitiendo su título, su color y su botón de lanzar. Cambiar un rótulo
+obligaba a hacerlo cinco veces, y bastaba olvidar una para que quedaran
+distintas.
+
+Ahora son una lista de datos (`PANTALLAS`) y un componente
+(`PantallaPreview`). El mismo patrón que ya se corrigió con los atajos, los
+planteles, las series y los temas.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan**, más la
+comprobación en navegador de las medidas de arriba.

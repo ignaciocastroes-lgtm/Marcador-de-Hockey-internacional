@@ -193,7 +193,11 @@
 
 /* ── Impresion de la planilla oficial ──────────────────────────────────── */
 @media print {
-  @page { size: A4 landscape; margin: 8mm; }
+  /* HOJA CARTA VERTICAL.
+     Estaba en A4 apaisado: en Chile el papel de oficina es carta, y apaisado
+     obligaba a girar la hoja para leer un acta que es una lista. Vertical y
+     carta es lo que sale de cualquier impresora sin tocar nada. */
+  @page { size: letter portrait; margin: 12mm; }
 
   body { background: #fff !important; }
 
@@ -215,6 +219,10 @@
     background: #fff !important;
     color: #000 !important;
   }
+
+  /* Nada se parte a mitad de camino entre dos hojas. */
+  [role="dialog"] table, [role="dialog"] tr { page-break-inside: avoid; }
+  [role="dialog"] h3 { page-break-after: avoid; }
 
   [role="dialog"] * {
     overflow: visible !important;

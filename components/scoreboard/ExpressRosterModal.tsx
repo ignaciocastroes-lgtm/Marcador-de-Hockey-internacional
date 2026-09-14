@@ -258,7 +258,6 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
                   `La serie tiene ${conNumero.length} con número y el tope es ${MAX_ENTRIES}: ` +
                   `quedaron fuera ${conNumero.length - MAX_ENTRIES}.`, { duration: 9000 })
               }
-              toast.success(`${cargadas} camisetas cargadas`)
             }}
             defaultValue=""
             className="flex-1 h-8 bg-zinc-800 border border-zinc-600 rounded text-xs font-bold px-2">
@@ -417,7 +416,6 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
                       personId: p.id, nombre: p.nombre, apodo: p.apodo || ''
                     }])
                     setPendientes(prev => prev.filter(x => x.id !== p.id))
-                    toast.success(`${p.nombre} entra con el ${libre}. Puedes cambiarlo.`)
                   }}
                   className="flex items-center gap-1 bg-zinc-900 border border-zinc-700 hover:border-amber-500 active:scale-95 transition-transform touch-manipulation rounded px-2 py-1">
                   <Plus className="w-3 h-3 text-amber-500" />
@@ -445,7 +443,7 @@ export function ExpressRosterModal({ open, onClose, teamName, side, value, onSav
         )}
 
         <div className="grid grid-cols-3 gap-2">
-          <Button onClick={() => { setEntries(DEFAULT_ENTRIES.map(e => ({ ...e }))); toast.success('Camisetas por defecto') }}
+          <Button onClick={() => { setEntries(DEFAULT_ENTRIES.map(e => ({ ...e })))}}
             variant="outline" className="h-11 font-bold border-zinc-600 text-xs">
             <RotateCcw className="w-4 h-4 mr-1.5" /> DEFECTO
           </Button>

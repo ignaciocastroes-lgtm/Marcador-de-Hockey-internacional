@@ -77,6 +77,16 @@ font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5
 .ardi-rep .ardi-pie{margin-top:18px;padding-top:12px;border-top:1px solid var(--ardi-line);
 color:var(--ardi-dim);font-size:11px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 @media(max-width:560px){.ardi-rep{padding:16px}.ardi-rep .ardi-cifras{font-size:34px}}
+@media print{
+  @page{size:letter portrait;margin:14mm}
+  .ardi-rep{--ardi-bg:#fff;--ardi-card:#fff;--ardi-line:#c8ccd4;--ardi-txt:#111;--ardi-dim:#555;--ardi-acc:#8a6100;
+  padding:0;max-width:none;border-radius:0}
+  .ardi-rep .ardi-box{break-inside:avoid;page-break-inside:avoid}
+  .ardi-rep tr{break-inside:avoid;page-break-inside:avoid}
+  .ardi-rep .ardi-box h3{break-after:avoid;page-break-after:avoid}
+  .ardi-rep .ardi-barra div{color:#111;border-right:1px solid #999}
+  .ardi-rep .ardi-chip{border:1px solid #666;color:#111 !important}
+}
 `.trim()
 
 /** El `<article>` autocontenido. Esto es lo que se pega en la web. */
@@ -239,14 +249,65 @@ export function downloadMatchReport(state: GameState, o: ReportOpts): void {
   bajar(buildMatchReportHTML(state, o), `${nombreArchivo(state, o)}.html`, 'text/html')
 }
 
-/** Sólo el `<article>`: lo que se pega en el gestor de la web. */
-export async function copyMatchArticle(state: GameState, o: ReportOpts): Promise<boolean> {
-  const html = buildMatchArticle(state, o)
-  try {
-    await navigator.clipboard.writeText(html)
-    return true
-  } catch {
-    bajar(html, `${nombreArchivo(state, o)}-fragmento.html`, 'text/html')
-    return false
-  }
+/**
+ * ABRE la crónica en una pestaña nueva, ya dibujada.
+ *
+ * Copiar al portapapeles a ciegas no servía: no se veía qué se estaba
+ * copiando, y si el navegador bloqueaba el permiso no pasaba nada visible.
+ * Ver la página es la comprobación: se mira, y desde ahí se guarda o se
+ * copia el código con el botón que trae.
+ */
+export function openMatchReport(state: GameState, o: ReportOpts): void {
+  const articulo = buildMatchArticle(state, o)
+  const doc = buildMatchReportHTML(state, o).replace('</body>', `
+<div style="max-width:860px;margin:16px auto 40px;display:flex;gap:8px;flex-wrap:wrap;
+  font-family:system-ui,sans-serif">
+  <button id="ardi-copiar" style="flex:1;min-width:200px;padding:12px;border:0;border-radius:10px;
+    background:#047857;color:#fff;font-weight:800;font-size:14px;cursor:pointer">
+    Copiar el código para la web
+  </button>
+  <button onclick="window.print()" style="flex:1;min-width:140px;padding:12px;border:1px solid #374151;
+    border-radius:10px;background:#111827;color:#e5e7eb;font-weight:700;font-size:14px;cursor:pointer">
+    Imprimir
+  </button>
+</div>
+<textarea id="ardi-src" style="position:absolute;left:-9999px" aria-hidden="true">${
+  articulo.replace(/<\/textarea>/gi, '&lt;/textarea&gt;')}</textarea>
+<style>@media print{#ardi-copiar,#ardi-src,button{display:none !important}}</style>
+<script>
+document.getElementById('ardi-copiar').onclick = function () {
+  var t = document.getElementById('ardi-src');
+  t.style.position='static'; t.select(); t.setSelectionRange(0, 999999);
+  try { document.execCommand('copy'); this.textContent = 'Copiado'; }
+  catch (e) { this.textContent = 'Selecciona el texto de abajo y copia'; t.style.height='120px'; }
+  t.style.position = this.textContent === 'Copiado' ? 'absolute' : 'static';
+  var b = this; setTimeout(function(){ b.textContent = 'Copiar el código para la web' }, 2500);
+};
+</script>
+</body>`)
+
+  /**
+   * VENTANA LATERAL, no pestaña.
+   *
+   * Una pestaña obliga a cambiar de contexto: se pierde de vista el marcador
+   * justo cuando se quiere comparar la crónica con lo que pasó. Una ventana
+   * aparte se puede dejar al costado del navegador, en el segundo monitor o
+   * a media pantalla, y se mira sin soltar la mesa.
+   *
+   * Angosta a propósito: la crónica está pensada a 860 px, así que más ancho
+   * sería espacio vacío.
+   */
+  const ancho = Math.min(900, Math.max(420, Math.round(window.screen.availWidth * 0.42)))
+  const alto = Math.round(window.screen.availHeight * 0.9)
+  const izquierda = Math.max(0, window.screen.availWidth - ancho - 20)
+
+  const w = window.open('', 'ardi-cronica',
+    `popup=yes,width=${ancho},height=${alto},left=${izquierda},top=40,` +
+    `scrollbars=yes,resizable=yes,menubar=no,toolbar=no`)
+
+  // Bloqueador de ventanas emergentes: se descarga en vez de no hacer nada.
+  if (!w) { bajar(doc, `${nombreArchivo(state, o)}.html`, 'text/html'); return }
+  w.document.write(doc)
+  w.document.close()
+  w.focus()
 }

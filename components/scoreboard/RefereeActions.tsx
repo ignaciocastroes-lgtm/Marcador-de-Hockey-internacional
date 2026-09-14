@@ -59,7 +59,6 @@ export function RefereeActions({
     const nombre = pendiente.team === 'home' ? homeTeamName : awayTeamName
     if (pendiente.accion === 'penal') {
       onPenal(pendiente.team)
-      toast.success(enTanda ? `Penal convertido — ${nombre}` : `¡GOL de penal — ${nombre}!`)
     } else {
       onAnular(pendiente.team)
       toast.warning(`Gol de ${nombre} ANULADO por el árbitro`, { duration: 5000 })

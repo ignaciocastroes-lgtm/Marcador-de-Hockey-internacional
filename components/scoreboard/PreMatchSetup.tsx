@@ -220,7 +220,6 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
 
     setSavedRosters(updated)
     localStorage.setItem(ROSTERS_STORAGE_KEY, JSON.stringify(updated))
-    toast.success(`Roster guardado: ${clubName} - ${configSeriesName} (${configGender})`)
   }
 
   const loadSavedRoster = (team: 'home' | 'away', rosterId: string) => {
@@ -275,7 +274,6 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
         setResumeAwayScore(resAwayScore)
         setResumeHomeFouls(resHomeFouls)
         setResumeAwayFouls(resAwayFouls)
-        toast.success('Planilla de partido suspendido cargada con éxito en el sistema pre-partido.')
       } catch {
         toast.error('Error al parsear el archivo CSV de reanudación.')
       }
@@ -305,7 +303,6 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
       name, logo: logo || null, serie,
       roster: entries.length ? entries : undefined
     })
-    toast.success(previo ? `${name} actualizado` : `${name} guardado`)
   }
 
   const handleExpressConfirm = () => {

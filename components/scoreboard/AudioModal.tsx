@@ -34,7 +34,6 @@ export function AudioModal({ open, onClose, onChange }: Props) {
     try {
       const data = await fileToDataUrl(file)
       apply({ ...cfg, hornMode: 'custom', customName: file.name, customData: data })
-      toast.success(`"${file.name}" cargado como chicharra`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo cargar el archivo')
     }
@@ -105,7 +104,7 @@ export function AudioModal({ open, onClose, onChange }: Props) {
                 <Upload className="w-3.5 h-3.5 mr-1.5" /> CARGAR MP3
               </Button>
               <Button
-                onClick={() => { setCfg(clearCustomSound()); toast.success('Sonido borrado, vuelve la sintetizada') }}
+                onClick={() => { setCfg(clearCustomSound())}}
                 disabled={!cfg.customData}
                 variant="outline"
                 className="h-9 text-xs font-bold border-red-900 text-red-400 hover:bg-red-950 disabled:opacity-30">

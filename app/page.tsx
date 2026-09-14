@@ -113,6 +113,48 @@ const PreviewTeamLogo = React.memo(({ team, url, shape, is3D, isAnim, size = 100
 PreviewTeamLogo.displayName = 'PreviewTeamLogo';
 
 
+/**
+ * Las cinco pantallas proyectables, en un solo lugar.
+ *
+ * Estaban escritas a mano cinco veces en el JSX, cada una con su titulo, su
+ * color y su boton de lanzar repetidos. Cambiar un rotulo obligaba a hacerlo
+ * cinco veces, y bastaba olvidar una para que quedaran distintas.
+ */
+const PANTALLAS = [
+  { id: 1, titulo: 'P1: MARCADOR GLOBAL',     color: 'text-yellow-500' },
+  { id: 2, titulo: 'P2: 45S / FALTAS LOCAL',  color: 'text-blue-500' },
+  { id: 3, titulo: 'P3: 45S / FALTAS VISITA', color: 'text-amber-500' },
+  { id: 4, titulo: 'P4: TARJETAS LOCAL',      color: 'text-indigo-500' },
+  { id: 5, titulo: 'P5: TARJETAS VISITA',     color: 'text-pink-500' },
+] as const
+
+type Pantalla = (typeof PANTALLAS)[number]
+
+function PantallaPreview({ pantalla, state, onSaveAndReset, onLanzar, className = '' }: {
+  pantalla: Pantalla
+  state: Parameters<typeof ScoreboardView>[0]['state']
+  onSaveAndReset: () => void
+  onLanzar: (id: number) => void
+  className?: string
+}) {
+  return (
+    <div className={`flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl p-2 shadow-2xl relative ${className}`}>
+      <div className="flex justify-between items-center px-2 mb-2 shrink-0">
+        <h3 className="text-white font-bold text-sm md:text-base flex items-center tracking-wider">
+          <Monitor className={`w-5 h-5 mr-2 ${pantalla.color}`} /> {pantalla.titulo}
+        </h3>
+        <Button size="sm" onClick={() => onLanzar(pantalla.id)}
+          className="h-7 md:h-8 font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white">
+          Lanzar <ExternalLink className="w-3 h-3 ml-2" />
+        </Button>
+      </div>
+      <div className="w-full flex-1 min-h-0 relative rounded-lg overflow-hidden border border-black/50 bg-black">
+        <ScoreboardView state={state} onSaveAndReset={onSaveAndReset} boardId={pantalla.id} isPreview={true} />
+      </div>
+    </div>
+  )
+}
+
 export default function HockeyControlPanel() {
   const venue = useVenueSetup()
 
@@ -141,6 +183,8 @@ export default function HockeyControlPanel() {
     } catch { /* ignorar */ }
   }, [])
   const [showOverlays, setShowOverlays] = useState(false)
+  /** Pantalla que se está ajustando. `null` = ver todas, como antes. */
+  const [focusScreen, setFocusScreen] = useState<number | null>(null)
   const [showHotkeys, setShowHotkeys] = useState(false)
   const [hotkeys, setHotkeys] = useState<HotkeyMap>(DEFAULT_HOTKEYS)
 
@@ -408,20 +452,63 @@ export default function HockeyControlPanel() {
         {viewMode === 'pista' && (<div className="absolute inset-0 overflow-y-auto"><CourtOperatorView {...operatorProps} /></div>)}
 
         {viewMode === 'videowall' && (
-          <div className={`flex-1 flex flex-col overflow-y-auto lg:overflow-hidden bg-zinc-950 p-2 md:p-4 gap-4 pb-4 transition-all duration-300 ${isSidebarOpen ? 'lg:mr-[500px]' : ''}`}>
-            <div className="flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl p-2 shadow-2xl shrink-0 lg:flex-[1.2] min-h-[300px] lg:min-h-0 relative">
-              <div className="flex justify-between items-center px-2 mb-2 shrink-0">
-                <h3 className="text-white font-bold text-sm md:text-base flex items-center tracking-wider"><Monitor className="w-5 h-5 mr-2 text-yellow-500" /> P1: MARCADOR GLOBAL</h3>
-                <Button size="sm" onClick={() => openScoreboardWindow(1)} className="h-7 md:h-8 font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white">Lanzar <ExternalLink className="w-3 h-3 ml-2" /></Button>
-              </div>
-              <div className="w-full flex-1 relative rounded-lg overflow-hidden border border-black/50 bg-black"><ScoreboardView state={gameState.state} onSaveAndReset={handleSaveAndReset} boardId={1} isPreview={true} /></div>
+          <div className={`flex-1 flex flex-col overflow-y-auto lg:overflow-hidden bg-zinc-950 p-2 md:p-4 gap-3 pb-4 transition-all duration-300 ${isSidebarOpen ? 'lg:mr-[500px]' : ''}`}>
+
+            {/*
+              SELECTOR DE PANTALLA.
+              Antes las cinco previsualizaciones convivían siempre: P1 arriba y
+              el resto en una rejilla debajo. Para ajustar UNA pantalla había
+              que hacerlo en un recuadro diminuto, con las otras cuatro
+              ocupando sitio. Eligiendo una, se ve sola y ocupa todo el alto.
+            */}
+            <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto pb-1">
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mr-1 shrink-0">Ver</span>
+              <button onClick={() => setFocusScreen(null)}
+                className={`px-3 h-8 rounded-lg text-[11px] font-black shrink-0 transition-colors ${
+                  focusScreen === null ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}>
+                TODAS
+              </button>
+              {PANTALLAS.filter(p => p.id === 1 || visibleScreens.includes(String(p.id))).map(p => (
+                <button key={p.id} onClick={() => setFocusScreen(p.id)}
+                  className={`px-3 h-8 rounded-lg text-[11px] font-black shrink-0 transition-colors ${
+                    focusScreen === p.id ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}>
+                  P{p.id}
+                </button>
+              ))}
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 shrink-0 lg:flex-1 min-h-[600px] lg:min-h-0 pb-4 lg:pb-0 overflow-y-auto pr-2">
-              {visibleScreens.includes('2') && (<div className="flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl p-2 shadow-2xl min-h-[300px] relative"><div className="flex justify-between items-center px-2 mb-2 shrink-0"><h3 className="text-white font-bold text-sm md:text-base flex items-center tracking-wider"><Monitor className="w-5 h-5 mr-2 text-blue-500" /> P2: 45S / FALTAS LOCAL</h3><Button size="sm" onClick={() => openScoreboardWindow(2)} className="h-7 md:h-8 font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white">Lanzar <ExternalLink className="w-3 h-3 ml-2" /></Button></div><div className="w-full h-full relative rounded-lg overflow-hidden border border-black/50 bg-black"><ScoreboardView state={gameState.state} onSaveAndReset={handleSaveAndReset} boardId={2} isPreview={true} /></div></div>)}
-              {visibleScreens.includes('3') && (<div className="flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl p-2 shadow-2xl min-h-[300px] relative"><div className="flex justify-between items-center px-2 mb-2 shrink-0"><h3 className="text-white font-bold text-sm md:text-base flex items-center tracking-wider"><Monitor className="w-5 h-5 mr-2 text-amber-500" /> P3: 45S / FALTAS VISITA</h3><Button size="sm" onClick={() => openScoreboardWindow(3)} className="h-7 md:h-8 font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white">Lanzar <ExternalLink className="w-3 h-3 ml-2" /></Button></div><div className="w-full h-full relative rounded-lg overflow-hidden border border-black/50 bg-black"><ScoreboardView state={gameState.state} onSaveAndReset={handleSaveAndReset} boardId={3} isPreview={true} /></div></div>)}
-              {visibleScreens.includes('4') && (<div className="flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl p-2 shadow-2xl min-h-[300px] relative"><div className="flex justify-between items-center px-2 mb-2 shrink-0"><h3 className="text-white font-bold text-sm md:text-base flex items-center tracking-wider"><Monitor className="w-5 h-5 mr-2 text-indigo-500" /> P4: TARJETAS LOCAL</h3><Button size="sm" onClick={() => openScoreboardWindow(4)} className="h-7 md:h-8 font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white">Lanzar <ExternalLink className="w-3 h-3 ml-2" /></Button></div><div className="w-full h-full relative rounded-lg overflow-hidden border border-black/50 bg-black"><ScoreboardView state={gameState.state} onSaveAndReset={handleSaveAndReset} boardId={4} isPreview={true} /></div></div>)}
-              {visibleScreens.includes('5') && (<div className="flex flex-col bg-zinc-900 border border-zinc-800 rounded-xl p-2 shadow-2xl min-h-[300px] relative"><div className="flex justify-between items-center px-2 mb-2 shrink-0"><h3 className="text-white font-bold text-sm md:text-base flex items-center tracking-wider"><Monitor className="w-5 h-5 mr-2 text-pink-500" /> P5: TARJETAS VISITA</h3><Button size="sm" onClick={() => openScoreboardWindow(5)} className="h-7 md:h-8 font-bold text-xs bg-blue-600 hover:bg-blue-500 text-white">Lanzar <ExternalLink className="w-3 h-3 ml-2" /></Button></div><div className="w-full h-full relative rounded-lg overflow-hidden border border-black/50 bg-black"><ScoreboardView state={gameState.state} onSaveAndReset={handleSaveAndReset} boardId={5} isPreview={true} /></div></div>)}
-            </div>
+
+            {focusScreen !== null ? (
+              /* Una sola, a todo el alto disponible. */
+              <PantallaPreview
+                pantalla={PANTALLAS.find(p => p.id === focusScreen)!}
+                state={gameState.state}
+                onSaveAndReset={handleSaveAndReset}
+                onLanzar={openScoreboardWindow}
+                className="flex-1 min-h-[420px]"
+              />
+            ) : (
+              <>
+                <PantallaPreview
+                  pantalla={PANTALLAS[0]}
+                  state={gameState.state}
+                  onSaveAndReset={handleSaveAndReset}
+                  onLanzar={openScoreboardWindow}
+                  className="shrink-0 lg:flex-[1.2] min-h-[300px] lg:min-h-0"
+                />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 shrink-0 lg:flex-1 min-h-[600px] lg:min-h-0 pb-4 lg:pb-0 overflow-y-auto pr-1">
+                  {PANTALLAS.slice(1)
+                    .filter(p => visibleScreens.includes(String(p.id)))
+                    .map(p => (
+                      <PantallaPreview key={p.id} pantalla={p}
+                        state={gameState.state}
+                        onSaveAndReset={handleSaveAndReset}
+                        onLanzar={openScoreboardWindow}
+                        className="min-h-[300px]"
+                      />
+                    ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 

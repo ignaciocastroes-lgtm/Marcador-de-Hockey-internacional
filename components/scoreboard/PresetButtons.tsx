@@ -28,7 +28,6 @@ export function PresetButtons({ kind }: { kind: PresetKind }) {
       const { datos, error } = parsePreset(kind, String(lector.result || ''))
       if (error || !datos) { toast.error(error || 'No se pudo leer el montaje'); return }
       const n = applyPreset(kind, datos)
-      toast.success(`Montaje aplicado (${n} ajustes). Recargando…`)
       setTimeout(() => window.location.reload(), 900)
     }
     lector.readAsText(file)
@@ -44,7 +43,6 @@ export function PresetButtons({ kind }: { kind: PresetKind }) {
           onClick={() => {
             if (guardados === 0) { toast.info('Todavía no hay nada ajustado que guardar'); return }
             downloadPreset(kind)
-            toast.success('Montaje guardado')
           }}
           variant="outline" className="h-10 text-[10px] font-bold border-zinc-600">
           <Download className="w-4 h-4 mr-1" /> GUARDAR

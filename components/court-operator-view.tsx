@@ -37,6 +37,7 @@ import {
 import { HOTKEY_EVENT, OPEN_HOTKEYS_EVENT } from '@/lib/hotkeys'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
 import { RefereeActions } from '@/components/scoreboard/RefereeActions'
+import { useTheme } from '@/lib/themes'
 import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
 
 import {
@@ -169,6 +170,14 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const [refOpen, setRefOpen] = useState(false)
   const [resetArmed, setResetArmed] = useState(false)
   const [showLook, setShowLook] = useState(false)
+
+  /**
+   * El tema visual que el operador eligio en CONTROL. Antes esta vista lo
+   * ignoraba: se cambiaba de piel y PISTA —la que se usa cada sabado— seguia
+   * igual. Se aplica a las superficies grandes: barra maestra, reloj, pista,
+   * mesa de control y la barra inferior.
+   */
+  const theme = useTheme()
 
   /**
    * Tarjeta de banca armada. El flujo es: elegir la tarjeta, tocar al infractor
@@ -359,7 +368,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           { playerNumber: getDisplayNumber(out), direction: 'out' },
           { playerNumber: getDisplayNumber(entraPortero), direction: 'in' }
         ])
-        toast.success(`Portero: entra #${getDisplayNumber(entraPortero)} por #${getDisplayNumber(out)}`, { duration: 2200 })
         return
       }
     }
@@ -493,12 +501,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
       playerNumber: getDisplayNumber(player),
       direction: result.action
     })
-    toast.success(
-      result.action === 'in'
-        ? `#${getDisplayNumber(player)} ingresa a pista`
-        : `#${getDisplayNumber(player)} sale de pista`,
-      { duration: 1500 }
-    )
     setSelected(null)
   }
 
@@ -974,17 +976,26 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         —ficha + su reloj de 45— y el centro es el reloj. Los controles de
         periodo bajan a su propia fila, que es donde ya terminaban de hecho.
       */}
-      <div className="bg-black border-2 border-zinc-800 rounded-xl p-2 sm:p-3 flex flex-col gap-2">
+      <div className={`${theme.panelBase} p-2 sm:p-3 flex flex-col gap-2`}>
       {/* Periodo, chicharra y giro van al COSTADO, no debajo del reloj.
           Ocupaban una banda horizontal entera y esa altura se la quitaban a la
           pista, que es donde el operador trabaja. */}
-      <div className="flex items-center justify-between sm:justify-center gap-1 sm:gap-3 flex-wrap xl:flex-nowrap">
+      {/*
+        UNA SOLA FILA, y el reloj SIEMPRE al centro.
+        Antes era `flex-wrap`: a poco que faltara ancho, la ficha de la visita
+        se caia a una segunda linea y quedaba debajo del centro, lejos de su
+        propio reloj de 45. Ahora los dos lados son columnas de igual peso
+        (`flex-1`) que empujan hacia el reloj, y los controles se anclan a la
+        derecha. Sin envolver a partir de 1024 px; mas abajo baja el bloque de
+        controles entero, no media ficha.
+      */}
+      <div className="flex items-center justify-center gap-1 sm:gap-2 flex-wrap lg:flex-nowrap">
         {/* Arrancar/pausar sin chicharra ya lo hace el círculo central de la
             pista (sacar del centro), y con chicharra: CHICHARRA + el mismo
             círculo. Los dos botones que estaban aquí eran el mismo gesto dos
             veces, así que ceden el lugar a lo que sí faltaba a mano: goles y
             faltas editables, justo al lado del reloj. */}
-        <div className="flex items-center gap-1 sm:gap-3">
+        <div className="flex items-center justify-end gap-1 sm:gap-3 lg:flex-1 min-w-0">
           <ManualScore team="home" />
           {/* 45 del local, pegado al reloj principal */}
           <PossessionSide side="home" />
@@ -992,13 +1003,17 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
         <div className="flex flex-col items-center px-4">
           <span className={`text-[10px] font-black tracking-widest ${
-            state.isIntermission ? 'text-amber-400' : 'text-zinc-500'}`}>
+            state.isIntermission ? 'text-amber-400' : theme.clock.label}`}>
             {/* Ya no dice TIEMPO MUERTO: este reloj muestra el tiempo de
                 juego incluso durante un timeout, y el rotulo tiene que
                 describir lo que hay debajo. El timeout se rotula en su panel. */}
-            {state.isIntermission ? 'DESCANSO' : 'TIEMPO DE JUEGO'}
+            {state.isIntermission
+              ? (state.pauseKind === 'suspension' ? 'PARTIDO SUSPENDIDO' : 'DESCANSO')
+              : 'TIEMPO DE JUEGO'}
           </span>
-          <span className="text-4xl sm:text-6xl lg:text-7xl font-black leading-none tabular-nums text-red-500" style={{ fontFamily: 'var(--font-led)' }}>
+          <span className={`text-4xl sm:text-6xl lg:text-7xl font-black leading-none tabular-nums ${
+            state.isIntermission ? 'text-amber-400' : theme.clock.textMain}`}
+            style={theme.clock.font}>
 {/* El reloj principal muestra SIEMPRE el tiempo de juego. Antes, con un
                     tiempo muerto activo, esta misma cifra pasaba a mostrar la
                     cuenta del timeout: el operador perdia de vista el minuto del
@@ -1014,13 +1029,13 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-3">
+        <div className="flex items-center justify-start gap-1 sm:gap-3 lg:flex-1 min-w-0">
           <PossessionSide side="away" />
           <ManualScore team="away" />
         </div>
 
-        {/* Controles al costado. En pantalla angosta bajan solos. */}
-        <div className="flex flex-col gap-1 min-w-[150px] xl:ml-2">
+        {/* Controles anclados a la derecha. En pantalla angosta bajan solos. */}
+        <div className="flex flex-col gap-1 w-[150px] shrink-0 lg:ml-2">
           <div className="flex gap-1">
             <Select value={state.period} onValueChange={v => props.setPeriod(v as Period)} disabled={matchEnded}>
               <SelectTrigger className="h-8 text-xs font-bold bg-zinc-900 border-zinc-700"><SelectValue /></SelectTrigger>
@@ -1033,7 +1048,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
             </Select>
             <Button onClick={props.nextPeriod} disabled={matchEnded} className="h-8 w-9 p-0 bg-zinc-800 hover:bg-zinc-700"><ChevronRight className="w-4 h-4" /></Button>
           </div>
-          <Button onPointerDown={() => buzz(1200)} className="h-8 font-black bg-red-700 hover:bg-red-600 text-xs">
+          <Button onPointerDown={() => buzz(1200)} className={`h-8 font-black text-xs ${theme.btn.shape} ${theme.btn.danger}`}>
             <Bell className="w-4 h-4 mr-1" /> CHICHARRA
           </Button>
           {/* Girar pista: quién ataca a cada lado. Útil sobre todo al empezar
@@ -1183,7 +1198,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                   // Llamar despues al alternador lo apagaba en el mismo toque.
                   if (zone.team === 'home') props.resetPossessionLeft()
                   else props.resetPossessionRight()
-                  toast.success(`Posesión ${zone.team === 'home' ? homeTeamName : awayTeamName}`, { duration: 1200 })
                 }}
                 title={`Tocar: posesión de ${zone.team === 'home' ? homeTeamName : awayTeamName}`}
                 className={`absolute top-0 bottom-0 w-1/2 z-0 transition-colors touch-manipulation select-none active:bg-white/[0.12] ${zone.pos} ${
@@ -1289,7 +1303,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
            nada puede encimársele. El alto no depende del contenido, así que la
            página tampoco salta cuando entra o sale un sancionado. */}
       <div className="relative z-30 isolate min-h-[104px]">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden h-full">
+      <div className={`${theme.panelBase} overflow-hidden h-full`}>
         <div className="bg-zinc-900 py-1 text-center border-b border-zinc-800">
           <span className="text-[10px] font-black text-zinc-400 tracking-[0.2em] uppercase">Mesa de control — cumplimiento de azules</span>
         </div>
@@ -1364,9 +1378,9 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         ) : (
           <Button onClick={() => setShowEndConfirm(true)} disabled={planillaLocked} className="h-10 font-bold text-xs bg-cyan-700 hover:bg-cyan-600 disabled:opacity-40"><Square className="w-4 h-4 mr-1" /> FIN</Button>
         )}
-        <Button onClick={() => setShowOfficialSheet(true)} className="h-10 font-bold text-xs bg-purple-700 hover:bg-purple-600"><FileText className="w-4 h-4 mr-1" /> PLANILLA</Button>
+        <Button onClick={() => setShowOfficialSheet(true)} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.penal}`}><FileText className="w-4 h-4 mr-1" /> PLANILLA</Button>
         <Button onClick={() => setShowHistory(true)} className="h-10 font-bold text-xs bg-zinc-700 hover:bg-zinc-600"><History className="w-4 h-4 mr-1" /> HISTORIAL</Button>
-        <Button onClick={() => setShowResetConfirm(true)} className="h-10 font-bold text-xs bg-red-700 hover:bg-red-600"><RotateCcw className="w-4 h-4 mr-1" /> NUEVO</Button>
+        <Button onClick={() => setShowResetConfirm(true)} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.danger}`}><RotateCcw className="w-4 h-4 mr-1" /> NUEVO</Button>
       </div>
 
       {/* ── CAJÓN INFERIOR: controles que no caben arriba. Empuja, no tapa ──── */}
@@ -1404,7 +1418,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               <Input type="number" min="1" max="60" placeholder="Min" value={customIntermissionMinutes}
                 onChange={e => setCustomIntermissionMinutes(e.target.value)}
                 className="h-10 bg-zinc-800 border-zinc-700 text-center font-bold text-xs" />
-              <Button onClick={() => { const m = parseInt(customIntermissionMinutes); if (m > 0) { props.setMainClockTime(m); setCustomIntermissionMinutes(''); toast.success(`Periodo fijado en ${m} min`) } }}
+              <Button onClick={() => { const m = parseInt(customIntermissionMinutes); if (m > 0) { props.setMainClockTime(m); setCustomIntermissionMinutes('')} }}
                 disabled={matchEnded} className="h-10 px-2 text-[10px] font-bold bg-zinc-700 hover:bg-zinc-600">FIJAR</Button>
             </div>
             {/* Reset del reloj: dos pasos. Un toque accidental durante el
@@ -1565,7 +1579,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                     </Button>
 
                     <Button
-                      onClick={() => { props.designateGoalie(selected.team, selected.player.id, getDisplayNumber(selected.player)); toast.success(`#${getDisplayNumber(selected.player)} designado portero`); setSelected(null) }}
+                      onClick={() => { props.designateGoalie(selected.team, selected.player.id, getDisplayNumber(selected.player)); setSelected(null) }}
                       disabled={isStaff(selected.player) || isGoalie(selected.player)}
                       variant="outline" className="h-11 text-xs font-bold border-emerald-800 text-emerald-300 hover:bg-emerald-950 disabled:opacity-30"
                     >
@@ -1573,7 +1587,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                     </Button>
 
                     <Button
-                      onClick={() => { props.designateCaptain(selected.team, selected.player.id, getDisplayNumber(selected.player)); toast.success(`#${getDisplayNumber(selected.player)} designado capitán`); setSelected(null) }}
+                      onClick={() => { props.designateCaptain(selected.team, selected.player.id, getDisplayNumber(selected.player)); setSelected(null) }}
                       disabled={isStaff(selected.player)}
                       variant="outline" className="h-11 text-xs font-bold border-amber-800 text-amber-300 hover:bg-amber-950 disabled:opacity-30"
                     >
@@ -1733,7 +1747,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                           { playerNumber: getDisplayNumber(subbing.out), direction: 'out' },
                           { playerNumber: getDisplayNumber(p), direction: 'in' }
                         ])
-                        toast.success(`Entra #${getDisplayNumber(p)} por #${getDisplayNumber(subbing.out)}`, { duration: 1800 })
                         setSubbing(null)
                       }}
                       className="h-16 rounded-xl border-2 border-zinc-700 bg-zinc-950 hover:border-indigo-500 active:scale-95 active:border-indigo-400 flex flex-col items-center justify-center transition-transform touch-manipulation select-none">
@@ -1779,7 +1792,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                       toast.error('No se puede reasignar el número de un expulsado.'); return
                     }
                     props.reassignPlayerNumber(renaming.team, renaming.player.id, getDisplayNumber(renaming.player), num)
-                    toast.success(`Ahora es el #${num}`)
                     setRenaming(null)
                   }}
                   className="flex-1 h-11 font-black bg-green-700 hover:bg-green-600">GUARDAR</Button>
@@ -1809,7 +1821,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                   const num = addNumber.trim()
                   if (!canUseNumber(roster, '', num)) { toast.error(`El #${num} ya existe en ese equipo.`); return }
                   props.addRosterPlayer(addTo, num)
-                  toast.success(`#${num} agregado`)
                   setAddTo(null); setAddNumber('')
                 }}
                 className="flex-1 h-11 font-black bg-green-700 hover:bg-green-600">AGREGAR</Button>
@@ -1832,7 +1843,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               </p>
               <div className="flex gap-3">
                 <Button onClick={() => setCancelling(null)} variant="outline" className="flex-1 h-11 font-bold border-zinc-600">NO</Button>
-                <Button onClick={() => { props.removeSanction(cancelling.id); toast.success(`Sanción del #${cancelling.num} anulada`); setCancelling(null) }}
+                <Button onClick={() => { props.removeSanction(cancelling.id); setCancelling(null) }}
                   className="flex-1 h-11 font-black bg-red-600 hover:bg-red-500">ANULAR</Button>
               </div>
             </div>

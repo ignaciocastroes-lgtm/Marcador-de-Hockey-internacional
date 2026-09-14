@@ -166,8 +166,25 @@ function Layout({
   const c = cfg[t] as { scale: number; align: 'top' | 'center' | 'bottom' }
   const patch = (v: Partial<{ scale: number; align: 'top' | 'center' | 'bottom' }>) =>
     update({ ...cfg, [t]: { ...cfg[t], ...v } } as OverlaysConfig)
+  /**
+   * LO AJUSTADO SE GUARDA SOLO.
+   *
+   * Antes `setPos` unicamente tocaba el estado del modal: el operador movia
+   * una capa o le subia el zoom, lo VEIA cambiar en la previsualizacion, y al
+   * cerrar se perdia todo — `ardi-overlay-layout` seguia sin escribirse.
+   * Comprobado en el navegador: el zoom pasaba de 100% a 110% en pantalla y
+   * la clave en disco seguia en `null`.
+   *
+   * De ahi la sensacion de que "no hacen nada": funcionaban en el modal y no
+   * llegaban a la proyeccion. Ahora cada cambio persiste, como en el resto de
+   * la app.
+   */
   const setPos = (launcher: LauncherId, id: string, pos: ElementPos) =>
-    setLayouts(prev => ({ ...prev, [launcher]: { ...prev[launcher], [id]: pos } }))
+    setLayouts(prev => {
+      const next = { ...prev, [launcher]: { ...prev[launcher], [id]: pos } }
+      saveLayouts(next)
+      return next
+    })
 
   return (
     <div className="border-t border-zinc-800 pt-3 space-y-3">
@@ -262,10 +279,10 @@ function Layout({
             className={`h-9 text-[10px] font-black ${editMode ? 'bg-blue-600 hover:bg-blue-500' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
             <Move className="w-3.5 h-3.5 mr-1" /> {editMode ? 'EDITANDO' : 'MOVER'}
           </Button>
-          <Button onClick={() => { saveLayouts(layouts); setEditMode(false); toast.success('Posiciones guardadas') }}
+          <Button onClick={() => { saveLayouts(layouts); setEditMode(false)}}
             disabled={!editMode}
             className="h-9 text-[10px] font-black bg-green-700 hover:bg-green-600 disabled:opacity-30">
-            <Save className="w-3.5 h-3.5 mr-1" /> GUARDAR
+            <Save className="w-3.5 h-3.5 mr-1" /> LISTO
           </Button>
           <Button onClick={() => { const l = resetLauncher(layouts, t as LauncherId); setLayouts(l); saveLayouts(l); toast.info('Posiciones por defecto') }}
             variant="outline" className="h-9 text-[10px] font-bold border-zinc-600">
@@ -284,12 +301,15 @@ function Layout({
                 return (
                   <div key={id} className="flex items-center gap-2 bg-zinc-900 rounded px-2 py-1">
                     <span className="flex-1 text-[11px] font-bold text-zinc-300 capitalize">{CAPA_NOMBRE[id] || id}</span>
-                    <button onClick={() => setPos(t as LauncherId, id, { ...pos, s: Math.max(0.3, +(pos.s - 0.1).toFixed(2)) })}
+                    <button type="button" onMouseDown={e => e.preventDefault()}
+                      onClick={() => setPos(t as LauncherId, id, { ...pos, s: Math.max(0.3, +(pos.s - 0.1).toFixed(2)) })}
                       className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-white">−</button>
                     <span className="text-[10px] font-mono text-zinc-500 w-9 text-center">{Math.round(pos.s * 100)}%</span>
-                    <button onClick={() => setPos(t as LauncherId, id, { ...pos, s: Math.min(3, +(pos.s + 0.1).toFixed(2)) })}
+                    <button type="button" onMouseDown={e => e.preventDefault()}
+                      onClick={() => setPos(t as LauncherId, id, { ...pos, s: Math.min(3, +(pos.s + 0.1).toFixed(2)) })}
                       className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-white">+</button>
-                    <button onClick={() => setPos(t as LauncherId, id, { ...pos, v: !pos.v })}
+                    <button type="button" onMouseDown={e => e.preventDefault()}
+                      onClick={() => setPos(t as LauncherId, id, { ...pos, v: !pos.v })}
                       title={pos.v ? 'Ocultar' : 'Mostrar'}
                       className={`w-6 h-6 rounded flex items-center justify-center ${pos.v ? 'bg-green-700' : 'bg-zinc-800 text-zinc-600'}`}>
                       {pos.v ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -493,7 +513,7 @@ export function OverlaysModal({ open, onClose }: Props) {
         </div>
 
         <div className="border-t border-zinc-800 p-3 flex gap-2 shrink-0 bg-zinc-950">
-          <Button onClick={() => { update(DEFAULT_OVERLAYS); toast.success('Lanzadores restaurados') }}
+          <Button onClick={() => { update(DEFAULT_OVERLAYS)}}
             variant="outline" className="h-10 text-xs font-bold border-zinc-600">
             <RotateCcw className="w-4 h-4 mr-1.5" /> POR DEFECTO
           </Button>

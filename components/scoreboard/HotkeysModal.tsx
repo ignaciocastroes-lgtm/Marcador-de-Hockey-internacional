@@ -51,8 +51,7 @@ export function HotkeysModal({ open, onClose, onChange }: Props) {
   const conflictingActions = new Set(Object.values(conflicts).flat())
 
   const apply = (next: HotkeyMap, msg: string) => {
-    setMap(next); saveHotkeys(next); onChange(next); toast.success(msg)
-  }
+    setMap(next); saveHotkeys(next); onChange(next)}
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) { setListening(null); onClose() } }}>

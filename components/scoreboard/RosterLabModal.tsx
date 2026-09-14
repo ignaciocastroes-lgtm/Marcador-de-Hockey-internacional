@@ -87,7 +87,6 @@ export function RosterLabModal({ open, onClose }: Props) {
     if (!r.ok) { toast.warning(r.error!); return }
     guardar(r.club!)
     setNuevoNombre(''); setNuevoDorsal('')
-    toast.success(`${nombre} agregada como ${id}`)
   }
 
   const cambiarDorsal = (personId: string, dorsal: string) => {
@@ -119,7 +118,6 @@ export function RosterLabModal({ open, onClose }: Props) {
       buildPlantelCSV(ejemplo, { club: club.nombre, clubId: club.identity.clubId }),
       'ardi-plantilla-plantel.csv'
     )
-    toast.success('Plantilla descargada. Llénala y vuelve a importarla.')
   }
 
   const exportar = () => {
@@ -147,7 +145,6 @@ export function RosterLabModal({ open, onClose }: Props) {
     const nuevas = pendiente.filter(m => m.kind === 'nueva').length
     const conocidas = pendiente.length - nuevas
     setPendiente(null)
-    toast.success(`${conocidas} actualizadas, ${nuevas} nuevas`)
   }
 
   const dudosas = pendiente?.filter(m => m.kind === 'ambigua').length ?? 0

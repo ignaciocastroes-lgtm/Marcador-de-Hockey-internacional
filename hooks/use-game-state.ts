@@ -945,7 +945,11 @@ export function useGameState() {
   }, [])
 
   const toggleMainClock = useCallback(() => setState(prev => {
-    if (prev.activeTimeout) return prev
+    // El juego no arranca con el partido detenido. Comprobaba el tiempo
+    // muerto pero NO el descanso ni la suspension: con el partido suspendido
+    // se podia seguir jugando, y el reloj de juego corria por debajo del
+    // rotulo "PARTIDO SUSPENDIDO". Para volver a jugar hay que reanudar.
+    if (prev.activeTimeout || prev.isIntermission || prev.isMatchEnded) return prev
     if (prev.isMainClockRunning) {
       return { 
         ...prev, 

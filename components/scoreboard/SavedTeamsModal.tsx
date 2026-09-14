@@ -121,7 +121,7 @@ export function SavedTeamsModal({
       rosters: serie ? { ...base, [serie]: entries } : base
     }
     saveTeam(t)
-    toast.success(editing ? `${n} actualizado` : `${n} creado con las ${seriesOf(bootClub()).length} series`)
+
     setEditing(t)
   }
 
@@ -178,7 +178,7 @@ export function SavedTeamsModal({
                         {enSerie ? ` · ${enSerie} camisetas en ${serieName}` : ''}
                       </span>
                     </div>
-                    <button onClick={e => { e.stopPropagation(); deleteTeam(t.id); toast.success('Club eliminado') }}
+                    <button onClick={e => { e.stopPropagation(); deleteTeam(t.id)}}
                       className="text-red-500 hover:text-red-400 shrink-0" title="Eliminar club">
                       <Trash2 className="w-4 h-4" />
                     </button>
