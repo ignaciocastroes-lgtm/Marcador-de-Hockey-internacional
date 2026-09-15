@@ -75,9 +75,32 @@ export function OverlayDraggable({
     drag.current = null
   }
 
+  /**
+   * LA CAUSA POR LA QUE EL ZOOM DE LAS CAPAS NO HACIA NADA.
+   * ======================================================
+   * Los lanzadores marcan sus capas con `bc-content-in` (o `bc-content-out`),
+   * la animacion de entrada. Esa animacion declara `animation-fill-mode: both`
+   * y anima `transform`.
+   *
+   * Y en CSS **una animacion pisa el estilo en linea**. Asi que el
+   * `transform: translate(-50%,-50%) scale(s)` que este componente escribia
+   * aqui no llegaba a aplicarse nunca: el navegador dejaba la matriz de la
+   * animacion. Comprobado en el navegador — el atributo decia `scale(1.1)` y
+   * el transform calculado era `matrix(1, 0, 0, 1, 0, 0)`, la identidad.
+   *
+   * Por eso se pulsaba + y el numero subia a 110% pero el elemento no crecia
+   * ni un pixel: el valor se guardaba bien y el dibujo lo ignoraba. De paso se
+   * perdia tambien el centrado del `translate(-50%,-50%)`.
+   *
+   * La animacion se muda a un envoltorio interior: sigue entrando igual en la
+   * proyeccion, y la capa exterior recupera el mando sobre posicion y escala.
+   */
+  const clasesAnim = (className.match(/bc-content-(in|out)/g) || []).join(' ')
+  const clasesResto = className.replace(/bc-content-(in|out)/g, '').trim()
+
   return (
     <div
-      className={`absolute group ${className} ${editMode ? 'cursor-move' : ''}`}
+      className={`absolute group ${clasesResto} ${editMode ? 'cursor-move' : ''}`}
       style={{
         left: pos.x,
         top: pos.y,
@@ -98,7 +121,7 @@ export function OverlayDraggable({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      {children}
+      {clasesAnim ? <div className={clasesAnim}>{children}</div> : children}
 
       {editMode && (
         /*

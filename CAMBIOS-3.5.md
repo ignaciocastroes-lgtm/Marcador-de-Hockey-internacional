@@ -620,3 +620,63 @@ no decoración.
 
 `tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan**, más las
 mediciones en navegador descritas arriba.
+
+---
+
+# DOS BUGS DE RAÍZ, ENCONTRADOS EJECUTANDO
+
+## 1. El zoom de las capas: una animación pisaba el estilo
+
+Llevaba varios intentos con esto. La causa real no se ve leyendo el código del
+zoom, porque **el código del zoom estaba bien**.
+
+Los lanzadores marcan sus capas con `bc-content-in`, la animación de entrada.
+Esa animación declara `animation-fill-mode: both` y **anima `transform`**. En
+CSS, una animación **pisa el estilo en línea**.
+
+Así que el `transform: translate(-50%,-50%) scale(s)` que escribe cada capa
+nunca llegaba a aplicarse. Medido en el navegador:
+
+```
+atributo style  : transform: translate(-50%, -50%) scale(1.1)
+transform real  : matrix(1, 0, 0, 1, 0, 0)     ← la identidad
+```
+
+El valor se guardaba bien, el rótulo subía a 110%, y el dibujo lo ignoraba. De
+paso se perdía también el centrado.
+
+**La animación se mudó a un envoltorio interior.** Entra igual en la
+proyección, y la capa exterior recupera el mando sobre posición y escala.
+
+Verificado en las tres pestañas — ahora el transform calculado es
+`matrix(1.1, …)` y los elementos crecen de verdad:
+
+| | Antes | Después |
+|---|---|---|
+| GOL | 981×552 | **1079×607** |
+| FIN | 362×17 | **398×19** |
+| ESTADÍSTICAS | 758×74 | **834×81** |
+
+## 2. El bucle al pegar un escudo
+
+`rememberShield` se llama desde el `onLoad` de la previsualización, y escribía
+**siempre**, con `usedAt: Date.now()`. Escribir emite un evento → se relee la
+galería → nuevo estado → se repinta → la imagen vuelve a disparar `onLoad` →
+otra vuelta. Y como `Date.now()` cambia cada vez, **el estado nunca se
+estabilizaba**: la app quedaba girando y sólo salía con F5, sin dejar pegar la
+segunda dirección.
+
+Cortado por dos vías:
+
+- Si el escudo ya está y se usó hace menos de un minuto, **no se escribe ni se
+  avisa**. La vuelta se corta en la primera.
+- Cada URL se anota **una vez por sesión** en el panel, aunque la imagen se
+  recargue por un repintado.
+
+Reproducido y verificado: al pegar la dirección se produce **una sola
+escritura**, y el segundo campo acepta su URL con la app viva.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan**, más las
+mediciones en navegador de arriba.

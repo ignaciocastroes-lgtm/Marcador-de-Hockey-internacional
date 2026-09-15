@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { Shield, Type, LayoutDashboard, ExternalLink, Layers, ChevronRight, Trash2, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -66,6 +66,8 @@ export function ScreensPanel(props: ScreensPanelProps) {
    * tenga que acordarse de sincronizar nada.
    */
   const [gallery, setGallery] = useState<GalleryShield[]>([])
+  /** URLs ya anotadas en esta sesion: evita reescribir en cada repintado. */
+  const anotados = useRef<Set<string>>(new Set())
   const [editingUrl, setEditingUrl] = useState<string | null>(null)
 
   /**
@@ -199,8 +201,15 @@ export function ScreensPanel(props: ScreensPanelProps) {
         <div className="flex items-center justify-center gap-6 bg-zinc-900 rounded-xl p-4 border border-zinc-800">
           {([['home', L.homeUrl], ['away', L.awayUrl]] as const).map(([side, u], i) => (
             <div key={side} className="flex flex-col items-center gap-1">
+              {/* Segundo cinturon contra el bucle: cada URL se anota UNA vez
+                  por sesion. Aunque la imagen vuelva a cargar por un
+                  repintado, no se vuelve a escribir. */}
               {u ? <img src={u} alt="" className="h-20 w-20 object-contain"
-                     onLoad={() => rememberShield(u)} />
+                     onLoad={() => {
+                       if (anotados.current.has(u)) return
+                       anotados.current.add(u)
+                       rememberShield(u)
+                     }} />
                  : <div className="h-20 w-20 rounded-lg border-2 border-dashed border-zinc-700" />}
               <span className="text-[9px] font-black text-zinc-500 uppercase">{i === 0 ? 'Local' : 'Visita'}</span>
             </div>

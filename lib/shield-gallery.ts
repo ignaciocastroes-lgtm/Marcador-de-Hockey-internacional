@@ -63,12 +63,33 @@ function persist(list: GalleryShield[]) {
  * Los escudos ARDI genéricos no se guardan: ya están siempre disponibles como
  * botón fijo, y ocuparían lugar repitiendo lo que no hace falta recordar.
  */
+/** Tiempo tras el cual vale la pena volver a anotar que se uso un escudo. */
+const REFRESCO_MS = 60_000
+
 export function rememberShield(url: string, label?: string): void {
   if (typeof window === 'undefined' || !isUsableUrl(url)) return
   if (url.startsWith('/escudos/ardi-')) return
 
   const list = loadGallery()
   const found = list.find(s => s.url === url)
+
+  /**
+   * EL BUCLE QUE COLGABA LA APP AL PEGAR UN ESCUDO.
+   *
+   * Esto se llama desde el `onLoad` de la previsualizacion. Antes escribia
+   * SIEMPRE, con `usedAt: Date.now()`, y `persist` emite un evento que hace
+   * releer la galeria -> nuevo estado -> se vuelve a pintar -> la imagen
+   * dispara `onLoad` otra vez -> vuelta a empezar. Como `Date.now()` cambia en
+   * cada vuelta, el estado NUNCA se estabilizaba: la aplicacion quedaba
+   * girando y solo salia con F5, sin dejar pegar la segunda direccion.
+   *
+   * Ahora, si el escudo ya esta y se uso hace menos de un minuto, no se
+   * escribe ni se avisa a nadie. La vuelta se corta en la primera.
+   */
+  if (found && !label && Date.now() - (found.usedAt || 0) < REFRESCO_MS) return
+  if (found && label && found.label === label &&
+      Date.now() - (found.usedAt || 0) < REFRESCO_MS) return
+
   const next: GalleryShield[] = found
     ? list.map(s => s.url === url ? { ...s, usedAt: Date.now(), label: label ?? s.label } : s)
     : [{ url, label, usedAt: Date.now() }, ...list]
