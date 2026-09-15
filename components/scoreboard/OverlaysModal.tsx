@@ -390,7 +390,16 @@ export function OverlaysModal({ open, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!o) onClose() }}>
-      <DialogContent className="bg-zinc-900 border-2 border-zinc-700 text-white max-w-lg max-h-[92vh] p-0 flex flex-col overflow-hidden" aria-describedby={undefined}>
+      {/*
+        EN MODO EDICION EL MODAL SE ENSANCHA.
+        Medido en el navegador: con 512 px de ancho, la previsualizacion queda
+        en 476x268 y el lienzo de 1920x1080 se dibuja al 24,8%. Ajustar ahi es
+        imposible — un +10% en una capa chica son dos pixeles, y por eso parecia
+        que los botones no hacian nada. El cableado estaba bien; lo que faltaba
+        era poder VER el cambio.
+      */}
+      <DialogContent className={`bg-zinc-900 border-2 border-zinc-700 text-white max-h-[92vh] p-0 flex flex-col overflow-hidden transition-[max-width] duration-200 ${
+        editMode ? 'sm:max-w-5xl' : 'sm:max-w-lg'}`} aria-describedby={undefined}>
         <DialogHeader className="p-4 pb-3 border-b border-zinc-800">
           <DialogTitle className="flex items-center gap-2 text-lg font-black">
             <Layers className="w-5 h-5 text-yellow-400" /> Lanzadores de proyección

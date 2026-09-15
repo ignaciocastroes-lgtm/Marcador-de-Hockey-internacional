@@ -1359,7 +1359,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
       {/* ── ADMINISTRACION ─────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pb-4">
-        <Button onClick={toggleFullscreen} className="h-10 font-bold text-xs bg-zinc-800 hover:bg-zinc-700">
+        <Button onClick={toggleFullscreen} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.secondary}`}>
           <Maximize className="w-4 h-4 mr-1" /> PANTALLA
         </Button>
         {/* Un partido suspendido usa el mismo mecanismo que el entretiempo: el
@@ -1379,7 +1379,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <Button onClick={() => setShowEndConfirm(true)} disabled={planillaLocked} className="h-10 font-bold text-xs bg-cyan-700 hover:bg-cyan-600 disabled:opacity-40"><Square className="w-4 h-4 mr-1" /> FIN</Button>
         )}
         <Button onClick={() => setShowOfficialSheet(true)} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.penal}`}><FileText className="w-4 h-4 mr-1" /> PLANILLA</Button>
-        <Button onClick={() => setShowHistory(true)} className="h-10 font-bold text-xs bg-zinc-700 hover:bg-zinc-600"><History className="w-4 h-4 mr-1" /> HISTORIAL</Button>
+        <Button onClick={() => setShowHistory(true)} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.secondary}`}><History className="w-4 h-4 mr-1" /> HISTORIAL</Button>
         <Button onClick={() => setShowResetConfirm(true)} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.danger}`}><RotateCcw className="w-4 h-4 mr-1" /> NUEVO</Button>
       </div>
 

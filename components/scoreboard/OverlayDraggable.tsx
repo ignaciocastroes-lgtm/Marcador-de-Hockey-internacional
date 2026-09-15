@@ -77,13 +77,18 @@ export function OverlayDraggable({
 
   return (
     <div
-      className={`absolute ${className} ${editMode ? 'cursor-move' : ''}`}
+      className={`absolute group ${className} ${editMode ? 'cursor-move' : ''}`}
       style={{
         left: pos.x,
         top: pos.y,
         transform: `translate(-50%, -50%) scale(${pos.s})`,
-        opacity: pos.v ? 1 : 0.25,
-        outline: editMode ? '2px dashed rgba(255,255,255,.35)' : undefined,
+        // Apagada se ve APAGADA. Antes quedaba al 25%, que sobre un lienzo
+        // oscuro y reducido casi no se distingue del 100%: se pulsaba el ojo y
+        // parecia no pasar nada. Ahora baja mas y se marca en rojo punteado.
+        opacity: pos.v ? 1 : (editMode ? 0.12 : 0),
+        outline: editMode
+          ? (pos.v ? '2px dashed rgba(255,255,255,.35)' : '2px dashed rgba(239,68,68,.9)')
+          : undefined,
         outlineOffset: editMode ? '10px' : undefined,
         touchAction: 'none',
         willChange: editMode ? 'transform' : undefined
@@ -96,27 +101,36 @@ export function OverlayDraggable({
       {children}
 
       {editMode && (
-        <div className="absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-black/90 border border-white/25 rounded-lg px-1 py-0.5 z-50"
-          onPointerDown={e => e.stopPropagation()}>
-          <button type="button" onMouseDown={e => e.stopPropagation()}
-            onClick={() => onChange(id, { ...pos, s: Math.max(0.3, +(pos.s - 0.1).toFixed(2)) })}
-            className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/15 rounded" title="Reducir">
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-          <span className="text-[10px] font-mono text-white/70 w-9 text-center">{Math.round(pos.s * 100)}%</span>
-          <button type="button" onMouseDown={e => e.stopPropagation()}
-            onClick={() => onChange(id, { ...pos, s: Math.min(3, +(pos.s + 0.1).toFixed(2)) })}
-            className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/15 rounded" title="Agrandar">
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-          <span className="w-px h-4 bg-white/20" />
-          <button type="button" onMouseDown={e => e.stopPropagation()}
-            onClick={() => onChange(id, { ...pos, v: !pos.v })}
-            className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/15 rounded"
-            title={pos.v ? 'Ocultar' : 'Mostrar'}>
-            {pos.v ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5 opacity-50" />}
-          </button>
-        </div>
+        /*
+          EL LIENZO ES PARA ARRASTRAR. LOS AJUSTES VIVEN EN "CAPAS".
+          =========================================================
+          Aqui habia una barra flotante con -, %, + y el ojo sobre cada capa.
+          No funcionaba, y no por un descuido sino por el diseño mismo de los
+          lanzadores: en GOL las capas se superponen a proposito —el escudo de
+          fondo ocupa el lienzo entero, la camiseta y el escudo van pegados— asi
+          que las barras se tapaban unas a otras y el clic se lo llevaba la
+          vecina. Comprobado en el navegador: en GOL respondia UNA de cinco; en
+          FIN y ESTADISTICAS, donde las capas no se pisan, respondian las cuatro.
+          Tambien quedaban fuera del lienzo las de la franja alta, debajo del
+          rotulo "Previsualizacion", que se comia el puntero.
+
+          Intentar arreglarla —moverla arriba, abajo, mostrarla solo al pasar
+          por encima— tapaba un caso y abria otro, porque la superposicion es
+          intencional y no va a desaparecer.
+
+          Asi que hay UN solo lugar para ajustar tamaño y visibilidad: la lista
+          CAPAS, que funciona en las tres pestañas. El lienzo se arrastra, que
+          es lo que se hace mirando. Mismo criterio que con los atajos y los
+          editores de plantel: una sola via para cada cosa.
+
+          Queda el rotulo con el nombre de la capa al pasar por encima, para
+          saber que se esta arrastrando cuando se superponen.
+        */
+        <span className="absolute -top-5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded
+          bg-black/85 border border-white/20 text-[9px] font-bold text-white/80 whitespace-nowrap
+          opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 z-50">
+          {id}{!pos.v && ' · oculta'}
+        </span>
       )}
     </div>
   )

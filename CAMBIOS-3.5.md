@@ -515,3 +515,108 @@ planteles, las series y los temas.
 
 `tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan**, más la
 comprobación en navegador de las medidas de arriba.
+
+---
+
+# EL PUENTE CON LA WEB DEL CLUB
+
+## Un botón nuevo: "Datos web"
+
+La crónica HTML sirve para pegar una noticia y verla. **No sirve para que una
+web filtre por serie, arme una tabla o liste goleadoras**: es dibujo, no dato.
+
+Se agregó `buildMatchJSON`, que entrega el mismo partido en datos planos y con
+nombres en español, para que quien lo lea del otro lado no tenga que conocer
+ARDI por dentro:
+
+`id` estable · fecha, hora, estadio, campeonato, serie, rama · por equipo
+(goles, penales, faltas, posesión en segundos y en %, goleadoras con minuto,
+tarjetas) · ganador · parciales por periodo · duración real · cronología.
+
+Dos decisiones del contrato:
+
+- **`id` es estable** (fecha + equipos): la web lo usa como clave y republicar
+  el mismo partido reemplaza en vez de duplicar.
+- **Los goles anulados vienen marcados y YA descontados** del marcador. La web
+  puede mostrarlos tachados sin riesgo de sumarlos dos veces.
+
+Verificado generando el JSON de un partido real con gol anulado, tarjeta
+anulada, penal y suspensión.
+
+## El prompt para el otro hilo
+
+En `PROMPT-HILO-WEB.md`, con el contrato y los tres caminos de publicación.
+
+**Lo importante que lleva escrito:** la web es Next.js estático en Vercel, sin
+base de datos. Una entrada de administrador que guarde en `localStorage` **no
+publica nada** — sólo se vería en el navegador donde se pegó. El prompt obliga
+a resolver eso antes de escribir una línea, con tres opciones y su costo real.
+
+Sin esa advertencia, lo más probable es que salga un panel de administrador
+bonito que no publica.
+
+---
+
+# LANZADORES: POR QUÉ LOS BOTONES DEL LIENZO NO RESPONDÍAN
+
+Auditado ejecutando la app y midiendo. El cableado **estaba bien**; los
+problemas eran otros dos, y ninguno se veía leyendo el código.
+
+## 1. La previsualización era demasiado chica para ver el cambio
+
+Medido: el modal tenía **512 px** de ancho, la previsualización **476×268**, y
+el lienzo de 1920×1080 se dibujaba al **24,6%**. Un `+10%` en una capa chica
+son dos píxeles. Por eso parecía que el botón no hacía nada: sí lo hacía, pero
+era invisible.
+
+**En modo edición el modal se ensancha a 1024 px** y el lienzo pasa a
+dibujarse al **41,7%**. (El `max-w-5xl` no bastaba: `DialogContent` trae
+`sm:max-w-lg` en su clase base, que gana por orden de media query. Va con
+`sm:`.)
+
+## 2. Las barras flotantes se tapaban entre sí
+
+Playwright no podía ni pulsarlas: *"otro elemento intercepta el puntero"*.
+
+Dos causas, las dos de diseño:
+
+- Las capas de la franja alta tenían su barra **fuera del lienzo**, debajo del
+  rótulo "Previsualización", que se comía el clic.
+- En GOL las capas **se superponen a propósito** —el escudo de fondo ocupa el
+  lienzo entero, la camiseta y el escudo van pegados— así que las barras se
+  tapaban y el clic se lo llevaba la vecina.
+
+Medido: en GOL respondía **una de cinco**; en FIN y ESTADÍSTICAS, donde no se
+pisan, respondían las cuatro.
+
+Probé moverla arriba, abajo y mostrarla sólo al pasar por encima. Cada arreglo
+tapaba un caso y abría otro, porque **la superposición es intencional y no va
+a desaparecer**.
+
+### La decisión
+
+**El lienzo es para arrastrar. Los ajustes viven en CAPAS.** Se quitó la barra
+flotante; queda sólo el nombre de la capa al pasar por encima, para saber qué
+se arrastra cuando se superponen.
+
+Una sola vía para cada cosa, como con los atajos y los editores de plantel.
+
+**Verificado en las tres pestañas**: GOL 5/5, FIN 4/4, ESTADÍSTICAS 4/4 —
+todas las capas cambian de tamaño y se apagan desde la lista.
+
+## 3. Apagada ahora se ve apagada
+
+Quedaba al 25% de opacidad, que sobre un lienzo oscuro y reducido casi no se
+distingue del 100%. Ahora baja al 12% y se marca con borde rojo punteado.
+
+## 4. Más tema en la vista PISTA
+
+Seguía muy por detrás de CONTROL (8 usos contra 66). Se sumó la barra inferior
+de administración. Las fichas de jugador **siguen sin tematizar a propósito**:
+su rojo y ámbar dicen de qué equipo es cada una — ahí el color es información,
+no decoración.
+
+## Verificado
+
+`tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan**, más las
+mediciones en navegador descritas arriba.

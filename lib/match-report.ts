@@ -311,3 +311,115 @@ document.getElementById('ardi-copiar').onclick = function () {
   w.document.close()
   w.focus()
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EL MISMO PARTIDO, EN DATOS
+//
+// El `<article>` sirve para pegar una noticia y verla. No sirve para que una
+// web filtre por serie, arme una tabla de posiciones o liste goleadoras: para
+// eso hace falta el dato, no el dibujo.
+//
+// Este JSON es el contrato con la web del club. Se mantiene deliberadamente
+// plano y con nombres en español: quien lo lea del otro lado no tiene que
+// conocer ARDI por dentro.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const MATCH_JSON_FORMAT = 'ardi:partido'
+export const MATCH_JSON_VERSION = 1
+
+export interface MatchJSON {
+  formato: typeof MATCH_JSON_FORMAT
+  version: number
+  /** Identificador estable del partido: fecha + equipos. Sirve de clave. */
+  id: string
+  fecha: string          // 'AAAA-MM-DD'
+  hora: string           // 'HH:MM'
+  estadio: string
+  campeonato: string
+  serie: string
+  rama: string
+  local:  LadoJSON
+  visita: LadoJSON
+  /** 'local' | 'visita' | 'empate' */
+  ganador: 'local' | 'visita' | 'empate'
+  hubopenales: boolean
+  parciales: { periodo: string; local: number; visita: number }[]
+  duracionRealSeg: number | null
+  cronologia: { minuto: string; periodo: string; equipo: 'local' | 'visita' | null; texto: string; anulado: boolean }[]
+}
+
+export interface LadoJSON {
+  nombre: string
+  escudo: string
+  goles: number
+  penales: number
+  faltas: number
+  posesionSeg: number
+  posesionPct: number
+  goleadores: { minuto: string; dorsal: string }[]
+  tarjetas: { tipo: 'yellow' | 'blue' | 'red'; dorsal: string; banca: boolean }[]
+}
+
+export function buildMatchJSON(state: GameState, o: ReportOpts): MatchJSON {
+  const r = buildSummary(state, 'completo')
+  const cfg = state.matchConfig
+  const inicio = state.timestamps?.matchStart ? new Date(state.timestamps.matchStart) : null
+  const fin = state.timestamps?.matchEnd ? new Date(state.timestamps.matchEnd) : null
+
+  const fecha = cfg.fecha || (inicio ? inicio.toISOString().slice(0, 10) : '')
+  const hora = cfg.hora || (inicio ? inicio.toTimeString().slice(0, 5) : '')
+
+  const lado = (k: 'home' | 'away'): LadoJSON => ({
+    nombre: k === 'home' ? o.homeTeamName : o.awayTeamName,
+    escudo: (k === 'home' ? o.homeLogo : o.awayLogo) || '',
+    goles: r[k].score,
+    penales: k === 'home' ? r.homePenalties : r.awayPenalties,
+    faltas: r[k].fouls,
+    posesionSeg: Math.round(r[k].possession),
+    posesionPct: r[k].possessionPct,
+    goleadores: r[k].goals.map(g => ({ minuto: g.minute, dorsal: g.number })),
+    tarjetas: r[k].cards.map(c => ({ tipo: c.type, dorsal: c.number, banca: !!c.isBench })),
+  })
+
+  const ganador = r.home.score > r.away.score ? 'local'
+    : r.away.score > r.home.score ? 'visita'
+    : r.hasPenalties
+      ? (r.homePenalties > r.awayPenalties ? 'local' : r.awayPenalties > r.homePenalties ? 'visita' : 'empate')
+      : 'empate'
+
+  const limpio = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'equipo'
+
+  return {
+    formato: MATCH_JSON_FORMAT,
+    version: MATCH_JSON_VERSION,
+    id: `${fecha}-${limpio(o.homeTeamName)}-vs-${limpio(o.awayTeamName)}`,
+    fecha, hora,
+    estadio: cfg.estadio || '',
+    campeonato: cfg.campeonato || '',
+    serie: cfg.seriesName || '',
+    rama: cfg.gender || '',
+    local: lado('home'),
+    visita: lado('away'),
+    ganador,
+    hubopenales: r.hasPenalties,
+    parciales: r.byPeriod.map(p => ({ periodo: p.label, local: p.home, visita: p.away })),
+    duracionRealSeg: inicio && fin ? Math.max(0, Math.round((fin.getTime() - inicio.getTime()) / 1000)) : null,
+    cronologia: (state.matchLog || [])
+      .filter(e => e.eventType === 'gol' || e.eventType.startsWith('tarjeta') ||
+        (e.eventType === 'ajuste' && /ANULAD|SUSPENDIDO|REANUDADO/.test(e.details || '')))
+      .map(e => ({
+        minuto: playedMinute(state, e.gameTime),
+        periodo: e.period,
+        equipo: e.team === 'home' ? 'local' : e.team === 'away' ? 'visita' : null,
+        texto: e.details || e.eventType,
+        anulado: !!e.anulado,
+      })),
+  }
+}
+
+export function downloadMatchJSON(state: GameState, o: ReportOpts): void {
+  bajar(JSON.stringify(buildMatchJSON(state, o), null, 2),
+    `${nombreArchivo(state, o)}.json`, 'application/json')
+}

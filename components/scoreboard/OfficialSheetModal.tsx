@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { Globe, Download, FileText, CheckCircle2, AlertTriangle, Save, RotateCcw, PenTool } from 'lucide-react'
 import { toast } from 'sonner'
 import { defaultHomeLogo } from '@/lib/club-brand'
-import { downloadMatchReport, openMatchReport } from '@/lib/match-report'
+import { downloadMatchReport, openMatchReport, downloadMatchJSON } from '@/lib/match-report'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
  './SignatureCanvas'
@@ -356,6 +356,12 @@ export function OfficialSheetModal({
             <Button onClick={() => openMatchReport(state, reportOpts)}
               className="bg-emerald-700 hover:bg-emerald-600 font-bold h-9">
               <Globe className="w-4 h-4 mr-2" /> Ver crónica
+            </Button>
+            {/* El dato, para que la web pueda filtrar por serie y armar
+                tablas. La crónica es el dibujo; esto es el contenido. */}
+            <Button onClick={() => downloadMatchJSON(state, reportOpts)}
+              variant="outline" className="border-zinc-600 font-bold h-9">
+              <Download className="w-4 h-4 mr-2" /> Datos web
             </Button>
             <Button onClick={exportCSV} variant="outline" className="border-zinc-600 font-bold h-9">
               <Download className="w-4 h-4 mr-2" /> CSV
