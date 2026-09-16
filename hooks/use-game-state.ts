@@ -1118,6 +1118,38 @@ export function useGameState() {
    * Antes el boton mandaba siempre al contador de la tanda, y encima estaba
    * deshabilitado fuera de ella: en juego no habia forma de registrarlo.
    */
+  /**
+   * SE COBRA UN PENAL EN JUEGO (Art. 30.9).
+   *
+   * Es el COBRO, no el gol. El articulo pide cinco segundos para ejecutar el
+   * lanzamiento, y eso se cuenta ANTES del tiro: un penal cobrado a 0:03 se
+   * tira con 0:05. Enganchar la reposicion al gol no sirve —un penal errado a
+   * 0:03 no repondria nunca, y uno convertido repondria despues del tiro.
+   *
+   * La conversion sigue su camino normal: se carga como gol en la ficha.
+   *
+   * No aplica en la tanda: ahi no corre el reloj de juego.
+   */
+  const awardPenalty = useCallback((team: 'home' | 'away') => setState(prev => {
+    if (prev.period === 'penales' || prev.isIntermission || prev.activeTimeout || prev.isMatchEnded) return prev
+
+    const reposicion = reponerParaLanzamiento(prev, 'penal')
+    const cobro: MatchEvent = {
+      id: uid(), timestamp: new Date().toISOString(), gameTime: prev.mainClock,
+      period: prev.period, eventType: 'ajuste', team, actor: '',
+      details: 'PENAL cobrado'
+    }
+    return {
+      ...prev,
+      // Igual que el tiro libre directo: se para el juego y se reponen los 45.
+      isMainClockRunning: false,
+      isPossessionLeftRunning: false, isPossessionRightRunning: false,
+      possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION,
+      ...(reposicion ? { mainClock: reposicion.mainClock } : {}),
+      matchLog: [...prev.matchLog, cobro, ...(reposicion ? [reposicion.evento] : [])]
+    }
+  }), [])
+
   const scorePenalty = useCallback((team: 'home' | 'away', playerNumber?: string) => setState(prev => {
     const enTanda = prev.period === 'penales'
     const num = playerNumber || '?'
@@ -2003,7 +2035,7 @@ export function useGameState() {
     configureMatch, configureMatchWithResume, setSignature, setClosingSignature, setMatchPhase,
     toggleMainClock, pauseMainClock, resetMainClock, setMainClockTime, adjustMainClock,
     setPeriod, nextPeriod, adjustHomeScore, adjustAwayScore, adjustHomeFouls, adjustAwayFouls, resetFouls,
-    annulGoal, correctScore, scorePenalty,
+    annulGoal, correctScore, scorePenalty, awardPenalty,
     adjustHomePenalties, adjustAwayPenalties, startIntermission, endIntermission, suspendMatch,
     addYellowCard, resetYellowCards, addSanction, addBenchSanction, removeSanction, clearSanctions,
     requestTimeoutHome, requestTimeoutAway, grantTimeoutHome, grantTimeoutAway,

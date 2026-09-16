@@ -86,5 +86,44 @@ const antes = JSON.stringify(d)
 d = anular(d, 'no-existe')
 chk(JSON.stringify(d)===antes, 'anular un id inexistente no cambia nada')
 
+// ── Lo que se PINTA tampoco cuenta una tarjeta anulada ──────────────────
+// Reproduce los cuatro conteos visuales que la ignoraban: la ficha de
+// castigo de PISTA, las amarillas y el "ya expulsado" de CONTROL, y las dos
+// lecturas de PosModal (amarilla de banca y roja).
+const tally      = (h,t,n) => h.filter(c => !c.anulada && c.team===t && c.playerNumber===n).length
+const expulsado2 = (h,t,n) => h.some(c => !c.anulada && c.team===t && c.playerNumber===n && c.cardType==='red')
+const bancaAm    = (h,t)   => h.some(c => !c.anulada && c.team===t && c.isBench && c.cardType==='yellow')
+
+let v = { sanctions:[], cardHistory:[] }
+v = sancionar(v,'home','7','yellow')
+chk(tally(v.cardHistory,'home','7')===1, 'la ficha pinta la amarilla')
+v = anular(v, v.sanctions[0].id)
+chk(tally(v.cardHistory,'home','7')===0, 'anulada, la ficha queda limpia al toque')
+
+let r2 = sancionar({sanctions:[],cardHistory:[]},'away','3','red')
+chk(expulsado2(r2.cardHistory,'away','3'), 'CONTROL lo marca expulsado')
+r2 = anular(r2, r2.sanctions[0].id)
+chk(!expulsado2(r2.cardHistory,'away','3'), 'anulada la roja, deja de estar deshabilitado en la grilla')
+
+const banca = { cardHistory:[{ team:'home', isBench:true, cardType:'yellow', anulada:true }] }
+chk(!bancaAm(banca.cardHistory,'home'), 'una amarilla de banca anulada no hace creer que ya se pinto')
+
+// ── El acta tampoco: grilla posicional y goles ─────────────────────────
+const grilla = (h,t,n,tipo) => h.filter(c => !c.anulada && c.team===t && c.playerNumber===n && c.cardType===tipo).length
+const hist = [
+  { team:'home', playerNumber:'7', cardType:'yellow' },
+  { team:'home', playerNumber:'7', cardType:'yellow', anulada:true },
+]
+chk(grilla(hist,'home','7','yellow')===1,
+  'la grilla del acta no reserva casillero para una tarjeta anulada')
+
+const log = [
+  { eventType:'gol', team:'home', period:'1er_tiempo' },
+  { eventType:'gol', team:'home', period:'1er_tiempo', anulado:true },
+]
+const golesPeriodo = (l,t,p) => l.filter(e => !e.anulado && e.team===t && e.eventType==='gol' && e.period===p).length
+chk(golesPeriodo(log,'home','1er_tiempo')===1,
+  'el desglose por periodo del acta cuadra con el marcador')
+
 console.log(`\n${pasa} pasan, ${falla} fallan`)
 process.exit(falla?1:0)

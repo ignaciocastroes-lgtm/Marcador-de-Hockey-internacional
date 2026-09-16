@@ -135,8 +135,13 @@ export function SummaryOverlay({
       </Slot>
 
       {/* ── MARCADOR: escudo, nombre y goles en una sola linea base ──────── */}
-      <Slot ctx={slotCtx} id="score" className="w-[1700px] flex items-center justify-between gap-[40px] bc-content-in">
-        <div className="flex items-center gap-[26px] flex-1 min-w-0">
+      {/* El marcador media 1700 px FIJOS con los nombres estirados a los
+          extremos: la capa se iba muy a la derecha y al agrandarla se salia
+          del cuadro. Ahora mide lo que ocupa su contenido y crece desde el
+          centro, asi que escalarla la mantiene dentro. Los nombres tienen un
+          tope propio para que uno largo no vuelva a estirar la capa entera. */}
+      <Slot ctx={slotCtx} id="score" className="flex items-center justify-center gap-[40px] bc-content-in">
+        <div className="flex items-center justify-end gap-[26px] min-w-0 max-w-[620px]">
           {homeLogo && <img src={homeLogo} alt="" className="h-[128px] w-[128px] object-contain shrink-0" />}
           <span className={`font-black text-[58px] leading-none truncate ${nameClass}`} style={paint(textColor, nameClass)}>{homeTeamName}</span>
         </div>
@@ -193,27 +198,22 @@ export function SummaryOverlay({
       </Slot>
 
       {/* ── PIE: goleadores y tarjetas, alineados a la misma base ─────────── */}
-      <Slot ctx={slotCtx} id="scorers" className="w-[1700px] flex items-start justify-between gap-[60px] pt-[34px] bc-content-in">
-        <div className="flex-1 min-w-0 flex flex-col gap-[16px]">
-          {sections.showGoalMinutes && (
-            <>
-              <span className="font-bold tracking-[0.26em] text-[22px]" style={dim(0.45)}>GOLES</span>
-              {Scorers({ data: s.home, align: 'left' })}
-            </>
-          )}
-          {sections.showCards && s.home.cards.length > 0 && Cards({ data: s.home, align: 'left' })}
-        </div>
-
-        <div className="flex-1 min-w-0 flex flex-col gap-[16px] items-end">
-          {sections.showGoalMinutes && (
-            <>
-              <span className="font-bold tracking-[0.26em] text-[22px]" style={dim(0.45)}>GOLES</span>
-              {Scorers({ data: s.away, align: 'right' })}
-            </>
-          )}
-          {sections.showCards && s.away.cards.length > 0 && Cards({ data: s.away, align: 'right' })}
-        </div>
-      </Slot>
+      <>
+        {/* Una capa por equipo: antes eran los dos dentro de 1700 px, asi que
+            agrandar hacia crecer ambos contra los bordes y no se leia. */}
+        {([['scorersHome', s.home, 'left'], ['scorersAway', s.away, 'right']] as const).map(([id, d, al]) => (
+          <Slot key={id} ctx={slotCtx} id={id}
+            className="flex flex-col gap-[16px] items-center max-w-[760px] bc-content-in">
+            {sections.showGoalMinutes && (
+              <>
+                <span className="font-bold tracking-[0.26em] text-[22px]" style={dim(0.45)}>GOLES</span>
+                {Scorers({ data: d, align: al })}
+              </>
+            )}
+            {sections.showCards && d.cards.length > 0 && Cards({ data: d, align: al })}
+          </Slot>
+        ))}
+      </>
       </>) }}</OverlayCanvas>
     </div>
   )

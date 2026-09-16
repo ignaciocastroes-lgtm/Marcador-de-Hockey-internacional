@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next'
-import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/sonner'
 
 // Tipografias autohospedadas desde npm: el build no consulta Google Fonts.
@@ -15,7 +14,7 @@ import '@fontsource/chivo-mono/700.css'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'ARDI Hockey Patín 3.5',
+  title: 'ARDI Hockey Patín 3.51',
   description: 'Sistema profesional de marcador y control de tiempo para Hockey Patín',
   generator: 'v0.app',
   /**
@@ -79,7 +78,9 @@ export default function RootLayout({
           toastOptions={{ style: { fontSize: '15px', fontWeight: 600 } }}
         />
 
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {/* Analytics de Vercel retirado: en un pabellon no aporta nada y
+            sumaba un script de terceros al primer pintado, justo cuando el
+            operador esta abriendo la mesa. */}
       </body>
     </html>
   )

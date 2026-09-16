@@ -680,3 +680,57 @@ escritura**, y el segundo campo acepta su URL con la app viva.
 
 `tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan**, más las
 mediciones en navegador de arriba.
+
+---
+
+# AJUSTES FINOS DE LAS CAPAS
+
+## 1. FIN · "Parciales" — su 100% pasa a ser el triple
+
+Medía `2vh`, unas dos decenas de píxeles sobre un lienzo de 1080: no se leía
+desde la tribuna, y al 100% ya estaba en su tope útil.
+
+Ahora su tamaño de fábrica es el triple, así que **el 100% ya sirve** y desde
+ahí se puede subir más todavía.
+
+**De paso, un problema de fondo:** esta capa medía en `vh`, que depende de la
+ventana del navegador y **no del lienzo de 1920×1080**. El mismo texto salía de
+un tamaño en la previsualización y de otro en el proyector. Pasó a píxeles del
+lienzo, como el resto.
+
+## 2. ESTADÍSTICAS · "Marcador" — deja de irse a la derecha
+
+Medía **1700 px fijos** con los nombres estirados a los extremos: la capa se
+extendía casi todo el lienzo y al agrandarla se salía del cuadro.
+
+Ahora mide lo que ocupa su contenido y crece desde el centro. Medido: de 868 px
+de ancho a **302 px**. Los nombres llevan un tope propio para que uno largo no
+vuelva a estirar la capa entera.
+
+## 3. "Goleadores" — una capa por equipo
+
+Era **una sola capa de 1700 px con los dos equipos dentro**. Al agrandarla
+crecían ambos a la vez, se iban contra los bordes y dejaba de leerse.
+
+Ahora son **dos capas independientes** en los dos lanzadores:
+"Goleadores local" y "Goleadores visita". Cada una se coloca y se escala por su
+lado, y arrancan a los costados.
+
+## Verificado en el navegador
+
+Al 100%, **ninguna capa se sale del cuadro** en FIN ni en ESTADÍSTICAS.
+
+Llevando **todas** al 200%:
+
+| | Se salen |
+|---|---|
+| ESTADÍSTICAS | 2 de 5 |
+| FIN | 1 de 5 |
+
+Las que se salen son las **barras de ancho completo** —cabecera, equipos y
+resultado, comparativas—, que miden casi el lienzo entero: al 200% cualquier
+elemento más ancho que medio lienzo se pasa, y eso es geometría, no un fallo.
+**Goleadores, marcador y parciales aguantan el 200% dentro del cuadro**, que
+era lo que hacía falta.
+
+`tsc --noEmit` y `next build` limpios. **130 pruebas, 130 pasan.**

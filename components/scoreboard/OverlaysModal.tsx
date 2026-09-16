@@ -30,7 +30,8 @@ const CAPA_NOMBRE: Record<string, string> = {
   watermark: 'Escudo de fondo', text: 'Texto del gol', jersey: 'Camiseta',
   shield: 'Escudo', score: 'Marcador',
   header: 'Cabecera', teams: 'Equipos y resultado', periods: 'Parciales',
-  scorers: 'Goleadores', compare: 'Comparativas'
+  scorers: 'Goleadores', compare: 'Comparativas',
+  scorersHome: 'Goleadores local', scorersAway: 'Goleadores visita'
 }
 
 interface Props { open: boolean; onClose: () => void }

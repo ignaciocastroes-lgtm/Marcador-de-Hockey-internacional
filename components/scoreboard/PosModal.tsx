@@ -86,8 +86,12 @@ export function PosModal({
       p.role === 'jugador_pista' || p.role === 'portero'
     )
 
+    // Las DOS lecturas de este modal ignoraban `anulada`, con consecuencias
+    // distintas: esta hacia creer a la banca que ya se habia pintado, y la de
+    // mas abajo dejaba al expulsado deshabilitado en la grilla aunque el
+    // arbitro hubiera anulado la roja.
     const teamHasBenchYellow = cardHistory?.some(
-      c => c.team === team && c.isBench && c.cardType === 'yellow'
+      c => !c.anulada && c.team === team && c.isBench && c.cardType === 'yellow'
     )
 
     const uiList: BenchStaffUI[] = benchMembers.map(p => {
@@ -148,7 +152,7 @@ export function PosModal({
               .map(num => {
                 const yellowCount = getPlayerYellowCount(team, num)
                 const isAlreadyExpelled = cardHistory?.some(
-                  c => c.team === team && c.playerNumber === num && c.cardType === 'red'
+                  c => !c.anulada && c.team === team && c.playerNumber === num && c.cardType === 'red'
                 )
                 return (
                   <Button

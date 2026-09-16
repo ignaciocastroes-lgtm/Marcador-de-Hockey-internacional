@@ -394,7 +394,21 @@ export function buildMatchJSON(state: GameState, o: ReportOpts): MatchJSON {
   return {
     formato: MATCH_JSON_FORMAT,
     version: MATCH_JSON_VERSION,
-    id: `${fecha}-${limpio(o.homeTeamName)}-vs-${limpio(o.awayTeamName)}`,
+    /**
+     * La SERIE entra en la clave.
+     *
+     * Era `fecha + local + visita`. Dos series de los mismos clubes el mismo
+     * sabado —Sub-15 a las 10 y Sub-17 a las 12— daban la MISMA clave, y la web
+     * hace upsert por `id`: la segunda noticia pisaba a la primera.
+     *
+     * Sin serie (un Express suelto) desempata la hora, porque una cadena vacia
+     * no desempata nada.
+     *
+     * Los partidos ya publicados NO se renombran: el cambio vale para los
+     * nuevos. Un slug viejo sigue siendo el suyo.
+     */
+    id: [fecha, limpio(cfg.seriesName || cfg.hora || 'amistoso'),
+         `${limpio(o.homeTeamName)}-vs-${limpio(o.awayTeamName)}`].join('-'),
     fecha, hora,
     estadio: cfg.estadio || '',
     campeonato: cfg.campeonato || '',

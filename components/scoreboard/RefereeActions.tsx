@@ -75,14 +75,14 @@ export function RefereeActions({
         <p className="flex items-center gap-2 text-sm font-black mb-1">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           {esPenal
-            ? (enTanda ? `Penal convertido de ${nombre}` : `Gol de penal de ${nombre}`)
+            ? (enTanda ? `Penal convertido de ${nombre}` : `Cobrar penal a favor de ${nombre}`)
             : `Anular el último gol de ${nombre}`}
         </p>
         <p className="text-[11px] text-zinc-300 leading-snug mb-2">
           {esPenal
             ? (enTanda
                 ? 'Suma al contador de la tanda. No cuenta como gol del partido.'
-                : 'Suma al marcador como gol y queda en el acta como gol de penal.')
+                : 'Se cobra el penal: para el reloj y, si quedan menos de cinco segundos, los repone a 0:05 (Art. 30.9). El gol se carga después, si entra.')
             : 'Baja el marcador y el acta lo consigna como gol anulado por el árbitro. Si fue un error de carga de la mesa, usa el − del marcador.'}
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -106,7 +106,7 @@ export function RefereeActions({
     <div className="space-y-2">
       <div>
         <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1 flex items-center gap-1">
-          <Target className="w-3 h-3" /> Penal {enTanda ? '(tanda)' : '— cuenta como gol'}
+          <Target className="w-3 h-3" /> Penal {enTanda ? '(tanda)' : '— se cobra'}
           {detenido && <span className="text-zinc-600 font-normal normal-case"> · juego detenido</span>}
         </p>
         <div className="grid grid-cols-2 gap-2">

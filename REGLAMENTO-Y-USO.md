@@ -176,10 +176,18 @@ un penal debe reponerse el cronómetro a cinco segundos, que es el tiempo previs
 para ejecutar el lanzamiento. Se admite la simulación, pero no hay tiempo para un
 segundo remate.
 
-> **En el marcador: ESTA FUNCIÓN NO EXISTE HOY.** El operador debe ajustar el reloj
-> manualmente con los botones de ajuste fino. **Mejora identificada y prioritaria**,
-> porque es una regla que afecta directamente al cronómetro, que es el corazón de
-> esta herramienta.
+> **En el marcador: IMPLEMENTADO desde la 3.5 (TLD) y la 3.51 (penal).**
+>
+> - **Tiro libre directo** (falta 10, 15, 20…): al cobrarse, si al reloj le quedan
+>   menos de cinco segundos se repone a `0:05`. Automático.
+> - **Penal en juego**: se repone al **cobrar** el penal, con el botón PENAL del
+>   árbitro. No al convertirlo — el artículo da los cinco segundos *para tirar*, así
+>   que un penal errado a `0:03` también los necesita.
+>
+> Nunca descuenta: si quedan más de cinco, el reloj no se toca. Queda constancia en
+> el acta: *"Cronómetro repuesto a 0:05 — penal (Art. 30.9)"*.
+>
+> No aplica en la tanda de penales, donde no corre el reloj de juego.
 
 ---
 

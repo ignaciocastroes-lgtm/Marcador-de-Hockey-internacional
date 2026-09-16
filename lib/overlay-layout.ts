@@ -33,13 +33,21 @@ export const DEFAULT_LAYOUT: Record<LauncherId, LayoutMap> = {
     header:    { x: 960, y: 140, s: 1, v: true },
     teams:     { x: 960, y: 480, s: 1, v: true },
     periods:   { x: 960, y: 760, s: 1, v: true },
-    scorers:   { x: 960, y: 930, s: 1, v: true }
+    /**
+     * Los goleadores eran UNA capa de 1700 px con los dos equipos dentro. Al
+     * agrandarla crecian los dos a la vez, se iban contra los bordes y dejaba
+     * de leerse. Ahora son dos capas independientes, una por equipo: cada una
+     * se coloca y se escala por su lado.
+     */
+    scorersHome: { x: 520,  y: 930, s: 1, v: true },
+    scorersAway: { x: 1400, y: 930, s: 1, v: true }
   },
   stats: {
     header:    { x: 960, y: 120, s: 1, v: true },
     score:     { x: 960, y: 320, s: 1, v: true },
     compare:   { x: 960, y: 620, s: 1, v: true },
-    scorers:   { x: 960, y: 900, s: 1, v: true }
+    scorersHome: { x: 520,  y: 900, s: 1, v: true },
+    scorersAway: { x: 1400, y: 900, s: 1, v: true }
   }
 }
 

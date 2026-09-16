@@ -163,11 +163,18 @@ export function WinnerOverlay({
       </Slot>
 
       {/* ── Parciales por periodo ────────────────────────────────────────── */}
+      {/* PARCIALES AL TRIPLE. Medían 2vh —unas dos decenas de píxeles sobre un
+          lienzo de 1080— y no se leían desde la tribuna. Su tamaño de fábrica
+          pasa a ser el triple, así que el 100% ya sirve y desde ahí se puede
+          subir más. Y las medidas pasan de `vh` a píxeles del lienzo: `vh`
+          depende de la ventana del navegador, no del lienzo de 1920x1080, así
+          que el mismo texto salía de un tamaño en la previsualización y de
+          otro en el proyector. */}
       {s.byPeriod.length > 0 && (
-        <Slot ctx={slotCtx} id="periods" className="flex items-center justify-center gap-[3vh] bc-content-in">
+        <Slot ctx={slotCtx} id="periods" className="flex items-center justify-center gap-[96px] bc-content-in">
           {s.byPeriod.map(p => (
             <span key={p.label} className="font-bold tabular-nums leading-none"
-              style={{ ...dim(0.45), fontSize: '2vh' }}>
+              style={{ ...dim(0.45), fontSize: '66px' }}>
               {p.label} {p.home}–{p.away}
             </span>
           ))}
@@ -176,26 +183,34 @@ export function WinnerOverlay({
 
       {/* ── Goleadores, para que el acta quede a la vista ────────────────── */}
       {(s.home.scorers.length > 0 || s.away.scorers.length > 0) && (
-        <Slot ctx={slotCtx} id="scorers" className="w-[1700px] flex items-start justify-center gap-[6vh] pt-[2vh] bc-content-in">
+        <>
+          {/*
+            UNA CAPA POR EQUIPO.
+            Antes era una sola de 1700 px con los dos dentro: al agrandarla
+            crecian ambos a la vez, se iban contra los bordes y dejaba de
+            leerse. Ahora cada equipo se coloca y se escala por su lado.
+          */}
           {[s.home, s.away].map((d, i) => (
-            <div key={i} className={`flex-1 min-w-0 flex flex-col gap-[0.5vh] ${i === 0 ? 'items-start' : 'items-end'}`}>
-              <span className="font-bold tracking-[0.26em] leading-none" style={{ ...dim(0.4), fontSize: '1.5vh' }}>
+            <Slot key={i} ctx={slotCtx} id={i === 0 ? 'scorersHome' : 'scorersAway'}
+              className="flex flex-col gap-[6px] items-center bc-content-in">
+              <span className="font-bold tracking-[0.26em] leading-none whitespace-nowrap"
+                style={{ ...dim(0.4), fontSize: '17px' }}>
                 GOLES
               </span>
-              <div className={`flex flex-wrap gap-x-[1.6vh] gap-y-[0.4vh] ${i === 0 ? 'justify-start' : 'justify-end'}`}>
+              <div className="flex flex-wrap justify-center gap-x-[18px] gap-y-[5px] max-w-[760px]">
                 {d.scorers.slice(0, 8).map(sc => (
                   <span key={sc.number} className="font-black tabular-nums leading-none"
-                    style={{ color: textColor, fontSize: '2.4vh' }}>
+                    style={{ color: textColor, fontSize: '27px' }}>
                     #{sc.number}{sc.goals > 1 ? `×${sc.goals}` : ''}
                   </span>
                 ))}
                 {d.scorers.length === 0 && (
-                  <span className="font-bold leading-none" style={{ ...dim(0.3), fontSize: '2vh' }}>Sin goles</span>
+                  <span className="font-bold leading-none" style={{ ...dim(0.3), fontSize: '22px' }}>Sin goles</span>
                 )}
               </div>
-            </div>
+            </Slot>
           ))}
-        </Slot>
+        </>
       )}
 
       {onSaveAndReset && (

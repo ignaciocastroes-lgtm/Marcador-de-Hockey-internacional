@@ -84,7 +84,11 @@ export function OfficialSheetModal({
 
   // UI: Devuelve un div apilado para ahorrar ancho en pantalla
   const getCardUI = (playerId: string, playerNumber: string, cardType: 'yellow' | 'blue' | 'red', index: number, isBench: boolean, team: 'home' | 'away') => {
+    // La grilla es POSICIONAL (amarilla 1, 2, 3...), asi que una anulada
+    // ocupaba casillero como si valiera. Se excluye de la grilla; la traza no
+    // se pierde: el registro cronologico imprime "ANULADA por la mesa".
     const cards = (state.cardHistory || []).filter(c =>
+      !c.anulada &&
       c.team === team && (c.playerNumber === playerNumber || c.staffId === playerId) && c.cardType === cardType && c.isBench === isBench
     );
     const card = cards[index];
@@ -179,7 +183,7 @@ export function OfficialSheetModal({
 
   // ─── Exportar CSV ─────────────────────────────────────────────────────────
   const exportCSV = () => {
-    const allGoals = (state.matchLog || []).filter(e => e.eventType === 'gol').sort((a, b) => {
+    const allGoals = (state.matchLog || []).filter(e => e.eventType === 'gol' && !e.anulado).sort((a, b) => {
       const o: Record<string, number> = { '1er_tiempo': 1, '2do_tiempo': 2, 'alargue': 3, 'penales': 4 }
       if (o[a.period] !== o[b.period]) return o[a.period] - o[b.period]
       return a.gameTime - b.gameTime
@@ -241,8 +245,8 @@ export function OfficialSheetModal({
       csv += `Marcador,${goalsData.map(g => `'${g.score}`).join(',')}\n\n`
     }
 
-    const gh = (p: Period) => (state.matchLog || []).filter(e => e.team === 'home' && e.eventType === 'gol' && e.period === p).length
-    const ga = (p: Period) => (state.matchLog || []).filter(e => e.team === 'away' && e.eventType === 'gol' && e.period === p).length
+    const gh = (p: Period) => (state.matchLog || []).filter(e => !e.anulado && e.team === 'home' && e.eventType === 'gol' && e.period === p).length
+    const ga = (p: Period) => (state.matchLog || []).filter(e => !e.anulado && e.team === 'away' && e.eventType === 'gol' && e.period === p).length
     const tieBreak = state.homeScore === state.awayScore && (state.homePenalties > 0 || state.awayPenalties > 0)
     csv += 'RESUMEN POR PERIODO\n'
     csv += `1T,${gh('1er_tiempo')} - ${ga('1er_tiempo')}\n`
@@ -273,7 +277,7 @@ export function OfficialSheetModal({
       const sep = separatePlayers(t === 'home' ? (state.matchConfig.homePlayers || []) : (state.matchConfig.awayPlayers || []))
       
       const getGridRowText = (pNum: string, pId: string, isBench: boolean) => {
-        const cards = (state.cardHistory || []).filter(c => c.team === t && (c.playerNumber === pNum || c.staffId === pId))
+        const cards = (state.cardHistory || []).filter(c => !c.anulada && c.team === t && (c.playerNumber === pNum || c.staffId === pId))
         const getT = (type: 'yellow' | 'blue' | 'red', idx: number) => formatCardTimeText(cards.filter(c => c.cardType === type && c.isBench === isBench)[idx])
         if (isBench) return `${getT('yellow',0)},${getT('yellow',1)},${getT('red',0)},-,-,-,-,-,-,-,-`
         return `-,-,-,${getT('yellow',0)},${getT('yellow',1)},${getT('yellow',2)},${getT('yellow',3)},${getT('blue',0)},${getT('blue',1)},${getT('blue',2)},${getT('red',0)}`
@@ -417,7 +421,7 @@ export function OfficialSheetModal({
             
             <div className="w-full overflow-x-auto pb-2 border-b border-zinc-700">
               {(() => {
-                const allGoals = (state.matchLog || []).filter(e => e.eventType === 'gol').sort((a, b) => {
+                const allGoals = (state.matchLog || []).filter(e => e.eventType === 'gol' && !e.anulado).sort((a, b) => {
                   const o: Record<string, number> = { '1er_tiempo': 1, '2do_tiempo': 2, 'alargue': 3, 'penales': 4 }
                   if (o[a.period] !== o[b.period]) return o[a.period] - o[b.period]
                   return a.gameTime - b.gameTime

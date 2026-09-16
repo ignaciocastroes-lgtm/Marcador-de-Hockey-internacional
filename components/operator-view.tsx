@@ -68,7 +68,8 @@ interface OperatorViewProps {
   adjustHomeScore: (delta: number, playerNumber?: string) => void; adjustAwayScore: (delta: number, playerNumber?: string) => void;
   adjustHomeFouls: (delta: number) => void; adjustAwayFouls: (delta: number) => void; resetFouls: () => void;
   adjustHomePenalties: (delta: number) => void;
-  scorePenalty: (team: 'home' | 'away', playerNumber?: string) => void;
+  scorePenalty: (team: 'home' | 'away', playerNumber?: string) => void
+  awardPenalty: (team: 'home' | 'away') => void;
   annulGoal: (team: 'home' | 'away') => void;
   correctScore: (team: 'home' | 'away') => void; adjustAwayPenalties: (delta: number) => void;
   startIntermission: (durationMinutes?: number) => void;
@@ -421,7 +422,7 @@ export function OperatorView(props: OperatorViewProps) {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   const getPlayerYellowCount = (team: 'home' | 'away', playerNumber: string) =>
-    (state.cardHistory || []).filter(c => c.team === team && c.cardType === 'yellow' && c.playerNumber === playerNumber).length
+    (state.cardHistory || []).filter(c => !c.anulada && c.team === team && c.cardType === 'yellow' && c.playerNumber === playerNumber).length
 
   const getCurrentRoster  = (team: 'home' | 'away') => team === 'home' ? (state.matchConfig.homeRoster || []) : (state.matchConfig.awayRoster || [])
   const getCurrentPlayers = (team: 'home' | 'away') => team === 'home' ? (state.matchConfig.homePlayers || []) : (state.matchConfig.awayPlayers || [])
@@ -449,7 +450,7 @@ export function OperatorView(props: OperatorViewProps) {
       return
     }
 
-    const isAlreadyExpelled = state.cardHistory?.some(c => c.team === team && c.playerNumber === playerNumber && c.cardType === 'red')
+    const isAlreadyExpelled = state.cardHistory?.some(c => !c.anulada && c.team === team && c.playerNumber === playerNumber && c.cardType === 'red')
     if (isAlreadyExpelled) {
       toast.error(`El jugador #${playerNumber} ya se encuentra EXPULSADO. No puede realizar acciones en cancha ni recibir más tarjetas.`)
       return
@@ -650,7 +651,10 @@ export function OperatorView(props: OperatorViewProps) {
               enTanda={state.period === 'penales'}
               disabled={matchEnded}
               detenido={state.isIntermission || !!state.activeTimeout}
-              onPenal={t => props.scorePenalty(t)}
+              // En juego el boton COBRA el penal (para el reloj y repone a
+              // 0:05 si hace falta); la conversion se carga como gol normal.
+              // En la tanda, en cambio, suma al contador de penales.
+              onPenal={t => state.period === 'penales' ? props.scorePenalty(t) : props.awardPenalty(t)}
               onAnular={t => props.annulGoal(t)}
             />
           </div>

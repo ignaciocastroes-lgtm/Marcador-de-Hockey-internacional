@@ -88,6 +88,7 @@ export interface CourtOperatorViewProps {
   adjustAwayFouls: (delta: number) => void
   adjustHomePenalties: (delta: number, playerNumber?: string) => void
   scorePenalty: (team: 'home' | 'away', playerNumber?: string) => void
+  awardPenalty: (team: 'home' | 'away') => void
   annulGoal: (team: 'home' | 'away') => void
   correctScore: (team: 'home' | 'away') => void
   adjustAwayPenalties: (delta: number, playerNumber?: string) => void
@@ -843,7 +844,10 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
   /** Tarjetas acumuladas del sancionado, sobre su ficha en la zona de castigo. */
   const CardTally = ({ team, number }: { team: 'home' | 'away'; number: string }) => {
-    const hist = cardHistory.filter(c => c.team === team && c.playerNumber === number)
+    // `!c.anulada`: el motor ya dejo de escalar con una tarjeta anulada, pero
+    // esta ficha seguia pintando el palito. El operador anulaba y veia la
+    // sancion en la ficha del jugador, que es donde mira en cancha.
+    const hist = cardHistory.filter(c => !c.anulada && c.team === team && c.playerNumber === number)
     const am = hist.filter(c => c.cardType === 'yellow').length
     const az = hist.filter(c => c.cardType === 'blue').length
     if (am + az === 0) return null
@@ -1709,7 +1713,10 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               enTanda={state.period === 'penales'}
               disabled={matchEnded}
               detenido={state.isIntermission || !!state.activeTimeout}
-              onPenal={t => props.scorePenalty(t)}
+              // En juego el boton COBRA el penal (para el reloj y repone a
+              // 0:05 si hace falta); la conversion se carga como gol normal.
+              // En la tanda, en cambio, suma al contador de penales.
+              onPenal={t => state.period === 'penales' ? props.scorePenalty(t) : props.awardPenalty(t)}
               onAnular={t => props.annulGoal(t)}
               onDone={() => setRefOpen(false)}
             />

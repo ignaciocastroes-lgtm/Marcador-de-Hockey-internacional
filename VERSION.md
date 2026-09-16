@@ -1,4 +1,4 @@
-# ARDI Hockey Patín 3.5
+# ARDI Hockey Patín 3.51
 
 ## Modo PISTA: la ficha es la mesa de mando
 Tocar un jugador abre su hoja de acciones. El menú de tarjetas lo decide la
