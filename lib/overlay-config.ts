@@ -30,6 +30,14 @@ export interface GoalOverlayConfig {
 export interface LayoutConfig {
   scale: number             // 0.6 – 1.4
   align: 'top' | 'center' | 'bottom'
+  /**
+   * MARCA: una imagen propia de cada lanzador, por enlace externo.
+   * Pensada para un logo con fondo transparente —un auspiciador, el sello del
+   * club— que aparezca en los goles, el entretiempo o el final. Vive aquí, en
+   * lo que comparten los tres, así que cada lanzador tiene la suya sin
+   * repetir código. Vacío = la capa no se dibuja.
+   */
+  marcaUrl: string
 }
 
 export interface FinalOverlayConfig {
@@ -54,13 +62,28 @@ export interface StatsOverlayConfig {
   showByPeriod: boolean
 }
 
+/**
+ * FIGURA DEL PARTIDO. Automatica: aparece `trasGanador` segundos despues del
+ * letrero de ganador y se queda `segundos`, antes de la ficha. La mesa no la
+ * elige —la calcula `lib/figura.ts`—, asi que aqui solo se decide si se muestra
+ * y cuanto dura.
+ */
+export interface FiguraOverlayConfig {
+  enabled: boolean
+  boards: number[]
+  trasGanador: number
+  segundos: number
+  titulo: string
+}
+
 export interface OverlaysConfig {
   goal: GoalOverlayConfig & LayoutConfig
   final: FinalOverlayConfig & LayoutConfig
   stats: StatsOverlayConfig & LayoutConfig
+  figura: FiguraOverlayConfig & LayoutConfig
 }
 
-export const DEFAULT_LAYOUT: LayoutConfig = { scale: 1, align: 'center' }
+export const DEFAULT_LAYOUT: LayoutConfig = { scale: 1, align: 'center', marcaUrl: '' }
 
 export const DEFAULT_OVERLAYS: OverlaysConfig = {
   goal: {
@@ -69,18 +92,23 @@ export const DEFAULT_OVERLAYS: OverlaysConfig = {
     textColor: '#ffffff', scoreColor: '#facc15', useTeamColor: true,
     jerseyDesign: 'solid',
     homeJ1: '#ef4444', homeJ2: '#ffffff', awayJ1: '#f59e0b', awayJ2: '#000000',
-    scale: 1, align: 'center'
+    scale: 1, align: 'center', marcaUrl: ''
   },
   final: {
     enabled: true, boards: [1], winnerSeconds: 10, showFicha: true,
     winnerText: '¡GANADOR!', drawText: 'EMPATE',
-    scale: 1, align: 'center'
+    scale: 1, align: 'center', marcaUrl: ''
+  },
+  figura: {
+    enabled: true, boards: [1], trasGanador: 6, segundos: 8,
+    titulo: 'FIGURA DEL PARTIDO',
+    scale: 1, align: 'center', marcaUrl: ''
   },
   stats: {
     enabled: true, boards: [1], breakDelay: 5, showInBreak: true,
     showScorers: true, showGoalMinutes: true, showCards: true,
     showFouls: true, showPossession: true, showByPeriod: true,
-    scale: 1, align: 'center'
+    scale: 1, align: 'center', marcaUrl: ''
   }
 }
 
@@ -116,7 +144,8 @@ export function loadOverlays(): OverlaysConfig {
     return {
       goal:  { ...DEFAULT_OVERLAYS.goal,  ...(p.goal  || {}) },
       final: { ...DEFAULT_OVERLAYS.final, ...(p.final || {}) },
-      stats: { ...DEFAULT_OVERLAYS.stats, ...(p.stats || {}) }
+      stats: { ...DEFAULT_OVERLAYS.stats, ...(p.stats || {}) },
+      figura: { ...DEFAULT_OVERLAYS.figura, ...(p.figura || {}) }
     }
   } catch { return DEFAULT_OVERLAYS }
 }

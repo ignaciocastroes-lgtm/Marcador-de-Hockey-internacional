@@ -22,6 +22,8 @@ import { DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-l
  */
 
 interface Props {
+  /** Logo propio de este lanzador (enlace externo). */
+  marcaUrl?: string
   state: GameState
   homeTeamName: string
   awayTeamName: string
@@ -51,7 +53,7 @@ interface Props {
 export function WinnerOverlay({
   state, homeTeamName, awayTeamName, homeLogo, awayLogo,
   accent, textColor, winColor, numberStyle, numberClass = '', nameClass = '', winnerText, drawText,
-  scale = 1, align = 'center', embedded = false, onSaveAndReset,
+  scale = 1, align = 'center', embedded = false, marcaUrl = '', onSaveAndReset,
   layout = DEFAULT_LAYOUT.final, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
   /**
@@ -224,6 +226,16 @@ export function WinnerOverlay({
           GUARDAR RESULTADO Y REINICIAR
         </button>
       )}
+        {/* MARCA — logo propio de este lanzador, por enlace externo. Pensado
+            para fondo transparente. Si la URL falla, la imagen se oculta sola
+            en vez de dejar un icono roto en la pantalla del estadio. */}
+        {marcaUrl && (
+          <Slot ctx={slotCtx} id="marca">
+            <img src={marcaUrl} alt="" draggable={false}
+              className="max-w-[420px] max-h-[240px] object-contain pointer-events-none select-none"
+              onError={e => { e.currentTarget.style.display = 'none' }} />
+          </Slot>
+        )}
       </>) }}</OverlayCanvas>
     </div>
   )

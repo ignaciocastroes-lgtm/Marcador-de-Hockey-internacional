@@ -17,7 +17,7 @@ export const CANVAS_W = 1920
 export const CANVAS_H = 1080
 
 export interface ElementPos { x: number; y: number; s: number; v: boolean }
-export type LauncherId = 'goal' | 'final' | 'stats'
+export type LauncherId = 'goal' | 'final' | 'stats' | 'figura'
 export type LayoutMap = Record<string, ElementPos>
 
 /** Posiciones de fabrica. Son la referencia contra la que se sanea lo guardado. */
@@ -27,7 +27,8 @@ export const DEFAULT_LAYOUT: Record<LauncherId, LayoutMap> = {
     text:      { x: 960, y: 300, s: 1,    v: true },
     jersey:    { x: 760, y: 660, s: 1,    v: true },
     shield:    { x: 1160, y: 660, s: 1,   v: true },
-    score:     { x: 960, y: 900, s: 1,    v: true }
+    score:     { x: 960, y: 900, s: 1,    v: true },
+    marca:     { x: 1700, y: 140, s: 1, v: true }
   },
   final: {
     header:    { x: 960, y: 140, s: 1, v: true },
@@ -40,14 +41,24 @@ export const DEFAULT_LAYOUT: Record<LauncherId, LayoutMap> = {
      * se coloca y se escala por su lado.
      */
     scorersHome: { x: 520,  y: 930, s: 1, v: true },
-    scorersAway: { x: 1400, y: 930, s: 1, v: true }
+    scorersAway: { x: 1400, y: 930, s: 1, v: true },
+    marca:     { x: 1700, y: 140, s: 1, v: true }
   },
   stats: {
     header:    { x: 960, y: 120, s: 1, v: true },
     score:     { x: 960, y: 320, s: 1, v: true },
     compare:   { x: 960, y: 620, s: 1, v: true },
     scorersHome: { x: 520,  y: 900, s: 1, v: true },
-    scorersAway: { x: 1400, y: 900, s: 1, v: true }
+    scorersAway: { x: 1400, y: 900, s: 1, v: true },
+    marca:     { x: 1700, y: 120, s: 1, v: true }
+  },
+  /** Figura del partido: el dorsal al centro, grande. */
+  figura: {
+    titulo:    { x: 960, y: 150, s: 1, v: true },
+    escudo:    { x: 960, y: 380, s: 1, v: true },
+    dorsal:    { x: 960, y: 640, s: 1, v: true },
+    motivo:    { x: 960, y: 930, s: 1, v: true },
+    marca:     { x: 1700, y: 140, s: 1, v: true }
   }
 }
 

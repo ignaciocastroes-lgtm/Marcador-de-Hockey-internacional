@@ -157,6 +157,16 @@ export function GoalOverlay({
                   </span>
                 </div>
              </Slot>
+        {/* MARCA — logo propio de este lanzador, por enlace externo. Pensado
+            para fondo transparente. Si la URL falla, la imagen se oculta sola
+            en vez de dejar un icono roto en la pantalla del estadio. */}
+        {cfg.marcaUrl && (
+          <Slot ctx={slotCtx} id="marca">
+            <img src={cfg.marcaUrl} alt="" draggable={false}
+              className="max-w-[420px] max-h-[240px] object-contain pointer-events-none select-none"
+              onError={e => { e.currentTarget.style.display = 'none' }} />
+          </Slot>
+        )}
       </>) }}</OverlayCanvas>
     </div>
   )

@@ -11,7 +11,7 @@
 // bugs ya arreglados, sin manera de enterarse.
 //
 // SUBIR ESTE NÚMERO EN CADA DESPLIEGUE. Es la única línea que hay que tocar.
-const CACHE = 'ardi-v351'
+const CACHE = 'ardi-v352'
 const CORE = ['/', '/scoreboard']
 
 self.addEventListener('install', event => {

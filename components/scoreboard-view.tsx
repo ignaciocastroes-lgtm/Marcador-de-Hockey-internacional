@@ -4,6 +4,8 @@ import { GoalOverlay } from '@/components/scoreboard/GoalOverlay'
 import { GENERIC_SHIELDS } from '@/lib/generic-shields'
 import { loadLayouts, OVERLAY_LAYOUT_EVENT, type AllLayouts } from '@/lib/overlay-layout'
 
+import { FiguraOverlay } from '@/components/scoreboard/FiguraOverlay'
+import { calcularFigura } from '@/lib/figura'
 import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
 
 import { finishClass, finishStyle, resolveFinish, type Finish } from '@/lib/finishes'
@@ -14,7 +16,7 @@ import { defaultHomeName, defaultHomeLogo, clubLogoFallback } from '@/lib/club-b
 import { SummaryOverlay } from '@/components/scoreboard/SummaryOverlay'
 import { loadOverlays, showsOn, OVERLAYS_EVENT, DEFAULT_OVERLAYS, type OverlaysConfig } from '@/lib/overlay-config'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useMemo } from 'react'
 import Image from 'next/image'
 import { Settings, X, Save, RotateCcw, Move, ZoomIn, ZoomOut, Plus, Minus, Trash2, Eye, FlipHorizontal } from 'lucide-react'
 import type { GameState } from '@/hooks/use-game-state'
@@ -719,11 +721,37 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
     return () => clearTimeout(t)
   }, [state.isIntermission, statsOn, ov.stats.showInBreak, ov.stats.breakDelay]);
 
+  /**
+   * FIGURA DEL PARTIDO — ganador, y a los 6 segundos la figura, luego la ficha.
+   *
+   * Se calcula UNA vez, al terminar el partido, sobre el registro. No en cada
+   * tick: tras el pitazo final el estado casi no cambia, y recalcularla en cada
+   * render seria trabajo tirado.
+   */
+  const figuraOn = !!ov.figura?.enabled && showsOn(ov.figura.boards, bId)
+  const figura = useMemo(
+    () => (state.isMatchEnded && figuraOn ? calcularFigura(state) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.isMatchEnded, figuraOn, state.matchLog?.length, state.cardHistory?.length]
+  )
+  const [showFigura, setShowFigura] = useState(false)
+
+  useEffect(() => {
+    if (!state.isMatchEnded || !finalOn || !figura) { setShowFigura(false); return }
+    const t = setTimeout(() => setShowFigura(true), (ov.figura.trasGanador || 6) * 1000)
+    return () => clearTimeout(t)
+  }, [state.isMatchEnded, finalOn, figura, ov.figura?.trasGanador]);
+
   useEffect(() => {
     if (!state.isMatchEnded || !finalOn || !ov.final.showFicha) { setShowFinalSummary(false); return }
-    const t = setTimeout(() => setShowFinalSummary(true), ov.final.winnerSeconds * 1000)
+    // Si hay figura, la ficha espera a que termine: ganador -> figura -> ficha.
+    const espera = figura
+      ? (ov.figura.trasGanador || 6) + (ov.figura.segundos || 8)
+      : ov.final.winnerSeconds
+    const t = setTimeout(() => setShowFinalSummary(true), espera * 1000)
     return () => clearTimeout(t)
-  }, [state.isMatchEnded, finalOn, ov.final.showFicha, ov.final.winnerSeconds]);
+  }, [state.isMatchEnded, finalOn, ov.final.showFicha, ov.final.winnerSeconds,
+      figura, ov.figura?.trasGanador, ov.figura?.segundos]);
 
   /**
    * SONIDO DEL RELOJ DE POSESIÓN UNIFICADO — sólo en la proyección real
@@ -1332,10 +1360,32 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
           layout={ovLayout.stats}
           scale={ov.stats.scale}
           align={ov.stats.align}
+          marcaUrl={ov.stats.marcaUrl}
         />
       )}
 
-      {state.isMatchEnded && !editMode && !showFinalSummary && finalOn && (
+      {state.isMatchEnded && !editMode && !showFinalSummary && showFigura && figura && (
+        <FiguraOverlay
+          embedded={isPreview}
+          state={state}
+          figura={figura}
+          titulo={ov.figura.titulo}
+          homeTeamName={homeTeamName}
+          awayTeamName={awayTeamName}
+          homeLogo={liveLogos.homeUrl || defaultHomeLogo() || state.homeTeam?.logo}
+          awayLogo={liveLogos.awayUrl || state.awayTeam?.logo}
+          accent={liveLogos.boardAccentColor || '#dc2626'}
+          textColor={liveLogos.boardTextColor || '#ffffff'}
+          numberStyle={{ ...customNumberStyle, border: 'none', background: 'transparent', boxShadow: 'none' }}
+          numberClass={digitFxClass}
+          layout={ovLayout.figura}
+          scale={ov.figura.scale}
+          align={ov.figura.align}
+          marcaUrl={ov.figura.marcaUrl}
+        />
+      )}
+
+      {state.isMatchEnded && !editMode && !showFinalSummary && !showFigura && finalOn && (
         <WinnerOverlay
           embedded={isPreview}
           state={state}
@@ -1354,6 +1404,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
           layout={ovLayout.final}
           scale={ov.final.scale}
           align={ov.final.align}
+          marcaUrl={ov.final.marcaUrl}
           onSaveAndReset={!isPreview ? onSaveAndReset : undefined}
         />
       )}

@@ -11,6 +11,8 @@ import { OverlayCanvas } from '@/components/scoreboard/OverlayCanvas'
 import { DEFAULT_LAYOUT, type LayoutMap, type ElementPos } from '@/lib/overlay-layout'
 
 interface Props {
+  /** Logo propio de este lanzador (enlace externo). */
+  marcaUrl?: string
   state: GameState
   scope: 'primer_tiempo' | 'completo'
   homeTeamName: string
@@ -41,7 +43,7 @@ const CARD_COLOR = { yellow: '#facc15', blue: '#3b82f6', red: '#dc2626' } as con
 
 export function SummaryOverlay({
   state, scope, homeTeamName, awayTeamName, homeLogo, awayLogo,
-  accent, textColor, numberStyle, numberClass = '', nameClass = '', clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center', embedded = false,
+  accent, textColor, numberStyle, numberClass = '', nameClass = '', clockLabel, clockValue, sections = DEFAULT_OVERLAYS.stats, scale = 1, align = 'center', embedded = false, marcaUrl = '',
   layout = DEFAULT_LAYOUT.stats, editMode = false, canvasScale = 1, onLayoutChange
 }: Props) {
   /**
@@ -214,6 +216,16 @@ export function SummaryOverlay({
           </Slot>
         ))}
       </>
+        {/* MARCA — logo propio de este lanzador, por enlace externo. Pensado
+            para fondo transparente. Si la URL falla, la imagen se oculta sola
+            en vez de dejar un icono roto en la pantalla del estadio. */}
+        {marcaUrl && (
+          <Slot ctx={slotCtx} id="marca">
+            <img src={marcaUrl} alt="" draggable={false}
+              className="max-w-[420px] max-h-[240px] object-contain pointer-events-none select-none"
+              onError={e => { e.currentTarget.style.display = 'none' }} />
+          </Slot>
+        )}
       </>) }}</OverlayCanvas>
     </div>
   )

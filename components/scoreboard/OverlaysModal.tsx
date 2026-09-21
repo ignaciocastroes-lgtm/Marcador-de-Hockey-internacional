@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import {
-  Goal, Trophy, BarChart3, RotateCcw, Check, Layers, Eye,
+  Goal, Trophy, BarChart3, Star, RotateCcw, Check, Layers, Eye,
   Move, Save, RotateCw, EyeOff
 } from 'lucide-react'
 import { GoalOverlay } from '@/components/scoreboard/GoalOverlay'
+import { FiguraOverlay } from '@/components/scoreboard/FiguraOverlay'
 import { SummaryOverlay } from '@/components/scoreboard/SummaryOverlay'
 import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
 import { DEMO_STATE, DEMO_HOME, DEMO_AWAY } from '@/lib/overlay-demo'
@@ -31,7 +32,9 @@ const CAPA_NOMBRE: Record<string, string> = {
   shield: 'Escudo', score: 'Marcador',
   header: 'Cabecera', teams: 'Equipos y resultado', periods: 'Parciales',
   scorers: 'Goleadores', compare: 'Comparativas',
-  scorersHome: 'Goleadores local', scorersAway: 'Goleadores visita'
+  scorersHome: 'Goleadores local', scorersAway: 'Goleadores visita',
+  marca: 'Marca',
+  titulo: 'Título', escudo: 'Escudo', dorsal: 'Dorsal', motivo: 'Motivo'
 }
 
 interface Props { open: boolean; onClose: () => void }
@@ -41,7 +44,7 @@ const BOARDS = [
   { id: 4, label: 'P4 Tarj. L' }, { id: 5, label: 'P5 Tarj. V' }
 ]
 
-type Tab = 'goal' | 'final' | 'stats'
+type Tab = 'goal' | 'final' | 'stats' | 'figura'
 
 /**
  * TODO LO QUE SIGUE VIVÍA DECLARADO DENTRO DEL CUERPO DE `OverlaysModal`.
@@ -164,8 +167,8 @@ function Layout({
   tab: t, cfg, layouts, editMode, setEditMode, setLayouts, update,
   look, previewFont, previewNumberStyle, digitFxClass, nameFxClass, prevTeam, setPrevTeam
 }: LayoutProps) {
-  const c = cfg[t] as { scale: number; align: 'top' | 'center' | 'bottom' }
-  const patch = (v: Partial<{ scale: number; align: 'top' | 'center' | 'bottom' }>) =>
+  const c = cfg[t] as { scale: number; align: 'top' | 'center' | 'bottom'; marcaUrl?: string }
+  const patch = (v: Partial<{ scale: number; align: 'top' | 'center' | 'bottom'; marcaUrl: string }>) =>
     update({ ...cfg, [t]: { ...cfg[t], ...v } } as OverlaysConfig)
   /**
    * LO AJUSTADO SE GUARDA SOLO.
@@ -190,6 +193,31 @@ function Layout({
   return (
     <div className="border-t border-zinc-800 pt-3 space-y-3">
       <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Tamaño y posición</p>
+
+      {/* MARCA de este lanzador: un logo por enlace, con fondo transparente.
+          Aparece como una capa más —se mueve con MOVER y se apaga con su
+          ojito en CAPAS—. Cada lanzador tiene la suya: se puede poner un
+          auspiciador en los goles y otro distinto en el final. */}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-bold text-zinc-300">Marca (logo)</span>
+          {c.marcaUrl && (
+            <button type="button" onClick={() => patch({ marcaUrl: '' })}
+              className="text-[10px] font-bold text-zinc-500 hover:text-red-400">Quitar</button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="url" defaultValue={c.marcaUrl || ''} key={`${t}-${c.marcaUrl || ''}`}
+            placeholder="https://… (PNG o WebP con fondo transparente)"
+            onBlur={e => { const v = e.target.value.trim(); if (v !== (c.marcaUrl || '')) patch({ marcaUrl: v }) }}
+            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            className="flex-1 h-9 rounded-md bg-zinc-950 border border-zinc-700 px-2 text-xs text-white" />
+          {c.marcaUrl && (
+            <img src={c.marcaUrl} alt="" className="h-9 w-9 object-contain rounded bg-zinc-800/60 border border-zinc-700"
+              onError={e => { e.currentTarget.style.opacity = '0.2' }} />
+          )}
+        </div>
+      </div>
 
       <div>
         <div className="flex items-center justify-between mb-1">
@@ -258,7 +286,7 @@ function Layout({
                 accent={look.boardAccentColor} textColor={look.boardTextColor} winColor={look.possessionColor}
                 numberStyle={previewNumberStyle} numberClass={digitFxClass} nameClass={nameFxClass}
                 winnerText={cfg.final.winnerText} drawText={cfg.final.drawText}
-                scale={cfg.final.scale} align={cfg.final.align} />
+                scale={cfg.final.scale} align={cfg.final.align} marcaUrl={cfg.final.marcaUrl} />
             )}
             {t === 'stats' && (
               <SummaryOverlay embedded state={DEMO_STATE} scope="primer_tiempo"
@@ -268,7 +296,20 @@ function Layout({
                 accent={look.boardAccentColor} textColor={look.boardTextColor}
                 numberStyle={previewNumberStyle} numberClass={digitFxClass} nameClass={nameFxClass}
                 clockLabel="DESCANSO" clockValue="04:32"
-                sections={cfg.stats} scale={cfg.stats.scale} align={cfg.stats.align} />
+                sections={cfg.stats} scale={cfg.stats.scale} align={cfg.stats.align} marcaUrl={cfg.stats.marcaUrl} />
+            )}
+            {t === 'figura' && (
+              /* Figura de muestra: la real se calcula al terminar el partido. */
+              <FiguraOverlay embedded state={DEMO_STATE}
+                figura={{ team: 'home', dorsal: '9', goles: 3, minutos: 48, esPortera: false,
+                          via: 'puntaje', motivo: '3 goles · 48 min' }}
+                titulo={cfg.figura.titulo}
+                layout={layouts.figura} editMode={editMode} onLayoutChange={(id, pos) => setPos('figura', id, pos)}
+                homeTeamName={DEMO_HOME} awayTeamName={DEMO_AWAY}
+                homeLogo={look.homeUrl} awayLogo={look.awayUrl}
+                accent={look.boardAccentColor} textColor={look.boardTextColor}
+                numberStyle={previewNumberStyle} numberClass={digitFxClass}
+                scale={cfg.figura.scale} align={cfg.figura.align} marcaUrl={cfg.figura.marcaUrl} />
             )}
           </div>
         </div>
@@ -383,6 +424,7 @@ export function OverlaysModal({ open, onClose }: Props) {
   const patchGoal  = (p: Partial<OverlaysConfig['goal']>)  => update({ ...cfg, goal:  { ...cfg.goal,  ...p } })
   const patchFinal = (p: Partial<OverlaysConfig['final']>) => update({ ...cfg, final: { ...cfg.final, ...p } })
   const patchStats = (p: Partial<OverlaysConfig['stats']>) => update({ ...cfg, stats: { ...cfg.stats, ...p } })
+  const patchFigura = (p: Partial<OverlaysConfig['figura']>) => update({ ...cfg, figura: { ...cfg.figura, ...p } })
 
   const layoutProps = {
     cfg, layouts, editMode, setEditMode, setLayouts, update,
@@ -414,6 +456,7 @@ export function OverlaysModal({ open, onClose }: Props) {
           <TabBtn label="Gol"          icon={<Goal className="w-3.5 h-3.5" />}      active={tab === 'goal'}  onClick={() => setTab('goal')} />
           <TabBtn label="Fin"          icon={<Trophy className="w-3.5 h-3.5" />}    active={tab === 'final'} onClick={() => setTab('final')} />
           <TabBtn label="Estadísticas" icon={<BarChart3 className="w-3.5 h-3.5" />} active={tab === 'stats'} onClick={() => setTab('stats')} />
+          <TabBtn label="Figura"       icon={<Star className="w-3.5 h-3.5" />}      active={tab === 'figura'} onClick={() => setTab('figura')} />
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -493,6 +536,33 @@ export function OverlaysModal({ open, onClose }: Props) {
                     className="h-10 mt-1.5 bg-zinc-900 border-zinc-700 text-center font-black" />
                 </div>
               </div>
+            </>
+          )}
+
+          {tab === 'figura' && (
+            <>
+              <Toggle on={cfg.figura.enabled} onChange={v => patchFigura({ enabled: v })}
+                label="Figura del partido"
+                hint="Automática: aparece después del ganador. La calcula el registro del partido, no la mesa" />
+
+              <Layout tab="figura" {...layoutProps} />
+
+              <BoardPicker value={cfg.figura.boards} onChange={v => patchFigura({ boards: v })} />
+              <NumberField label="Aparece a los" value={cfg.figura.trasGanador}
+                onChange={v => patchFigura({ trasGanador: v })} min={2} max={30} suffix="seg. del ganador" />
+              <NumberField label="Se queda" value={cfg.figura.segundos}
+                onChange={v => patchFigura({ segundos: v })} min={3} max={30} suffix="segundos" />
+              <div>
+                <span className="text-xs font-bold text-zinc-300 block mb-1">Título</span>
+                <input defaultValue={cfg.figura.titulo} key={cfg.figura.titulo}
+                  onBlur={e => patchFigura({ titulo: e.target.value.trim() || 'FIGURA DEL PARTIDO' })}
+                  className="w-full h-9 rounded-md bg-zinc-950 border border-zinc-700 px-2 text-xs text-white" />
+              </div>
+              <p className="text-[10px] text-zinc-500 leading-snug">
+                Sólo muestra el dorsal, nunca el nombre. Goles pesan más que
+                minutos; una expulsión la descarta; si se aguantó el partido con
+                menos pelota, la figura es la portera.
+              </p>
             </>
           )}
 
