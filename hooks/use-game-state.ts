@@ -4,6 +4,8 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { emptyMatchAdjustments, type MatchAdjustments, type TeamAdjustments } from '@/lib/court-rules'
 import { toast } from 'sonner'
+import { buildMatchJSON, buildMatchArticle, reportOptsFor, type MatchJSON } from '@/lib/match-report'
+import { upsertHistory, aliviarEscudos, podarEscudos, HISTORY_ESCUDOS_KEY, type CronicaGuardada } from '@/lib/history'
 
 // ─── Generador de IDs único (sin colisiones en loops síncronos) ──────────────
 const uid = () => crypto.randomUUID()
@@ -92,7 +94,9 @@ export interface RefereeData {
   encargadoPista: string
 }
 
-// Firmas Digitales Pre-Partido (Apertura)
+// FIRMAS — RETIRADAS. Apertura en la 3.42, cierre en la 3.54.
+// Los tipos se quedan: los partidos guardados antes y un estado en curso
+// restaurado del almacenamiento pueden traerlas. Nada las escribe ya.
 export interface SignatureData {
   delegadoLocal: string | null
   delegadoVisita: string | null
@@ -161,6 +165,22 @@ export interface MatchRecord {
   homePlayers?: Player[]
   awayPlayers?: Player[]
   matchLog?: MatchEvent[]
+  /**
+   * Inicio del partido (timestamps.matchStart). Identifica el partido para
+   * no guardarlo dos veces: "Guardar en historial" y despues "Guardar y nuevo"
+   * dejaban dos registros iguales. Los guardados antes de la 3.54 no lo
+   * traen y se quedan como estan.
+   */
+  matchStart?: string
+  /**
+   * El partido tal como sale en "Datos web", tomado al guardarlo. Con esto se
+   * arma el archivo del día (JSON) que se sube a la web del club.
+   */
+  web?: MatchJSON
+  /** Su crónica, para VER el partido o el día en ARDI. */
+  cronica?: CronicaGuardada
+  // Los dos llevan los escudos pegados por referencia (ver `lib/history.ts`)
+  // y faltan en los registros anteriores a la 3.55.
 }
 
 export interface MatchConfig {
@@ -187,8 +207,10 @@ export interface MatchConfig {
   homePlayers: Player[]
   awayPlayers: Player[]
   referees: RefereeData
-  signatures: SignatureData
-  closingSignatures: ClosingSignatureData
+  /** Retirada (3.42). Opcional: la traen partidos viejos. */
+  signatures?: SignatureData
+  /** Retirada (3.54). Opcional: la traen partidos viejos. */
+  closingSignatures?: ClosingSignatureData
   isExpressMode: boolean
   allowOvertime: boolean
   allowPenalties: boolean
@@ -322,23 +344,13 @@ const initialReferees: RefereeData = {
   principal: '', segundo: '', auxiliar: '', cronometrista: '', encargadoPista: ''
 }
 
-const initialSignatures: SignatureData = {
-  delegadoLocal: null, delegadoVisita: null, arbitroAuxiliarMesa: null
-}
-
-const initialClosingSignatures: ClosingSignatureData = {
-  capitanLocal: null, capitanVisita: null, dtLocal: null, dtVisita: null,
-  encargadoCancha: null, arbitroCronometrista: null, arbitroPrincipal: null, arbitroAuxiliar: null
-}
-
 const initialConfig: MatchConfig = {
   seriesName: 'Adulta', gender: 'MASCULINA', periodsCount: 2,
   periodDuration: DEFAULT_PERIOD_DURATION,
   campeonato: 'Liga Regular', partidoNumero: '1',
   fecha: '', hora: '', estadio: '',
   homeRoster: [], awayRoster: [], homePlayers: [], awayPlayers: [],
-  referees: initialReferees, signatures: initialSignatures,
-  closingSignatures: initialClosingSignatures,
+  referees: initialReferees,
   isExpressMode: false, allowOvertime: false, allowPenalties: false
 }
 
@@ -398,6 +410,13 @@ export function useGameState() {
   const [state, setState] = useState<GameState>(initialState)
   const [savedTeams, setSavedTeams]       = useState<Team[]>([])
   const [matchHistory, setMatchHistory]   = useState<MatchRecord[]>([])
+  /**
+   * El historial vigente, para calcular el siguiente FUERA del updater de
+   * setState. Antes se escribía el almacenamiento dentro del updater: React
+   * puede ejecutarlo dos veces (el mismo defecto del ancla del reloj de la
+   * 3.53). Sólo lo cambian la carga inicial y `commitHistory`.
+   */
+  const historyRef = useRef<MatchRecord[]>([])
 
   const audioRef     = useRef<HTMLAudioElement | null>(null)
   const channelRef   = useRef<BroadcastChannel | null>(null)
@@ -412,7 +431,8 @@ export function useGameState() {
       if (t.rosters || !t.serie || !t.roster) return t
       return { ...t, rosters: { [t.serie]: t.roster } }
     }))
-    setMatchHistory(lsGet<MatchRecord[]>(HISTORY_STORAGE_KEY, []))
+    historyRef.current = lsGet<MatchRecord[]>(HISTORY_STORAGE_KEY, [])
+    setMatchHistory(historyRef.current)
     const savedLiveGame = localStorage.getItem(LIVE_GAME_STORAGE_KEY)
     if (savedLiveGame) {
       try {
@@ -562,6 +582,24 @@ export function useGameState() {
    * y vuelve a anclar, en vez de pelear contra el cambio.
    */
   type Ancla = { ts: number; clock: number } | null
+  /**
+   * ESPEJOS: el valor de cada reloj en el ultimo render.
+   *
+   * La deteccion de "alguien cambio el reloj por fuera" vivia DENTRO de la
+   * funcion de setState y escribia referencias ahi. React puede ejecutar esa
+   * funcion mas de una vez con el mismo `prev`: en desarrollo lo hace siempre
+   * (modo estricto) y en produccion puede hacerlo al reordenar actualizaciones.
+   * En la segunda pasada el codigo veia su propia escritura como un cambio
+   * externo, reanclaba y descartaba el tick. Medido en el navegador: en
+   * desarrollo el reloj oscilaba 14 -> 13 -> 14 y no avanzaba.
+   *
+   * Ahora el latido compara contra estos espejos, y el updater es puro.
+   */
+  const espejoMain = useRef(state.mainClock);          espejoMain.current = state.mainClock
+  const espejoTimeout = useRef(state.timeoutClock);    espejoTimeout.current = state.timeoutClock
+  const espejoLeft = useRef(state.possessionClockLeft);   espejoLeft.current = state.possessionClockLeft
+  const espejoRight = useRef(state.possessionClockRight); espejoRight.current = state.possessionClockRight
+
   const anclaReloj = useRef<Ancla>(null)
   const anclaTimeout = useRef<Ancla>(null)
   const anclaLeft = useRef<Ancla>(null)
@@ -578,22 +616,25 @@ export function useGameState() {
     ultimoEscrito.current = state.mainClock
 
     const interval = setInterval(() => {
+      // Cambio externo (ajuste fino, reposicion del Art. 30.9): se detecta
+      // AQUI, en el latido, no dentro de setState. Ver el comentario del
+      // ancla: React puede ejecutar el updater mas de una vez.
+      if (espejoMain.current !== ultimoEscrito.current) {
+        anclaReloj.current = { ts: performance.now(), clock: espejoMain.current }
+        ultimoEscrito.current = espejoMain.current
+        return
+      }
       const ancla = anclaReloj.current
       if (!ancla) return
       const elapsed  = (performance.now() - ancla.ts) / 1000
       const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
+      if (accurate === espejoMain.current) return
+      ultimoEscrito.current = accurate
+      espejoMain.current = accurate
+      // Desde aqui el updater es PURO: solo lee `prev` y `accurate`.
       setState(prev => {
         if (!prev.isMainClockRunning) return prev
-
-        // El reloj cambio por fuera del latido: se reancla y se deja pasar
-        // este tick. Sin esto, el ajuste fino se desharia solo.
-        if (prev.mainClock !== ultimoEscrito.current) {
-          anclaReloj.current = { ts: performance.now(), clock: prev.mainClock }
-          ultimoEscrito.current = prev.mainClock
-          return prev
-        }
         if (accurate === prev.mainClock) return prev
-        ultimoEscrito.current = accurate
         
         const delta = prev.mainClock - accurate
         let finalSanctions = [...prev.sanctions]
@@ -648,19 +689,25 @@ export function useGameState() {
     ultimoTimeout.current = state.timeoutClock
 
     const interval = setInterval(() => {
+      // Cambio externo (ajuste fino, reposicion del Art. 30.9): se detecta
+      // AQUI, en el latido, no dentro de setState. Ver el comentario del
+      // ancla: React puede ejecutar el updater mas de una vez.
+      if (espejoTimeout.current !== ultimoTimeout.current) {
+        anclaTimeout.current = { ts: performance.now(), clock: espejoTimeout.current }
+        ultimoTimeout.current = espejoTimeout.current
+        return
+      }
       const ancla = anclaTimeout.current
       if (!ancla) return
       const elapsed  = (performance.now() - ancla.ts) / 1000
       const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
+      if (accurate === espejoTimeout.current) return
+      ultimoTimeout.current = accurate
+      espejoTimeout.current = accurate
+      // Desde aqui el updater es PURO: solo lee `prev` y `accurate`.
       setState(prev => {
         if (!prev.activeTimeout) return prev
-        if (prev.timeoutClock !== ultimoTimeout.current) {
-          anclaTimeout.current = { ts: performance.now(), clock: prev.timeoutClock }
-          ultimoTimeout.current = prev.timeoutClock
-          return prev
-        }
         if (accurate === prev.timeoutClock) return prev
-        ultimoTimeout.current = accurate
         if (accurate <= 0) {
           playBuzzer()
           return { ...prev, timeoutClock: 0, activeTimeout: null }
@@ -688,19 +735,25 @@ export function useGameState() {
     ultimoDescanso.current = state.mainClock
 
     const interval = setInterval(() => {
+      // Cambio externo (ajuste fino, reposicion del Art. 30.9): se detecta
+      // AQUI, en el latido, no dentro de setState. Ver el comentario del
+      // ancla: React puede ejecutar el updater mas de una vez.
+      if (espejoMain.current !== ultimoDescanso.current) {
+        anclaDescanso.current = { ts: performance.now(), clock: espejoMain.current }
+        ultimoDescanso.current = espejoMain.current
+        return
+      }
       const ancla = anclaDescanso.current
       if (!ancla) return
       const elapsed  = (performance.now() - ancla.ts) / 1000
       const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
+      if (accurate === espejoMain.current) return
+      ultimoDescanso.current = accurate
+      espejoMain.current = accurate
+      // Desde aqui el updater es PURO: solo lee `prev` y `accurate`.
       setState(prev => {
         if (!prev.isIntermission) return prev
-        if (prev.mainClock !== ultimoDescanso.current) {
-          anclaDescanso.current = { ts: performance.now(), clock: prev.mainClock }
-          ultimoDescanso.current = prev.mainClock
-          return prev
-        }
         if (accurate === prev.mainClock) return prev
-        ultimoDescanso.current = accurate
         if (accurate <= 0) {
           playBuzzer()
           const sig = siguientePeriodo(prev)
@@ -732,19 +785,25 @@ export function useGameState() {
     ultimoLeft.current = state.possessionClockLeft
 
     const interval = setInterval(() => {
+      // Cambio externo (ajuste fino, reposicion del Art. 30.9): se detecta
+      // AQUI, en el latido, no dentro de setState. Ver el comentario del
+      // ancla: React puede ejecutar el updater mas de una vez.
+      if (espejoLeft.current !== ultimoLeft.current) {
+        anclaLeft.current = { ts: performance.now(), clock: espejoLeft.current }
+        ultimoLeft.current = espejoLeft.current
+        return
+      }
       const ancla = anclaLeft.current
       if (!ancla) return
       const elapsed  = (performance.now() - ancla.ts) / 1000
       const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
+      if (accurate === espejoLeft.current) return
+      ultimoLeft.current = accurate
+      espejoLeft.current = accurate
+      // Desde aqui el updater es PURO: solo lee `prev` y `accurate`.
       setState(prev => {
         if (!prev.isPossessionLeftRunning) return prev
-        if (prev.possessionClockLeft !== ultimoLeft.current) {
-          anclaLeft.current = { ts: performance.now(), clock: prev.possessionClockLeft }
-          ultimoLeft.current = prev.possessionClockLeft
-          return prev
-        }
         if (accurate === prev.possessionClockLeft) return prev
-        ultimoLeft.current = accurate
         const usado = prev.possessionClockLeft - accurate
         if (accurate <= 0) {
           playBuzzer()
@@ -766,19 +825,25 @@ export function useGameState() {
     ultimoRight.current = state.possessionClockRight
 
     const interval = setInterval(() => {
+      // Cambio externo (ajuste fino, reposicion del Art. 30.9): se detecta
+      // AQUI, en el latido, no dentro de setState. Ver el comentario del
+      // ancla: React puede ejecutar el updater mas de una vez.
+      if (espejoRight.current !== ultimoRight.current) {
+        anclaRight.current = { ts: performance.now(), clock: espejoRight.current }
+        ultimoRight.current = espejoRight.current
+        return
+      }
       const ancla = anclaRight.current
       if (!ancla) return
       const elapsed  = (performance.now() - ancla.ts) / 1000
       const accurate = Math.max(0, ancla.clock - Math.floor(elapsed))
+      if (accurate === espejoRight.current) return
+      ultimoRight.current = accurate
+      espejoRight.current = accurate
+      // Desde aqui el updater es PURO: solo lee `prev` y `accurate`.
       setState(prev => {
         if (!prev.isPossessionRightRunning) return prev
-        if (prev.possessionClockRight !== ultimoRight.current) {
-          anclaRight.current = { ts: performance.now(), clock: prev.possessionClockRight }
-          ultimoRight.current = prev.possessionClockRight
-          return prev
-        }
         if (accurate === prev.possessionClockRight) return prev
-        ultimoRight.current = accurate
         const usado = prev.possessionClockRight - accurate
         if (accurate <= 0) {
           playBuzzer()
@@ -835,20 +900,6 @@ export function useGameState() {
       homeScore: resume.homeScore, awayScore: resume.awayScore,
       homeFouls: resume.homeFouls, awayFouls: resume.awayFouls,
       timestamps: { matchStart: now }, matchLog: [resumeEvent]
-    }))
-  }, [])
-
-  const setSignature = useCallback((role: keyof SignatureData, signatureData: string) => {
-    setState(prev => ({
-      ...prev,
-      matchConfig: { ...prev.matchConfig, signatures: { ...prev.matchConfig.signatures, [role]: signatureData } }
-    }))
-  }, [])
-
-  const setClosingSignature = useCallback((role: keyof ClosingSignatureData, signatureData: string) => {
-    setState(prev => ({
-      ...prev,
-      matchConfig: { ...prev.matchConfig, closingSignatures: { ...prev.matchConfig.closingSignatures, [role]: signatureData } }
     }))
   }, [])
 
@@ -1957,7 +2008,31 @@ export function useGameState() {
     })
   }, [])
 
+  /** Único punto que cambia el historial: estado, ref y almacenamiento a la vez. */
+  const commitHistory = useCallback((next: MatchRecord[], escudosNuevos: Record<string, string> = {}) => {
+    historyRef.current = next
+    setMatchHistory(next)
+    lsSet(HISTORY_STORAGE_KEY, next)
+    const mapa = { ...lsGet<Record<string, string>>(HISTORY_ESCUDOS_KEY, {}), ...escudosNuevos }
+    lsSet(HISTORY_ESCUDOS_KEY, podarEscudos(next, mapa))
+  }, [])
+
   const saveMatchToHistory = useCallback(() => {
+    // Datos web y crónica se arman AHORA, con los mismos nombres y escudos que
+    // "Datos web" y "Ver crónica". Si algo falla, el partido se guarda igual.
+    let web: MatchJSON | undefined
+    let cronica: CronicaGuardada | undefined
+    let escudos: Record<string, string> = {}
+    try {
+      const x = aliviarEscudos(reportOptsFor(state))
+      web = buildMatchJSON(state, x.opts)
+      cronica = {
+        titulo: `${web.local.nombre} ${web.local.goles} - ${web.visita.goles} ${web.visita.nombre}`,
+        html: buildMatchArticle(state, x.opts),
+      }
+      escudos = x.escudos
+    } catch { /* sin datos: el registro de siempre */ }
+
     const record: MatchRecord = {
       id: uid(),
       date: new Date().toISOString(),
@@ -1976,26 +2051,23 @@ export function useGameState() {
       referees: state.matchConfig.referees,
       homePlayers: state.matchConfig.homePlayers,
       awayPlayers: state.matchConfig.awayPlayers,
-      matchLog: state.matchLog
+      matchLog: state.matchLog,
+      matchStart: state.timestamps?.matchStart || undefined,
+      web,
+      cronica,
     }
-    setMatchHistory(prev => {
-      const newHistory = [record, ...prev].slice(0, HISTORY_MAX_RECORDS)
-      lsSet(HISTORY_STORAGE_KEY, newHistory)
-      return newHistory
-    })
-  }, [state])
+    commitHistory(upsertHistory(historyRef.current, record, HISTORY_MAX_RECORDS), escudos)
+  }, [state, commitHistory])
 
   const deleteMatchFromHistory = useCallback((id: string) => {
-    setMatchHistory(prev => {
-      const next = prev.filter(m => m.id !== id)
-      lsSet(HISTORY_STORAGE_KEY, next)
-      return next
-    })
-  }, [])
+    commitHistory(historyRef.current.filter(m => m.id !== id))
+  }, [commitHistory])
 
   const clearHistory = useCallback(() => {
+    historyRef.current = []
     setMatchHistory([])
     localStorage.removeItem(HISTORY_STORAGE_KEY)
+    localStorage.removeItem(HISTORY_ESCUDOS_KEY)
   }, [])
 
   const resetForNewMatch = useCallback(() => {
@@ -2003,8 +2075,9 @@ export function useGameState() {
       ...initialState,
       matchConfig: {
         ...prev.matchConfig,
-        signatures: initialSignatures,
-        closingSignatures: initialClosingSignatures,
+        // Un estado de antes de la 3.54 puede traer firmas: no pasan al siguiente.
+        signatures: undefined,
+        closingSignatures: undefined,
         isExpressMode: false
       },
       homeTeam: prev.homeTeam,
@@ -2032,7 +2105,7 @@ export function useGameState() {
 
   return {
     state, savedTeams, matchHistory, playBuzzer,
-    configureMatch, configureMatchWithResume, setSignature, setClosingSignature, setMatchPhase,
+    configureMatch, configureMatchWithResume, setMatchPhase,
     toggleMainClock, pauseMainClock, resetMainClock, setMainClockTime, adjustMainClock,
     setPeriod, nextPeriod, adjustHomeScore, adjustAwayScore, adjustHomeFouls, adjustAwayFouls, resetFouls,
     annulGoal, correctScore, scorePenalty, awardPenalty,

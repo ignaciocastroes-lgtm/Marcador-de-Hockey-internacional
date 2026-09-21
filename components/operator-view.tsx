@@ -23,6 +23,7 @@
  */
 
 import { RigidClock } from '@/components/scoreboard/RigidClock'
+import { RelojVivo } from '@/components/scoreboard/RelojVivo'
 import {
   loadHotkeys, keyLabel, DEFAULT_HOTKEYS, HOTKEYS_CHANGED_EVENT, HOTKEY_EVENT,
   OPEN_HOTKEYS_EVENT, type HotkeyMap
@@ -40,15 +41,14 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { INTERMISSION_DURATION } from '@/hooks/use-game-state'
-import type { GameState, Period, Team, MatchRecord, MatchConfig, Sanction, Player, RefereeData, MatchEvent, SignatureData, ClosingSignatureData, MatchPhase, CardHistory } from '@/hooks/use-game-state'
+import type { GameState, Period, Team, MatchRecord, MatchConfig, Sanction, Player, RefereeData, MatchEvent, MatchPhase, CardHistory } from '@/hooks/use-game-state'
 
-import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
 import { RefereeActions } from '@/components/scoreboard/RefereeActions'
 import { GLOBAL_THEMES, saveTheme, loadTheme, type SkinKey, type ThemeConfig } from '@/lib/themes'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
 import { BenchModal, type BenchStaffUI } from '@/components/scoreboard/BenchModal'
 import { PosModal } from '@/components/scoreboard/PosModal'
-import { OfficialSheetModal } from '@/components/scoreboard/OfficialSheetModal'
+import { MatchStatsModal } from '@/components/scoreboard/MatchStatsModal'
 import { PreMatchSetup } from '@/components/scoreboard/PreMatchSetup'
 import { MatchHistoryModal } from '@/components/scoreboard/MatchHistoryModal'
 import { playHorn, playBeep, stopHorn, armAudio, loadAudioConfig } from '@/lib/audio-engine'
@@ -60,8 +60,6 @@ interface OperatorViewProps {
   state: GameState; savedTeams: Team[]; matchHistory: MatchRecord[]; playBuzzer: () => void;
   configureMatch: (config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null) => void;
   configureMatchWithResume?: (config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null, resume: ResumeParams) => void;
-  setSignature: (role: keyof SignatureData, signatureData: string) => void;
-  setClosingSignature: (role: keyof ClosingSignatureData, signatureData: string) => void;
   setMatchPhase: (phase: MatchPhase) => void;
   toggleMainClock: () => void; resetMainClock: () => void; setMainClockTime: (minutes: number) => void;
   adjustMainClock: (seconds: number) => void; setPeriod: (period: Period) => void; nextPeriod: () => void;
@@ -107,7 +105,7 @@ export function OperatorView(props: OperatorViewProps) {
   const [benchModalTeam, setBenchModalTeam] = useState<'home' | 'away'>('home')
   const [benchModalCard, setBenchModalCard] = useState<'yellow' | 'red'>('yellow')
   const [benchStaffList, setBenchStaffList] = useState<BenchStaffUI[]>([])
-  const [showOfficialSheet, setShowOfficialSheet] = useState(false)
+  const [showStats, setShowStats] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showEndConfirm, setShowEndConfirm]       = useState(false)
   /**
@@ -119,10 +117,6 @@ export function OperatorView(props: OperatorViewProps) {
    */
   const matchEnded = state.isMatchEnded
 
-  const [signingClosingRole, setSigningClosingRole] = useState<keyof ClosingSignatureData | null>(null)
-  const [extraSignatures, setExtraSignatures]       = useState<{ arbitroPrincipal: string | null; arbitroAuxiliar: string | null }>({ arbitroPrincipal: null, arbitroAuxiliar: null })
-  const [signingExtraRole, setSigningExtraRole]     = useState<'arbitroPrincipal' | 'arbitroAuxiliar' | null>(null)
-  const [planillaLocked, setPlanillaLocked]         = useState(false)
 
   const [showIntermissionSelector, setShowIntermissionSelector] = useState(false)
   const [customIntermissionMinutes, setCustomIntermissionMinutes] = useState('')
@@ -190,7 +184,7 @@ export function OperatorView(props: OperatorViewProps) {
       const action = (e as CustomEvent).detail as string
       if (action === 'undo') {
         setShowIntermissionSelector(false); setShowEndConfirm(false)
-        setShowResetConfirm(false); setShowOfficialSheet(false)
+        setShowResetConfirm(false); setShowStats(false)
         setShowHistory(false); setPosModalOpen(false); setBenchModalOpen(false)
         setShowAdminMenu(false)
       } else if (action === 'intermission' && !matchEnded) {
@@ -487,7 +481,7 @@ export function OperatorView(props: OperatorViewProps) {
     // operador justo cuando el partido acababa —que es cuando hay gente
     // preguntando el resultado, jugadores saliendo y el arbitro acercandose a
     // la mesa— y habia que cerrarla para ver el marcador final. Ahora se
-    // genera solo cuando se pide, con el boton PLANILLA.
+    // genera solo cuando se pide, con el boton ESTADÍSTICAS.
     props.setMatchPhase('finalizado' as MatchPhase)
     props.endMatch()
     setShowEndConfirm(false)
@@ -496,9 +490,7 @@ export function OperatorView(props: OperatorViewProps) {
   const handleFullReset = () => {
     props.resetAll()
     setShowResetConfirm(false)
-    setPlanillaLocked(false)
-    setExtraSignatures({ arbitroPrincipal: null, arbitroAuxiliar: null })
-    setShowOfficialSheet(false)
+    setShowStats(false)
     setShowAdminMenu(false) // Cerrar menú al reiniciar
   }
 
@@ -512,18 +504,8 @@ export function OperatorView(props: OperatorViewProps) {
     ? `${theme.clock.containerMain} ${theme.id === 'alto-contraste' ? 'border-white' : 'border-red-700 shadow-[0_0_30px_rgba(239,68,68,0.4)]'}`
     : theme.clock.containerMain
 
-  if (signingClosingRole) {
-    const titles: Record<keyof ClosingSignatureData, string> = { capitanLocal: `Firma Capitan ${homeTeamName}`, capitanVisita: `Firma Capitan ${awayTeamName}`, dtLocal: `Firma DT ${homeTeamName}`, dtVisita: `Firma DT ${awayTeamName}`, encargadoCancha: 'Firma Encargado de Cancha', arbitroCronometrista: 'Firma Árbitro Cronometrista', arbitroPrincipal: 'Firma Árbitro Principal', arbitroAuxiliar: 'Firma Árbitro Auxiliar (Sistema)' }
-    return <SignatureCanvas title={titles[signingClosingRole]} onSave={sig => { props.setClosingSignature(signingClosingRole, sig); setSigningClosingRole(null) }} onCancel={() => setSigningClosingRole(null)} />
-  }
-
-  if (signingExtraRole) {
-    const titles = { arbitroPrincipal: 'Firma Árbitro Principal', arbitroAuxiliar: 'Firma Árbitro Auxiliar (Sistema)' }
-    return <SignatureCanvas title={titles[signingExtraRole]} onSave={sig => { setExtraSignatures(prev => ({ ...prev, [signingExtraRole]: sig })); setSigningExtraRole(null) }} onCancel={() => setSigningExtraRole(null)} />
-  }
-
   if (state.matchPhase === 'pre-partido' && !state.isMatchConfigured) {
-    return <PreMatchSetup state={state} savedTeams={props.savedTeams} configureMatch={props.configureMatch} configureMatchWithResume={props.configureMatchWithResume} setSignature={props.setSignature} saveTeam={props.saveTeam} deleteTeam={props.deleteTeam} />
+    return <PreMatchSetup state={state} savedTeams={props.savedTeams} configureMatch={props.configureMatch} configureMatchWithResume={props.configureMatchWithResume} saveTeam={props.saveTeam} deleteTeam={props.deleteTeam} />
   }
 
   return (
@@ -549,7 +531,7 @@ export function OperatorView(props: OperatorViewProps) {
       <PosModal open={posModalOpen} onClose={() => setPosModalOpen(false)} team={posModalTeam} action={posModalAction} homeTeamName={homeTeamName} awayTeamName={awayTeamName} roster={getCurrentRoster(posModalTeam)} cardHistory={state.cardHistory || []} onSelectPlayer={handlePosSelectPlayer} getPlayerYellowCount={getPlayerYellowCount} getCurrentPlayers={getCurrentPlayers} onOpenBenchModal={(team, card, list) => { if(!matchEnded) { setBenchStaffList(list); setBenchModalCard(card); setBenchModalTeam(team); setBenchModalOpen(true) } }} />
       <MatchHistoryModal open={showHistory} onClose={() => setShowHistory(false)} matchHistory={props.matchHistory || []} deleteMatchFromHistory={props.deleteMatchFromHistory} clearHistory={props.clearHistory} />
 
-      <OfficialSheetModal open={showOfficialSheet} onClose={() => setShowOfficialSheet(false)} state={state} homeTeamName={homeTeamName} awayTeamName={awayTeamName} matchEnded={matchEnded} setSigningClosingRole={setSigningClosingRole} onSaveMatchToHistory={props.saveMatchToHistory} onSaveAndReset={props.onSaveAndReset} planillaLocked={planillaLocked} onLockPlanilla={() => setPlanillaLocked(true)} />
+      <MatchStatsModal open={showStats} onClose={() => setShowStats(false)} state={state} homeTeamName={homeTeamName} awayTeamName={awayTeamName} matchEnded={matchEnded} onSaveMatchToHistory={props.saveMatchToHistory} onSaveAndReset={props.onSaveAndReset} />
 
       {/* ── PANEL RELOJ PRINCIPAL Y CONTROLES MAESTROS ─────────────────────────── */}
       <div
@@ -631,7 +613,8 @@ export function OperatorView(props: OperatorViewProps) {
                     cuenta del timeout: el operador perdia de vista el minuto del
                     partido justo cuando el arbitro pregunta por el. El timeout
                     tiene su propio panel, que ya existe. */}
-                <RigidClock seconds={state.mainClock} tenthsUnder={state.isMainClockRunning ? 10 : 0} />
+                <RelojVivo segundos={state.mainClock} corriendo={state.isMainClockRunning}
+                  sinAlerta={state.isIntermission || !!state.activeTimeout} />
               </div>
               <div className="flex items-center justify-center gap-2 mt-2 sm:mt-4">
                 <span className={`text-xs sm:text-sm font-bold transition-colors ${theme.clock.label}`}>
@@ -812,17 +795,17 @@ export function OperatorView(props: OperatorViewProps) {
                       props.closeMatchEndModal(); // 🛡️ REPARADO: Ahora limpia el letrero gigante de FIN DEL PARTIDO
                       props.setMatchPhase('en-curso' as MatchPhase);
                       toast.info("Partido reanudado. Controles desbloqueados.", { position: 'top-center' });
-                    }} disabled={planillaLocked} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs bg-green-600 hover:bg-green-500 text-white rounded-md`}>
+                    }} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs bg-green-600 hover:bg-green-500 text-white rounded-md`}>
                       <Play className="w-3 h-3 sm:mr-1" /> REANUDAR
                     </Button>
                   ) : (
-                    <Button onClick={() => setShowEndConfirm(true)} disabled={planillaLocked} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${theme.btn.timeout}`}>
+                    <Button onClick={() => setShowEndConfirm(true)} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${theme.btn.timeout}`}>
                       <Square className="w-3 h-3 sm:mr-1" /> FIN
                     </Button>
                   )}
                   
-                  <Button onClick={() => setShowOfficialSheet(true)} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${theme.btn.penal}`}>
-                    <FileText className="w-3 h-3 sm:mr-1" /> PLANILLA
+                  <Button onClick={() => setShowStats(true)} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${theme.btn.penal}`}>
+                    <FileText className="w-3 h-3 sm:mr-1" /> ESTADÍSTICAS
                   </Button>
 
                   <Button onClick={() => setShowHistory(true)} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${theme.btn.secondary}`}>
@@ -860,7 +843,7 @@ export function OperatorView(props: OperatorViewProps) {
           <div className="text-center p-4">
             <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h2 className="text-2xl font-black text-red-500 mb-2">FINALIZAR PARTIDO</h2>
-            <p className="text-zinc-400 mb-6">Bloqueará controles y generará planilla oficial.</p>
+            <p className="text-zinc-400 mb-6">Se bloquean los controles de juego y quedan listas las estadísticas.</p>
             <div className="flex gap-3">
               <Button onClick={() => setShowEndConfirm(false)} variant="outline" className="flex-1 h-14 font-bold border-zinc-600">CANCELAR</Button>
               <Button onClick={confirmEndMatch} className="flex-1 h-14 font-black bg-red-600 hover:bg-red-500 text-lg">SÍ, FINALIZAR</Button>

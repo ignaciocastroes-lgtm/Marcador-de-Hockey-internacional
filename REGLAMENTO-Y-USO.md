@@ -198,8 +198,7 @@ segundo remate.
    habrá alargue o penales.
 2. Cargar los planteles. En modo Express basta con los números de camiseta; el
    primero de cada lista se toma como portero y puede reasignarse en partido.
-3. Recoger las firmas de apertura en pantalla.
-4. Abrir las pantallas de proyección y repartirlas por los monitores.
+3. Abrir las pantallas de proyección y repartirlas por los monitores.
 
 ### 3.2 Durante el partido
 - **Reloj:** dos botones de arranque, con chicharra y sin chicharra. Ajuste fino
@@ -214,9 +213,18 @@ segundo remate.
   permite anular la sanción. La tarjeta permanece en el historial.
 
 ### 3.3 Al terminar
-1. Cerrar el partido y recoger las firmas de cierre.
-2. Revisar la planilla y sellarla. Al sellar se exporta el acta.
-3. Guardar el partido en el historial.
+1. Tocar **FIN** y revisar **ESTADÍSTICAS**. No hay nada que firmar ni sellar.
+2. **Guardar en historial** (o **Guardar y nuevo partido** para seguir con el
+   siguiente). Guardar dos veces el mismo partido no lo duplica.
+3. Al cerrar la jornada: **HISTORIAL**, y en el día que corresponde, **Archivo
+   del día**. Descarga `jornada-AAAA-MM-DD.json` (el archivo oficial que se sube
+   a la web del club) y abre la vista del día. El flujo completo y el formato
+   están en `ARCHIVO-DEL-DIA.md`.
+
+### 3.3.1 Partido suspendido
+Antes de cerrar, descargar **Datos web** desde ESTADÍSTICAS. Para retomarlo:
+configurar el partido, activar la reanudación y **Cargar partido suspendido**
+con ese archivo. Trae periodo, minuto, marcador y faltas.
 
 ### 3.4 Responsabilidad del operador
 El operador es responsable de que lo registrado coincida con lo señalado por el

@@ -4,6 +4,7 @@ import { GoalOverlay } from '@/components/scoreboard/GoalOverlay'
 import { GENERIC_SHIELDS } from '@/lib/generic-shields'
 import { loadLayouts, OVERLAY_LAYOUT_EVENT, type AllLayouts } from '@/lib/overlay-layout'
 
+import { RelojVivo, COLOR_ALERTA } from '@/components/scoreboard/RelojVivo'
 import { FiguraOverlay } from '@/components/scoreboard/FiguraOverlay'
 import { calcularFigura } from '@/lib/figura'
 import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
@@ -827,6 +828,13 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
     : Math.min(state.possessionClockLeft ?? 45, state.possessionClockRight ?? 45)
   const possessionRunning = state.isPossessionLeftRunning || state.isPossessionRightRunning
   const possessionWarning = unifiedPossession <= 10 && unifiedPossession > 0
+  /**
+   * El reloj principal avisa como el 45: rojo y con pulso en los ultimos diez
+   * segundos del periodo. No en el descanso ni en un tiempo muerto, que no son
+   * el fin de nada.
+   */
+  const relojAlerta = !state.activeTimeout && !state.isIntermission &&
+    state.mainClock > 0 && state.mainClock <= 10
   const possessionZero = unifiedPossession === 0
   
   const homeSanctions = state.sanctions?.filter(s => s.team === 'home' && s.remainingTime > 0 && !s.isBench && s.type !== 'yellow') || []
@@ -895,7 +903,20 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   };
 
   return (
-    <div ref={containerRef} className="absolute inset-0 bg-black overflow-hidden select-none font-sans">
+    /*
+      EN LA PREVISUALIZACIÓN, TODO QUEDA DENTRO DE SU CAJA — también en z.
+      Los lanzadores embebidos (gol z-3000, estadísticas z-2800, figura,
+      final) son `absolute`, así que el `overflow-hidden` ya los recortaba al
+      recuadro. Pero esta caja no creaba contexto de apilamiento: su z-index
+      competía con el de la página entera. En un descanso, el resumen tapaba
+      el GESTOR PANTALLAS (z-200), el fondo que lo acompaña en el móvil y los
+      diálogos de Lanzadores (z-310): el operador no podía ajustar nada justo
+      en el tiempo muerto, que es cuando se ajusta. Con `isolate` los z-index
+      de adentro sólo se comparan entre sí.
+      En la proyección no se aplica: ahí los lanzadores son `fixed` a pantalla
+      completa y no hay nada de la mesa encima.
+    */
+    <div ref={containerRef} className={`absolute inset-0 bg-black overflow-hidden select-none font-sans ${isPreview ? 'isolate' : ''}`}>
       
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes sway3d {
@@ -931,7 +952,9 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
       `}} />
 
       {isPreview && (
-        <div className="absolute bottom-4 left-4 z-[200] flex bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg overflow-hidden shadow-2xl">
+        /* Por encima de los lanzadores (z-3000): la lupa es de la mesa, no de la
+            proyección, y tiene que poder tocarse con un gol o un resumen en pantalla. */
+        <div className="absolute bottom-4 left-4 z-[3100] flex bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-lg overflow-hidden shadow-2xl">
           <div className="bg-zinc-800 px-3 py-2 flex items-center border-r border-zinc-700 text-zinc-400 text-xs font-bold uppercase tracking-wider">
             LUPA VIDEOWALL P{bId}
           </div>
@@ -947,14 +970,14 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
       {!editMode && !state.isMatchEnded && (
         <button
           onClick={() => setShowSettings(true)}
-          className={`absolute top-4 right-4 z-[100] p-3 text-zinc-400 hover:text-white bg-black/50 hover:bg-zinc-800 rounded-full transition-all border border-zinc-800 shadow-xl ${isPreview ? 'scale-75 md:scale-100 origin-top-right' : ''}`}
+          className={`absolute top-4 right-4 p-3 text-zinc-400 hover:text-white bg-black/50 hover:bg-zinc-800 rounded-full transition-all border border-zinc-800 shadow-xl ${isPreview ? 'z-[3100] scale-75 md:scale-100 origin-top-right' : 'z-[100]'}`}
         >
           <Settings className="w-8 h-8" />
         </button>
       )}
 
       {showSettings && (
-        <div className={`absolute z-[200] bg-zinc-900 border border-zinc-700 p-4 md:p-6 rounded-2xl shadow-2xl flex flex-col ${isPreview ? 'inset-2 md:inset-8' : 'top-20 right-4 w-[400px] max-h-[80vh] overflow-y-auto'}`}>
+        <div className={`absolute bg-zinc-900 border border-zinc-700 p-4 md:p-6 rounded-2xl shadow-2xl flex flex-col ${isPreview ? 'z-[3200] inset-2 md:inset-8' : 'z-[200] top-20 right-4 w-[400px] max-h-[80vh] overflow-y-auto'}`}>
           <div className="flex justify-between items-center mb-4 shrink-0">
             <h3 className="text-yellow-400 font-bold text-lg md:text-xl lg:text-2xl">Ajustes Proyección {bId}</h3>
             <button onClick={() => setShowSettings(false)} className="text-zinc-400 hover:text-white bg-zinc-800 p-2 rounded-full"><X className="w-5 h-5 md:w-6 md:h-6" /></button>
@@ -1069,10 +1092,15 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
             {clockTitle}
           </span>
           <div
-            className={`leading-none bg-black w-full text-center flex items-center justify-center transition-colors duration-300 ${clockBorder} ${digitFxClass}`}
-            style={{ ...customNumberStyle, ...numFx(state.activeTimeout ? '#22c55e' : state.isIntermission ? '#60a5fa' : (liveLogos.boardAccentColor || '#dc2626')), fontSize: '260px', height: '280px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}
+            className={`leading-none bg-black w-full text-center flex items-center justify-center transition-colors duration-300 ${relojAlerta ? 'border-red-700 ardi-alerta-reloj' : clockBorder} ${digitFxClass}`}
+            style={{ ...customNumberStyle, ...numFx(relojAlerta ? COLOR_ALERTA : state.activeTimeout ? '#22c55e' : state.isIntermission ? '#60a5fa' : (liveLogos.boardAccentColor || '#dc2626')), fontSize: '260px', height: '280px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}
           >
-            {formatTime(state.activeTimeout ? state.timeoutClock : state.mainClock)}
+            {/* Decimas de verdad en los ultimos diez segundos, calculadas en
+                esta pantalla: el estado sigue viajando en segundos enteros. */}
+            {state.activeTimeout
+              ? formatTime(state.timeoutClock)
+              : <RelojVivo segundos={state.mainClock} corriendo={state.isMainClockRunning}
+                  sinAlerta style={{ color: 'inherit' }} />}
           </div>
         </Draggable>
 

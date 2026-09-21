@@ -1,6 +1,7 @@
 "use client"
 
 import { RigidClock } from '@/components/scoreboard/RigidClock'
+import { RelojVivo } from '@/components/scoreboard/RelojVivo'
 
 import { defaultHomeName } from '@/lib/club-brand'
 
@@ -17,11 +18,10 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type {
-  GameState, Period, Player, MatchPhase, Team, MatchConfig,
-  SignatureData, ClosingSignatureData, MatchRecord
+  GameState, Period, Player, MatchPhase, Team, MatchConfig, MatchRecord
 } from '@/hooks/use-game-state'
 
-import { OfficialSheetModal } from '@/components/scoreboard/OfficialSheetModal'
+import { MatchStatsModal } from '@/components/scoreboard/MatchStatsModal'
 import { PreMatchSetup } from '@/components/scoreboard/PreMatchSetup'
 import { MatchHistoryModal } from '@/components/scoreboard/MatchHistoryModal'
 import { AudioModal } from '@/components/scoreboard/AudioModal'
@@ -38,7 +38,6 @@ import { HOTKEY_EVENT, OPEN_HOTKEYS_EVENT } from '@/lib/hotkeys'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
 import { RefereeActions } from '@/components/scoreboard/RefereeActions'
 import { useTheme } from '@/lib/themes'
-import { SignatureCanvas } from '@/components/scoreboard/SignatureCanvas'
 
 import {
   MIN_TOTAL_PLAYERS, getDisplayNumber, getStaffLabel, getStaffName,
@@ -66,8 +65,6 @@ export interface CourtOperatorViewProps {
   playBuzzer: () => void
   configureMatch: (config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null) => void
   configureMatchWithResume?: (config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null, resume: ResumeParams) => void
-  setSignature: (role: keyof SignatureData, signatureData: string) => void
-  setClosingSignature: (role: keyof ClosingSignatureData, signatureData: string) => void
   setMatchPhase: (phase: MatchPhase) => void
   saveTeam: (team: Team) => void
   deleteTeam: (teamId: string) => void
@@ -160,9 +157,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
    * no en este componente.
    */
   const matchEnded = state.isMatchEnded
-  const [showOfficialSheet, setShowOfficialSheet] = useState(false)
+  const [showStats, setShowStats] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
-  const [planillaLocked, setPlanillaLocked] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showDrawer, setShowDrawer] = useState(false)
   const [showHotkeys, setShowHotkeys] = useState(false)
@@ -230,7 +226,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [showIntermissionSelector, setShowIntermissionSelector] = useState(false)
   const [customIntermissionMinutes, setCustomIntermissionMinutes] = useState('')
-  const [signingClosingRole, setSigningClosingRole] = useState<keyof ClosingSignatureData | null>(null)
 
 
   // Ficha seleccionada -> hoja de acciones
@@ -541,7 +536,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     // operador justo cuando el partido acababa —que es cuando hay gente
     // preguntando el resultado, jugadores saliendo y el arbitro acercandose a
     // la mesa— y habia que cerrarla para ver el marcador final. Ahora se
-    // genera solo cuando se pide, con el boton PLANILLA.
+    // genera solo cuando se pide, con el boton ESTADÍSTICAS.
     props.setMatchPhase('finalizado' as MatchPhase)
     props.endMatch()
     setShowEndConfirm(false)
@@ -550,8 +545,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const handleFullReset = () => {
     props.resetAll()
     setShowResetConfirm(false)
-    setShowOfficialSheet(false)
-    setPlanillaLocked(false)
+    setShowStats(false)
     // Ya no hace falta resetear un candado a mano: seededFor se guía por
     // timestamps.matchStart, y resetAll() lo deja vacío por su cuenta.
   }
@@ -646,22 +640,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
 
   // ─── Pre-partido ───────────────────────────────────────────────────────────
 
-  if (signingClosingRole) {
-    const titles: Record<keyof ClosingSignatureData, string> = {
-      capitanLocal: `Firma Capitan ${homeTeamName}`, capitanVisita: `Firma Capitan ${awayTeamName}`,
-      dtLocal: `Firma DT ${homeTeamName}`, dtVisita: `Firma DT ${awayTeamName}`,
-      encargadoCancha: 'Firma Encargado de Cancha', arbitroCronometrista: 'Firma Arbitro Cronometrista',
-      arbitroPrincipal: 'Firma Arbitro Principal', arbitroAuxiliar: 'Firma Arbitro Auxiliar'
-    }
-    return (
-      <SignatureCanvas
-        title={titles[signingClosingRole]}
-        onSave={sig => { props.setClosingSignature(signingClosingRole, sig); setSigningClosingRole(null) }}
-        onCancel={() => setSigningClosingRole(null)}
-      />
-    )
-  }
-
   if (state.matchPhase === 'pre-partido' && !state.isMatchConfigured) {
     return (
       <PreMatchSetup
@@ -669,7 +647,6 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         savedTeams={props.savedTeams}
         configureMatch={props.configureMatch}
         configureMatchWithResume={props.configureMatchWithResume}
-        setSignature={props.setSignature}
         saveTeam={props.saveTeam}
         deleteTeam={props.deleteTeam}
       />
@@ -957,18 +934,15 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         clearHistory={props.clearHistory}
       />
 
-      <OfficialSheetModal
-        open={showOfficialSheet}
-        onClose={() => setShowOfficialSheet(false)}
+      <MatchStatsModal
+        open={showStats}
+        onClose={() => setShowStats(false)}
         state={state}
         homeTeamName={homeTeamName}
         awayTeamName={awayTeamName}
         matchEnded={matchEnded}
-        setSigningClosingRole={setSigningClosingRole}
         onSaveMatchToHistory={props.saveMatchToHistory}
         onSaveAndReset={props.onSaveAndReset}
-        planillaLocked={planillaLocked}
-        onLockPlanilla={() => setPlanillaLocked(true)}
       />
 
       {/* ── BARRA MAESTRA: reloj, periodo, chicharra ───────────────────────── */}
@@ -1023,7 +997,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
                     cuenta del timeout: el operador perdia de vista el minuto del
                     partido justo cuando el arbitro pregunta por el. El timeout
                     tiene su propio panel, que ya existe. */}
-                <RigidClock seconds={state.mainClock} tenthsUnder={state.isMainClockRunning ? 10 : 0} />
+                <RelojVivo segundos={state.mainClock} corriendo={state.isMainClockRunning}
+                  sinAlerta={state.isIntermission || !!state.activeTimeout} />
           </span>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-[10px] font-bold text-zinc-500">
@@ -1378,11 +1353,11 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <SlidersHorizontal className="w-4 h-4 mr-1" /> AJUSTES
         </Button>
         {matchEnded ? (
-          <Button onClick={resumeMatch} disabled={planillaLocked} className="h-10 font-bold text-xs bg-green-600 hover:bg-green-500 disabled:opacity-40"><Play className="w-4 h-4 mr-1" /> REANUDAR</Button>
+          <Button onClick={resumeMatch} className="h-10 font-bold text-xs bg-green-600 hover:bg-green-500"><Play className="w-4 h-4 mr-1" /> REANUDAR</Button>
         ) : (
-          <Button onClick={() => setShowEndConfirm(true)} disabled={planillaLocked} className="h-10 font-bold text-xs bg-cyan-700 hover:bg-cyan-600 disabled:opacity-40"><Square className="w-4 h-4 mr-1" /> FIN</Button>
+          <Button onClick={() => setShowEndConfirm(true)} className="h-10 font-bold text-xs bg-cyan-700 hover:bg-cyan-600"><Square className="w-4 h-4 mr-1" /> FIN</Button>
         )}
-        <Button onClick={() => setShowOfficialSheet(true)} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.penal}`}><FileText className="w-4 h-4 mr-1" /> PLANILLA</Button>
+        <Button onClick={() => setShowStats(true)} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.penal}`}><FileText className="w-4 h-4 mr-1" /> ESTADÍSTICAS</Button>
         <Button onClick={() => setShowHistory(true)} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.secondary}`}><History className="w-4 h-4 mr-1" /> HISTORIAL</Button>
         <Button onClick={() => setShowResetConfirm(true)} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.danger}`}><RotateCcw className="w-4 h-4 mr-1" /> NUEVO</Button>
       </div>
@@ -1907,7 +1882,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <div className="text-center p-4">
             <AlertCircle className="w-14 h-14 text-red-500 mx-auto mb-3" />
             <h2 className="text-2xl font-black text-red-500 mb-2">FINALIZAR PARTIDO</h2>
-            <p className="text-zinc-400 mb-5">Bloquea controles y genera la planilla oficial.</p>
+            <p className="text-zinc-400 mb-5">Se bloquean los controles de juego y quedan listas las estadísticas.</p>
             <div className="flex gap-3">
               <Button onClick={() => setShowEndConfirm(false)} variant="outline" className="flex-1 h-12 font-bold border-zinc-600">CANCELAR</Button>
               <Button onClick={confirmEndMatch} className="flex-1 h-12 font-black bg-red-600 hover:bg-red-500">SI, FINALIZAR</Button>

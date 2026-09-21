@@ -85,9 +85,15 @@ export interface OverlaysConfig {
 
 export const DEFAULT_LAYOUT: LayoutConfig = { scale: 1, align: 'center', marcaUrl: '' }
 
+/**
+ * TODOS LOS LANZADORES PARTEN APAGADOS (3.55).
+ * Cada uno se enciende en su modal (Lanzadores de proyección). Encendidos por
+ * defecto, un equipo recién instalado pintaba animaciones que nadie pidió y
+ * gastaba rendimiento en ellas. Lo ya configurado y guardado no cambia.
+ */
 export const DEFAULT_OVERLAYS: OverlaysConfig = {
   goal: {
-    enabled: true, boards: [1], duration: 5, text: '¡GOL!',
+    enabled: false, boards: [1], duration: 5, text: '¡GOL!',
     showPlayerNumber: true, showScore: true, showWatermark: true,
     textColor: '#ffffff', scoreColor: '#facc15', useTeamColor: true,
     jerseyDesign: 'solid',
@@ -95,17 +101,17 @@ export const DEFAULT_OVERLAYS: OverlaysConfig = {
     scale: 1, align: 'center', marcaUrl: ''
   },
   final: {
-    enabled: true, boards: [1], winnerSeconds: 10, showFicha: true,
+    enabled: false, boards: [1], winnerSeconds: 10, showFicha: true,
     winnerText: '¡GANADOR!', drawText: 'EMPATE',
     scale: 1, align: 'center', marcaUrl: ''
   },
   figura: {
-    enabled: true, boards: [1], trasGanador: 6, segundos: 8,
+    enabled: false, boards: [1], trasGanador: 6, segundos: 8,
     titulo: 'FIGURA DEL PARTIDO',
     scale: 1, align: 'center', marcaUrl: ''
   },
   stats: {
-    enabled: true, boards: [1], breakDelay: 5, showInBreak: true,
+    enabled: false, boards: [1], breakDelay: 5, showInBreak: true,
     showScorers: true, showGoalMinutes: true, showCards: true,
     showFouls: true, showPossession: true, showByPeriod: true,
     scale: 1, align: 'center', marcaUrl: ''

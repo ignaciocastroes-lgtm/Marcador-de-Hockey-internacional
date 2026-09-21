@@ -52,9 +52,20 @@ export function RigidClock({
   const anchoDigito = digitEm ? `${digitEm}em` : '1ch'
   const anchoSeparador = digitEm ? `${digitEm * 0.45}em` : '0.55ch'
 
+  /**
+   * ANCHO FIJO, sea cual sea el formato.
+   * `MM:SS` son cinco casillas y `SS.d` son cuatro: al pasar a décimas el
+   * reloj se angostaba un dígito y arrastraba todo lo que tenía al lado —en
+   * PISTA, los 45 y los marcadores de gol y falta "bailaban"—. Se reserva
+   * siempre el ancho del formato largo y el contenido se centra dentro.
+   */
+  const anchoFijo = digitEm
+    ? `${4 * digitEm + digitEm * 0.45}em`
+    : 'calc(4ch + 0.55ch)'
+
   return (
-    <span className={`inline-flex items-baseline leading-none tabular-nums ${className}`}
-      style={{ fontVariantNumeric: 'tabular-nums', ...style }}>
+    <span className={`inline-flex items-baseline justify-center leading-none tabular-nums ${className}`}
+      style={{ fontVariantNumeric: 'tabular-nums', minWidth: anchoFijo, ...style }}>
       {chars.map((c, i) => {
         const separator = c === ':' || c === '.'
         return (

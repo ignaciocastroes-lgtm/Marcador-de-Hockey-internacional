@@ -3,14 +3,16 @@
 import { useState, useMemo } from 'react'
 import { toast } from 'sonner'
 import {
-  History, X, Download, Trash2, Search, Trophy, Target,
-  AlertTriangle, ChevronDown, ChevronRight, ShieldAlert
+  History, X, Trash2, Search, Trophy, Target,
+  AlertTriangle, ChevronDown, ChevronRight, ShieldAlert, Globe
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { MatchRecord, MatchEvent } from '@/hooks/use-game-state'
+import { buildJornadaJSON, buildJornadaHTML, cronicaDeRegistro, agruparPorFecha, fechaCorta, HISTORY_ESCUDOS_KEY } from '@/lib/history'
+import { abrirCronica, bajar } from '@/lib/match-report'
 
 export interface MatchHistoryModalProps {
   open: boolean
@@ -18,22 +20,6 @@ export interface MatchHistoryModalProps {
   matchHistory: MatchRecord[]
   deleteMatchFromHistory: (id: string) => void
   clearHistory: () => void
-}
-
-// Escapa comas, comillas y saltos de linea
-const q = (v: unknown) => {
-  const t = (v ?? '').toString()
-  return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t
-}
-
-const download = (name: string, content: string) => {
-  const blob = new Blob(['\ufeff' + content], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 const fmtDate = (iso: string) => {
@@ -130,6 +116,39 @@ export function MatchHistoryModal({
   const [expanded, setExpanded] = useState<string | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
 
+  const leerEscudos = (): Record<string, string> => {
+    try { return JSON.parse(localStorage.getItem(HISTORY_ESCUDOS_KEY) || '{}') } catch { return {} }
+  }
+
+  /**
+   * ARCHIVO DEL DÍA — un botón en cada día del historial.
+   * Crea el JSON oficial (`ardi:jornada`, el que se sube a la web), lo
+   * descarga y abre la vista del día con las crónicas de esos mismos partidos.
+   * Siempre el día COMPLETO, aunque la lista esté filtrada por serie.
+   */
+  const archivoDelDia = (fecha: string) => {
+    const mapa = leerEscudos()
+    const { jornada, sinDatos } = buildJornadaJSON(matchHistory, fecha, mapa)
+    const n = jornada.partidos.length
+    if (n === 0) {
+      toast.warning(`Los ${sinDatos} partidos de ese día se guardaron antes de la 3.55 y no traen los datos para la web.`)
+      return
+    }
+    // La vista primero: abrir una ventana sólo se permite en el mismo toque.
+    abrirCronica(buildJornadaHTML(matchHistory, fecha, mapa), `jornada-${fecha}.html`)
+    bajar(JSON.stringify(jornada, null, 2), `jornada-${fecha}.json`, 'application/json')
+    const t = `${n} ${n === 1 ? 'partido' : 'partidos'} en jornada-${fecha}.json.`
+    if (sinDatos > 0) toast.info(`${t} ${sinDatos} de ese día quedaron fuera: se guardaron antes de la 3.55.`)
+    else toast.success(t)
+  }
+
+  /** La crónica de un partido guardado, como se vio ese día. */
+  const verCronica = (m: MatchRecord) => {
+    const doc = cronicaDeRegistro(m, leerEscudos())
+    if (!doc) { toast.warning('Este partido se guardó antes de la 3.55: no tiene crónica guardada.'); return }
+    abrirCronica(doc, `cronica-${m.web?.fecha || 'partido'}-${m.id}.html`)
+  }
+
   const series = useMemo(() => {
     const set = new Set(matchHistory.map(m => m.series).filter(Boolean))
     return ['TODAS', ...Array.from(set)]
@@ -150,72 +169,6 @@ export function MatchHistoryModal({
 
   const standings = useMemo(() => buildStandings(filtered), [filtered])
   const scorers = useMemo(() => buildScorers(filtered), [filtered])
-
-  // ─── Exportaciones ─────────────────────────────────────────────────────────
-
-  const exportResumen = () => {
-    if (filtered.length === 0) { toast.warning('No hay partidos que exportar con este filtro.'); return }
-    let csv = 'HISTORIAL DE PARTIDOS\n'
-    csv += `Filtro,${q(serieFilter)}\n`
-    csv += `Partidos,${filtered.length}\n\n`
-    csv += 'Fecha,Serie,Rama,Local,Goles Local,Goles Visita,Visita,Penales,Ganador\n'
-    filtered.forEach(m => {
-      const tie = m.homeScore === m.awayScore && ((m.homePenalties || 0) > 0 || (m.awayPenalties || 0) > 0)
-      // null significa que fue a desempate y quedo igualado: no es empate.
-      const winnerName = m.winner === 'draw' ? 'EMPATE'
-        : m.winner === 'home' ? m.homeTeam
-        : m.winner === 'away' ? m.awayTeam
-        : 'NO DEFINIDO'
-      csv += [
-        fmtDate(m.date), q(m.series), q(m.gender), q(m.homeTeam),
-        m.homeScore, m.awayScore, q(m.awayTeam),
-        tie ? `${m.homePenalties}-${m.awayPenalties}` : '',
-        q(winnerName)
-      ].join(',') + '\n'
-    })
-    download(`historial_${serieFilter.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`, csv)
-  }
-
-  const exportPosiciones = () => {
-    if (standings.length === 0) { toast.warning('No hay datos para la tabla.'); return }
-    let csv = 'TABLA DE POSICIONES\n'
-    csv += `Serie,${q(serieFilter)}\n\n`
-    csv += 'Pos,Equipo,PJ,PG,PE,PP,GF,GC,DIF,PTS,Amarillas,Azules,Rojas\n'
-    standings.forEach((r, i) => {
-      csv += [
-        i + 1, q(r.team), r.pj, r.pg, r.pe, r.pp, r.gf, r.gc, r.gf - r.gc, r.pts,
-        r.amarillas, r.azules, r.rojas
-      ].join(',') + '\n'
-    })
-    csv += '\nGOLEADORES\nPos,Camiseta,Nombre,Equipo,Goles\n'
-    scorers.forEach((s, i) => {
-      csv += [i + 1, q(s.number), q(s.name), q(s.team), s.goles].join(',') + '\n'
-    })
-    download(`posiciones_${serieFilter.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`, csv)
-  }
-
-  const exportMatch = (m: MatchRecord) => {
-    let csv = 'PARTIDO\n'
-    csv += `Fecha,${fmtDate(m.date)}\n`
-    csv += `Serie,${q(m.series)}\nRama,${q(m.gender)}\n`
-    csv += `${q(m.homeTeam)},${m.homeScore}\n${q(m.awayTeam)},${m.awayScore}\n`
-    if (m.homeScore === m.awayScore && ((m.homePenalties || 0) > 0 || (m.awayPenalties || 0) > 0)) {
-      csv += `Definicion por penales,${m.homePenalties} - ${m.awayPenalties}\n`
-    }
-    csv += '\nCUERPO ARBITRAL\n'
-    csv += `Arbitro Principal,${q(m.referees?.principal || '')}\n`
-    csv += `Segundo Arbitro,${q(m.referees?.segundo || '')}\n`
-    csv += `Cronometrista,${q(m.referees?.cronometrista || '')}\n`
-    csv += '\nREGISTRO CRONOLOGICO\nPeriodo,Minuto,Equipo,Evento,Actor,Detalles\n'
-    ;(m.matchLog || []).forEach(e => {
-      const teamN = e.team === 'home' ? m.homeTeam : e.team === 'away' ? m.awayTeam : 'SISTEMA'
-      csv += [
-        periodLabel(e.period), fmtGameTime(e.gameTime), q(teamN),
-        e.eventType.toUpperCase(), q(e.actor), q(e.details || '')
-      ].join(',') + '\n'
-    })
-    download(`partido_${m.homeTeam}_vs_${m.awayTeam}_${fmtDate(m.date).replace(/\//g, '-')}.csv`, csv)
-  }
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -271,12 +224,26 @@ export function MatchHistoryModal({
             <div className="h-full flex flex-col items-center justify-center text-center gap-2 text-zinc-600">
               <ShieldAlert className="w-12 h-12" />
               <p className="font-bold">Todavía no hay partidos guardados.</p>
-              <p className="text-xs">Al finalizar un partido, usa el botón Historial de la planilla oficial.</p>
+              <p className="text-xs">Al terminar un partido, ábrelo en Estadísticas y toca Guardar en historial.</p>
             </div>
           ) : tab === 'partidos' ? (
             <div className="space-y-2">
               {filtered.length === 0 && <p className="text-zinc-600 text-sm text-center py-8">Ningún partido coincide con el filtro.</p>}
-              {filtered.map(m => {
+              {/* Agrupado por día. Cada día con su botón para la web. */}
+              {agruparPorFecha(filtered).map(({ fecha, registros }) => (
+              <div key={fecha} className="space-y-2">
+                <div className="flex items-center gap-2 pt-2 first:pt-0">
+                  <span className="text-xs font-black text-zinc-300 tabular-nums">{fechaCorta(fecha)}</span>
+                  <span className="text-[10px] font-bold text-zinc-500">
+                    {registros.length} {registros.length === 1 ? 'partido' : 'partidos'}
+                  </span>
+                  <Button onClick={() => archivoDelDia(fecha)} size="sm"
+                    className="ml-auto h-8 bg-emerald-700 hover:bg-emerald-600 font-bold text-[11px]"
+                    title="Crea el JSON del día para la web, lo descarga y abre la vista">
+                    <Globe className="w-3.5 h-3.5 mr-1.5" /> Archivo del día
+                  </Button>
+                </div>
+              {registros.map(m => {
                 const tie = m.homeScore === m.awayScore && ((m.homePenalties || 0) > 0 || (m.awayPenalties || 0) > 0)
                 const isOpen = expanded === m.id
                 const cards = m.sanctions || []
@@ -299,8 +266,10 @@ export function MatchHistoryModal({
                           {tie && <span className="text-[10px] font-bold text-purple-400 shrink-0">(pen {m.homePenalties}-{m.awayPenalties})</span>}
                         </div>
                       </div>
-                      <Button onClick={() => exportMatch(m)} size="sm" variant="outline" className="h-8 border-zinc-700 text-xs shrink-0" title="Exportar este partido">
-                        <Download className="w-3.5 h-3.5" />
+                      <Button onClick={() => verCronica(m)} disabled={!m.cronica} size="sm" variant="outline"
+                        className="h-8 border-zinc-700 text-xs shrink-0 disabled:opacity-30"
+                        title={m.cronica ? 'Ver la crónica de este partido' : 'Guardado antes de la 3.55: sin crónica'}>
+                        <Globe className="w-3.5 h-3.5" />
                       </Button>
                       <Button onClick={() => { deleteMatchFromHistory(m.id)}}
                         size="sm" variant="outline" className="h-8 border-red-900 text-red-400 hover:bg-red-950 text-xs shrink-0" title="Eliminar del historial">
@@ -358,6 +327,8 @@ export function MatchHistoryModal({
                   </div>
                 )
               })}
+              </div>
+              ))}
             </div>
           ) : tab === 'posiciones' ? (
             <table className="w-full text-xs">
@@ -423,13 +394,7 @@ export function MatchHistoryModal({
         </div>
 
         <div className="border-t border-zinc-800 p-3 flex flex-wrap gap-2 shrink-0 bg-zinc-950">
-          <Button onClick={exportResumen} className="flex-1 min-w-[140px] h-10 bg-green-600 hover:bg-green-500 font-bold text-xs">
-            <Download className="w-4 h-4 mr-2" /> EXPORTAR HISTORIAL
-          </Button>
-          <Button onClick={exportPosiciones} className="flex-1 min-w-[140px] h-10 bg-blue-600 hover:bg-blue-500 font-bold text-xs">
-            <Trophy className="w-4 h-4 mr-2" /> TABLA Y GOLEADORES
-          </Button>
-          <Button onClick={() => setConfirmClear(true)} variant="outline" className="h-10 border-red-900 text-red-400 hover:bg-red-950 font-bold text-xs">
+          <Button onClick={() => setConfirmClear(true)} variant="outline" className="ml-auto h-10 border-red-900 text-red-400 hover:bg-red-950 font-bold text-xs">
             <Trash2 className="w-4 h-4 mr-2" /> BORRAR TODO
           </Button>
         </div>

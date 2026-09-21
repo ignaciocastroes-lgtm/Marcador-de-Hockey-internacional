@@ -19,7 +19,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-import type { GameState, Period, Team, MatchConfig, Player, RefereeData, SignatureData } from '@/hooks/use-game-state'
+import { leerReanudacion } from '@/lib/resume-import'
+import { fechaLocal } from '@/lib/history'
+import type { GameState, Period, Team, MatchConfig, Player, RefereeData } from '@/hooks/use-game-state'
 import { TacticalBoard } from '@/components/scoreboard/TacticalBoard'
 import { generateExpressRoster, downloadRosterCSV } from '@/lib/roster-utils'
 
@@ -47,7 +49,6 @@ interface PreMatchSetupProps {
   savedTeams: Team[]
   configureMatch: (config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null) => void
   configureMatchWithResume?: (config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null, resume: ResumeParams) => void
-  setSignature: (role: keyof SignatureData, signatureData: string) => void
   saveTeam: (team: Team) => void
   deleteTeam: (teamId: string) => void
 }
@@ -58,7 +59,7 @@ const parseRoster = (input: string): string[] =>
 input.split(/[,\s]+/).map(n => n.trim()).filter(n => n && /^\d+$/.test(n))
 
 export function PreMatchSetup(props: PreMatchSetupProps) {
-  const { state, savedTeams, configureMatch, configureMatchWithResume, setSignature, saveTeam, deleteTeam } = props
+  const { state, savedTeams, configureMatch, configureMatchWithResume, saveTeam, deleteTeam } = props
 
   /**
    * La puerta: tres tarjetas. El detalle de jugadores y planteles queda detras
@@ -146,8 +147,6 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
   const [newPlayerPosition, setNewPlayerPosition] = useState<Player['position']>('')
   const [newPlayerRole, setNewPlayerRole]       = useState<string>('')
   const [editingPlayerTeam, setEditingPlayerTeam] = useState<'home' | 'away'>('home')
-
-  // ─── Firmas ───────────────────────────────────────────────────────────────
 
   // ─── Rosters guardados ────────────────────────────────────────────────────
   const [savedRosters, setSavedRosters] = useState<SavedRoster[]>([])
@@ -239,44 +238,24 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
   // personas con `crypto.randomUUID()`, sin identidad estable. Quedarse con
   // las funciones sin usar invitaba a volver a cablearlas por error.
 
+  /** Lee los Datos web (JSON) del partido suspendido; también un CSV viejo. */
   const handleResumeStateImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''   // permite volver a elegir el mismo archivo
     if (!file) return
     const reader = new FileReader()
     reader.onload = (event) => {
-      try {
-        const text   = event.target?.result as string
-        const lines  = text.split('\n').map(l => l.trim())
-        const findValue = (key: string) => {
-          const line = lines.find(l => l.startsWith(key))
-          return line ? line.split(',')[1] : null
-        }
-        // Lee el bloque REANUDACION (LECTURA AUTOMATICA) que emite exportCSV
-        const VALID_PERIODS: Period[] = ['1er_tiempo', '2do_tiempo', 'alargue', 'penales']
-        const rawPeriodo   = (findValue('Periodo Reanudacion') || '1er_tiempo').trim()
-        const resPeriodo   = (VALID_PERIODS.includes(rawPeriodo as Period) ? rawPeriodo : '1er_tiempo') as Period
-        const resMinutos   = (findValue('Minuto Reanudacion') || '00:00').trim()
-        const resHomeScore = findValue('Resultado Local')  || '0'
-        const resAwayScore = findValue('Resultado Visita') || '0'
-        const resHomeFouls = findValue('Faltas Local')  || '0'
-        const resAwayFouls = findValue('Faltas Visita') || '0'
-        const [rawMin, rawSec] = resMinutos.split(':')
-
-        if (!findValue('Periodo Reanudacion')) {
-          toast.error('El archivo no tiene el bloque de reanudacion. Exporta la planilla desde ARDI para reanudar.')
-          return
-        }
-
-        setResumePeriod(resPeriodo)
-        setResumeMinutes((parseInt(rawMin) || 0).toString())
-        setResumeSeconds((parseInt(rawSec) || 0).toString())
-        setResumeHomeScore(resHomeScore)
-        setResumeAwayScore(resAwayScore)
-        setResumeHomeFouls(resHomeFouls)
-        setResumeAwayFouls(resAwayFouls)
-      } catch {
-        toast.error('Error al parsear el archivo CSV de reanudación.')
-      }
+      const r = leerReanudacion(String(event.target?.result || ''))
+      if (!r.ok) { toast.error(r.error); return }
+      const d = r.datos
+      setResumePeriod(d.periodo)
+      setResumeMinutes(String(d.minutos))
+      setResumeSeconds(String(d.segundos))
+      setResumeHomeScore(String(d.golesLocal))
+      setResumeAwayScore(String(d.golesVisita))
+      setResumeHomeFouls(String(d.faltasLocal))
+      setResumeAwayFouls(String(d.faltasVisita))
+      toast.success('Partido cargado: revisa los valores antes de iniciar.')
     }
     reader.readAsText(file)
   }
@@ -372,13 +351,11 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
       // esta jugando ahora. Nadie deberia teclear la fecha de hoy un sabado
       // por la manana. Lo escrito a mano manda, que es lo que hace falta al
       // reanudar un suspendido de otra fecha.
-      fecha: configFecha || new Date().toISOString().slice(0, 10),
+      fecha: configFecha || fechaLocal(new Date()),   // local, no UTC: ver lib/history
       hora: configHora || new Date().toTimeString().slice(0, 5),
       estadio: configEstadio,
       homeRoster: homeRosterNumbers, awayRoster: awayRosterNumbers,
       homePlayers, awayPlayers, referees,
-      signatures: state.matchConfig.signatures,
-      closingSignatures: state.matchConfig.closingSignatures,
       isExpressMode: state.matchConfig.isExpressMode,
       allowOvertime: configAllowOvertime, allowPenalties: configAllowPenalties,
     }
@@ -580,10 +557,10 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
             {configResumeMode && (
               <div className="bg-amber-950/20 border border-amber-700/50 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-amber-800 pb-2">
-                  <p className="text-amber-300 text-xs font-bold">Importación Rápida por Planilla de Cierre (CSV):</p>
-                  <input type="file" accept=".csv" className="hidden" id="resume-state-import" onChange={handleResumeStateImport} />
+                  <p className="text-amber-300 text-xs font-bold">Desde el archivo del partido (Datos web):</p>
+                  <input type="file" accept=".json,.csv,application/json,text/csv" className="hidden" id="resume-state-import" onChange={handleResumeStateImport} />
                   <Button size="sm" variant="outline" className="border-amber-600 text-amber-400 h-7 text-xs bg-transparent" onClick={() => document.getElementById('resume-state-import')?.click()}>
-                    <Upload className="w-3 h-3 mr-1" /> Cargar Planilla Suspendida
+                    <Upload className="w-3 h-3 mr-1" /> Cargar partido suspendido
                   </Button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -730,9 +707,8 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
           Bloqueaban el boton de iniciar con "COMPLETE LAS 3 FIRMAS PARA
           CONTINUAR" en un flujo donde nadie las usaba. Verificado antes de
           sacarlas: `delegadoLocal`, `delegadoVisita` y `arbitroAuxiliarMesa`
-          no los leia nada mas que esta pantalla. El acta usa las OCHO firmas
-          de cierre, que son otras y viven en la planilla; no pierde ningun
-          campo.
+          no los leia nada mas que esta pantalla. Las de cierre salieron en la
+          3.54 junto con la planilla oficial: ya no se firma nada.
         */}
         <div className="space-y-3">
           <Button onClick={handleStartMatch}

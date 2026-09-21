@@ -21,6 +21,9 @@
 
 import type { GameState, MatchEvent } from '@/hooks/use-game-state'
 import { buildSummary, playedMinute, fmtDuration } from '@/lib/match-summary'
+import { defaultHomeLogo, defaultHomeName } from '@/lib/club-brand'
+import { documentoCronica, conBarraCronica, escHtml } from '@/lib/cronica-doc'
+import { fechaLocal } from '@/lib/history'
 
 export interface ReportOpts {
   homeTeamName: string
@@ -29,9 +32,34 @@ export interface ReportOpts {
   awayLogo?: string
 }
 
-const esc = (v: unknown): string =>
-  String(v ?? '').replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
+/**
+ * Nombres y escudos del partido, en UN solo lugar.
+ *
+ * Estaba escrito en el modal de estadísticas (con los escudos leídos en un
+ * efecto) y el historial guardaba otros nombres ('LOCAL' en vez del nombre
+ * del club). Ahora el modal, "Datos web" y el archivo del día salen de aquí.
+ *
+ * Los escudos salen del GESTOR DE PANTALLAS (`ardi-live-logos`), que es lo
+ * que usa el tablero; en un partido Express `state.homeTeam?.logo` está vacío.
+ * Se leen en el momento de exportar, así que siempre son los actuales.
+ */
+export function reportOptsFor(
+  state: GameState, names?: { home?: string; away?: string }
+): ReportOpts {
+  let live: { homeUrl?: string; awayUrl?: string } = {}
+  try {
+    if (typeof localStorage !== 'undefined') live = JSON.parse(localStorage.getItem('ardi-live-logos') || '{}')
+  } catch { /* sin escudos, el resto sale igual */ }
+  return {
+    homeTeamName: names?.home || state.homeTeam?.name || defaultHomeName(),
+    awayTeamName: names?.away || state.awayTeam?.name || 'VISITA',
+    homeLogo: live.homeUrl || state.homeTeam?.logo || defaultHomeLogo() || undefined,
+    awayLogo: live.awayUrl || state.awayTeam?.logo || undefined,
+  }
+}
+
+/** Un solo escapador de HTML para la crónica: el de `cronica-doc`. */
+const esc = escHtml
 
 const PERIODO: Record<string, string> = {
   '1er_tiempo': '1er tiempo', '2do_tiempo': '2do tiempo',
@@ -214,22 +242,12 @@ export function buildMatchArticle(state: GameState, o: ReportOpts): string {
 export function buildMatchReportHTML(state: GameState, o: ReportOpts): string {
   const r = buildSummary(state, 'completo')
   const titulo = `${o.homeTeamName} ${r.home.score} - ${r.away.score} ${o.awayTeamName}`
-  return `<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(titulo)}</title>
-<meta name="description" content="${esc(`${titulo} · ${state.matchConfig.campeonato || ''} ${state.matchConfig.seriesName || ''}`.trim())}">
-<style>body{margin:0;padding:20px;background:#0b0d11}</style>
-</head>
-<body>
-${buildMatchArticle(state, o)}
-</body>
-</html>`
+  return documentoCronica(titulo,
+    `${titulo} · ${state.matchConfig.campeonato || ''} ${state.matchConfig.seriesName || ''}`.trim(),
+    [buildMatchArticle(state, o)])
 }
 
-const bajar = (texto: string, nombre: string, tipo: string) => {
+export const bajar = (texto: string, nombre: string, tipo: string) => {
   const blob = new Blob([texto], { type: `${tipo};charset=utf-8;` })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
@@ -241,12 +259,8 @@ const bajar = (texto: string, nombre: string, tipo: string) => {
 const nombreArchivo = (state: GameState, o: ReportOpts) => {
   const limpio = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'equipo'
-  const f = state.matchConfig.fecha || new Date().toISOString().slice(0, 10)
+  const f = state.matchConfig.fecha || fechaLocal(new Date())
   return `${f}-${limpio(o.homeTeamName)}-vs-${limpio(o.awayTeamName)}`
-}
-
-export function downloadMatchReport(state: GameState, o: ReportOpts): void {
-  bajar(buildMatchReportHTML(state, o), `${nombreArchivo(state, o)}.html`, 'text/html')
 }
 
 /**
@@ -258,34 +272,12 @@ export function downloadMatchReport(state: GameState, o: ReportOpts): void {
  * copia el código con el botón que trae.
  */
 export function openMatchReport(state: GameState, o: ReportOpts): void {
-  const articulo = buildMatchArticle(state, o)
-  const doc = buildMatchReportHTML(state, o).replace('</body>', `
-<div style="max-width:860px;margin:16px auto 40px;display:flex;gap:8px;flex-wrap:wrap;
-  font-family:system-ui,sans-serif">
-  <button id="ardi-copiar" style="flex:1;min-width:200px;padding:12px;border:0;border-radius:10px;
-    background:#047857;color:#fff;font-weight:800;font-size:14px;cursor:pointer">
-    Copiar el código para la web
-  </button>
-  <button onclick="window.print()" style="flex:1;min-width:140px;padding:12px;border:1px solid #374151;
-    border-radius:10px;background:#111827;color:#e5e7eb;font-weight:700;font-size:14px;cursor:pointer">
-    Imprimir
-  </button>
-</div>
-<textarea id="ardi-src" style="position:absolute;left:-9999px" aria-hidden="true">${
-  articulo.replace(/<\/textarea>/gi, '&lt;/textarea&gt;')}</textarea>
-<style>@media print{#ardi-copiar,#ardi-src,button{display:none !important}}</style>
-<script>
-document.getElementById('ardi-copiar').onclick = function () {
-  var t = document.getElementById('ardi-src');
-  t.style.position='static'; t.select(); t.setSelectionRange(0, 999999);
-  try { document.execCommand('copy'); this.textContent = 'Copiado'; }
-  catch (e) { this.textContent = 'Selecciona el texto de abajo y copia'; t.style.height='120px'; }
-  t.style.position = this.textContent === 'Copiado' ? 'absolute' : 'static';
-  var b = this; setTimeout(function(){ b.textContent = 'Copiar el código para la web' }, 2500);
-};
-</script>
-</body>`)
+  const doc = conBarraCronica(buildMatchReportHTML(state, o), buildMatchArticle(state, o))
+  abrirCronica(doc, `${nombreArchivo(state, o)}.html`)
+}
 
+/** Abre una página de crónica ya armada (un partido o el día). */
+export function abrirCronica(doc: string, nombreSiBloquea: string): void {
   /**
    * VENTANA LATERAL, no pestaña.
    *
@@ -306,7 +298,7 @@ document.getElementById('ardi-copiar').onclick = function () {
     `scrollbars=yes,resizable=yes,menubar=no,toolbar=no`)
 
   // Bloqueador de ventanas emergentes: se descarga en vez de no hacer nada.
-  if (!w) { bajar(doc, `${nombreArchivo(state, o)}.html`, 'text/html'); return }
+  if (!w) { bajar(doc, nombreSiBloquea, 'text/html'); return }
   w.document.write(doc)
   w.document.close()
   w.focus()
@@ -347,6 +339,12 @@ export interface MatchJSON {
   parciales: { periodo: string; local: number; visita: number }[]
   duracionRealSeg: number | null
   cronologia: { minuto: string; periodo: string; equipo: 'local' | 'visita' | null; texto: string; anulado: boolean }[]
+  /**
+   * Dónde quedó el reloj. Lo lee "Cargar partido suspendido" para retomar
+   * (antes salía de un bloque del CSV, que ya no existe). La web lo ignora.
+   * Opcional: los archivos anteriores a la 3.55 no lo traen.
+   */
+  reanudacion?: { periodo: string; relojSeg: number }
 }
 
 export interface LadoJSON {
@@ -367,7 +365,7 @@ export function buildMatchJSON(state: GameState, o: ReportOpts): MatchJSON {
   const inicio = state.timestamps?.matchStart ? new Date(state.timestamps.matchStart) : null
   const fin = state.timestamps?.matchEnd ? new Date(state.timestamps.matchEnd) : null
 
-  const fecha = cfg.fecha || (inicio ? inicio.toISOString().slice(0, 10) : '')
+  const fecha = cfg.fecha || (inicio ? fechaLocal(inicio) : '')
   const hora = cfg.hora || (inicio ? inicio.toTimeString().slice(0, 5) : '')
 
   const lado = (k: 'home' | 'away'): LadoJSON => ({
@@ -430,6 +428,7 @@ export function buildMatchJSON(state: GameState, o: ReportOpts): MatchJSON {
         texto: e.details || e.eventType,
         anulado: !!e.anulado,
       })),
+    reanudacion: { periodo: state.period, relojSeg: Math.max(0, Math.round(state.mainClock || 0)) },
   }
 }
 

@@ -20,7 +20,6 @@ import {
 import { CLUB_BRAND, defaultHomeLogo, clubLogoFallback, clubIcon } from '@/lib/club-brand'
 import { seedFromDeployment } from '@/lib/club-boot'
 import { ScoreboardView } from '@/components/scoreboard-view'
- 'sonner'
 
 type ViewMode = 'operator' | 'pista' | 'videowall'
 
@@ -208,7 +207,12 @@ export default function HockeyControlPanel() {
     localStorage.setItem('ardi-view-mode', mode)
   }
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [visibleScreens, setVisibleScreens] = useState<string[]>(['1', '2', '3', '4', '5'])
+  /**
+   * Sólo P1 parte encendida (3.55). P2-P5 se encienden en Vistas y
+   * proyectores: cada pantalla visible es un tablero vivo más en PANTALLAS y
+   * una ventana más en LANZAR TODO. Lo ya guardado manda.
+   */
+  const [visibleScreens, setVisibleScreens] = useState<string[]>(['1'])
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   
   const gameState = useGameState() as any; 
@@ -370,7 +374,7 @@ export default function HockeyControlPanel() {
 
   const operatorProps = {
     ...gameState, configureMatch, configureMatchWithResume,
-    setSignature: gameState.setSignature, setMatchPhase: gameState.setMatchPhase, onSaveAndReset: handleSaveAndReset
+    setMatchPhase: gameState.setMatchPhase, onSaveAndReset: handleSaveAndReset
   }
 
   return (
