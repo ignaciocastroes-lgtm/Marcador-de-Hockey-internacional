@@ -21,44 +21,153 @@ export type LauncherId = 'goal' | 'final' | 'stats' | 'figura'
 export type LayoutMap = Record<string, ElementPos>
 
 /** Posiciones de fabrica. Son la referencia contra la que se sanea lo guardado. */
+/** Posiciones de fábrica, tomadas del montaje del club. */
 export const DEFAULT_LAYOUT: Record<LauncherId, LayoutMap> = {
   goal: {
-    watermark: { x: 960, y: 540, s: 1,    v: true },
-    text:      { x: 960, y: 300, s: 1,    v: true },
-    jersey:    { x: 760, y: 660, s: 1,    v: true },
-    shield:    { x: 1160, y: 660, s: 1,   v: true },
-    score:     { x: 960, y: 900, s: 1,    v: true },
-    marca:     { x: 1700, y: 140, s: 1, v: true }
+    watermark: {
+      x: 960,
+      y: 540,
+      s: 0.3,
+      v: true
+    },
+    text: {
+      x: 1420,
+      y: 234,
+      s: 1,
+      v: true
+    },
+    jersey: {
+      x: 1224,
+      y: 607,
+      s: 1.1,
+      v: true
+    },
+    shield: {
+      x: 373,
+      y: 437,
+      s: 1.6,
+      v: true
+    },
+    score: {
+      x: 918,
+      y: 950,
+      s: 1,
+      v: true
+    },
+    marca: {
+      x: 1700,
+      y: 140,
+      s: 1,
+      v: true
+    }
   },
   final: {
-    header:    { x: 960, y: 140, s: 1, v: true },
-    teams:     { x: 960, y: 480, s: 1, v: true },
-    periods:   { x: 960, y: 760, s: 1, v: true },
-    /**
-     * Los goleadores eran UNA capa de 1700 px con los dos equipos dentro. Al
-     * agrandarla crecian los dos a la vez, se iban contra los bordes y dejaba
-     * de leerse. Ahora son dos capas independientes, una por equipo: cada una
-     * se coloca y se escala por su lado.
-     */
-    scorersHome: { x: 520,  y: 930, s: 1, v: true },
-    scorersAway: { x: 1400, y: 930, s: 1, v: true },
-    marca:     { x: 1700, y: 140, s: 1, v: true }
+    header: {
+      x: 1153,
+      y: -59,
+      s: 1.9,
+      v: true
+    },
+    teams: {
+      x: 82,
+      y: 499,
+      s: 1.5,
+      v: true
+    },
+    periods: {
+      x: 1354,
+      y: 171,
+      s: 2.6,
+      v: true
+    },
+    scorersHome: {
+      x: 929,
+      y: 672,
+      s: 3,
+      v: true
+    },
+    scorersAway: {
+      x: 1893,
+      y: 723,
+      s: 2.2,
+      v: true
+    },
+    marca: {
+      x: 1700,
+      y: 140,
+      s: 1.2,
+      v: false
+    }
   },
   stats: {
-    header:    { x: 960, y: 120, s: 1, v: true },
-    score:     { x: 960, y: 320, s: 1, v: true },
-    compare:   { x: 960, y: 620, s: 1, v: true },
-    scorersHome: { x: 520,  y: 900, s: 1, v: true },
-    scorersAway: { x: 1400, y: 900, s: 1, v: true },
-    marca:     { x: 1700, y: 120, s: 1, v: true }
+    header: {
+      x: 954,
+      y: 133,
+      s: 1.6,
+      v: true
+    },
+    score: {
+      x: 989,
+      y: 529,
+      s: 1.3,
+      v: true
+    },
+    compare: {
+      x: 915,
+      y: 984,
+      s: 1.5,
+      v: true
+    },
+    scorersHome: {
+      x: 359,
+      y: 601,
+      s: 1.4,
+      v: true
+    },
+    scorersAway: {
+      x: 1589,
+      y: 576,
+      s: 1.4,
+      v: true
+    },
+    marca: {
+      x: 1700,
+      y: 120,
+      s: 1,
+      v: true
+    }
   },
-  /** Figura del partido: el dorsal al centro, grande. */
   figura: {
-    titulo:    { x: 960, y: 150, s: 1, v: true },
-    escudo:    { x: 960, y: 380, s: 1, v: true },
-    dorsal:    { x: 960, y: 640, s: 1, v: true },
-    motivo:    { x: 960, y: 930, s: 1, v: true },
-    marca:     { x: 1700, y: 140, s: 1, v: true }
+    titulo: {
+      x: 960,
+      y: 150,
+      s: 1,
+      v: true
+    },
+    escudo: {
+      x: 474,
+      y: 518,
+      s: 2.5,
+      v: true
+    },
+    dorsal: {
+      x: 1365,
+      y: 522,
+      s: 1.9,
+      v: true
+    },
+    motivo: {
+      x: 967,
+      y: 955,
+      s: 3,
+      v: true
+    },
+    marca: {
+      x: 1700,
+      y: 140,
+      s: 1,
+      v: true
+    }
   }
 }
 

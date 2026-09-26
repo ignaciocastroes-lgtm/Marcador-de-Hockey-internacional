@@ -54,30 +54,128 @@ const MIRROR_PAIRS: Record<string, string> = {
 const MIRROR_AXIS = 960
 
 
+/** Posiciones de fábrica del tablero P1, del montaje del club. */
 const DEFAULTS_P1 = {
-  clock: { x: 960, y: 170, s: 1, v: true },
-  homeLogo: { x: 310, y: 220, s: 1, v: true },
-  homeName: { x: 310, y: 380, s: 1, v: true },
-  homeScore: { x: 310, y: 640, s: 1, v: true },
-  period: { x: 960, y: 550, s: 1, v: true },
-  awayLogo: { x: 1610, y: 220, s: 1, v: true },
-  awayName: { x: 1610, y: 380, s: 1, v: true },
-  awayScore: { x: 1610, y: 640, s: 1, v: true },
-  homePossession: { x: 200, y: 920, s: 0.9, v: false },
-  homeLights: { x: 200, y: 740, s: 0.9, v: true },
-  homePenalties: { x: 500, y: 920, s: 0.9, v: true },
-  homeFouls: { x: 800, y: 920, s: 0.9, v: true },
-  awayPossession: { x: 1720, y: 920, s: 0.9, v: false },
-  awayLights: { x: 1720, y: 740, s: 0.9, v: true },
-  awayPenalties: { x: 1420, y: 920, s: 0.9, v: true },
-  awayFouls: { x: 1120, y: 920, s: 0.9, v: true },
-  homeSanctions: { x: 750, y: 700, s: 1, v: true },
-  awaySanctions: { x: 1170, y: 700, s: 1, v: true },
-  skaters: { x: 960, y: 880, s: 1, v: true },
-  // Reloj de posesión unificado — reemplaza a las dos cajas de arriba
-  // (homePossession/awayPossession, que quedan ocultas por defecto pero
-  // siguen ahí por si alguna vez hace falta el modo de dos cajas a mano).
-  possession: { x: 960, y: 790, s: 1, v: true },
+  clock: {
+    x: 960.5629565508357,
+    y: 117.0486239997708,
+    s: 1.4000000000000004,
+    v: true
+  },
+  homeLogo: {
+    x: 16.12235938269214,
+    y: 133.68887464589557,
+    s: 2.7000000000000015,
+    v: true
+  },
+  homeName: {
+    x: -1791.262158917305,
+    y: 16.14738128367093,
+    s: 1,
+    v: false
+  },
+  homeScore: {
+    x: 12.561096453640943,
+    y: 626.1654974489795,
+    s: 1.3000000000000003,
+    v: true
+  },
+  period: {
+    x: 957.3927577558575,
+    y: 453.0531525739922,
+    s: 1.1,
+    v: true
+  },
+  awayLogo: {
+    x: 1903.8776406173079,
+    y: 133.68887464589557,
+    s: 2.7000000000000015,
+    v: true
+  },
+  awayName: {
+    x: 3711.262158917305,
+    y: 16.14738128367093,
+    s: 1,
+    v: false
+  },
+  awayScore: {
+    x: 1907.4389035463591,
+    y: 626.1654974489795,
+    s: 1.3000000000000003,
+    v: true
+  },
+  homePossession: {
+    x: -1615.2045641447367,
+    y: 905.0294253700658,
+    s: 0.9,
+    v: false
+  },
+  homeLights: {
+    x: 568.0543231247066,
+    y: 541.4366184320666,
+    s: 1.4000000000000004,
+    v: true
+  },
+  homePenalties: {
+    x: -1121.3231179834133,
+    y: 498.06586254978964,
+    s: 0.9,
+    v: false
+  },
+  homeFouls: {
+    x: 332.2975088215794,
+    y: 1011.8487627498573,
+    s: 1.1,
+    v: true
+  },
+  awayPossession: {
+    x: 3535.2045641447367,
+    y: 905.0294253700658,
+    s: 0.8,
+    v: false
+  },
+  awayLights: {
+    x: 1351.9456768752934,
+    y: 541.4366184320666,
+    s: 1.4000000000000004,
+    v: true
+  },
+  awayPenalties: {
+    x: 3041.3231179834133,
+    y: 498.06586254978964,
+    s: 0.9,
+    v: false
+  },
+  awayFouls: {
+    x: 1587.7024911784206,
+    y: 1011.8487627498573,
+    s: 1.1,
+    v: true
+  },
+  homeSanctions: {
+    x: -89.43219254190171,
+    y: 1143.8661197671915,
+    s: 1.3000000000000003,
+    v: true
+  },
+  awaySanctions: {
+    x: 2009.4321925419017,
+    y: 1143.8661197671915,
+    s: 1.3000000000000003,
+    v: true
+  },
+  skaters: {
+    x: 674.2855274433994,
+    y: 1406.0772082270407,
+    s: 1,
+    v: false
+  },
+  possession: {
+    x: 967.3716091725547,
+    y: 973.6977785563239,
+    s: 2.300000000000001,
+    v: true
+  }
 }
 
 const DEFAULTS_P2 = {
@@ -384,7 +482,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   const [autoScale, setAutoScale] = useState(true)
 
   const [containerBaseScale, setContainerBaseScale] = useState(1)
-  const [previewZoom, setPreviewZoom] = useState(0.35) 
+  const [previewZoom, setPreviewZoom] = useState(0.25) 
 
   const [editMode, setEditMode] = useState(false)
   const [mirrorMode, setMirrorMode] = useState(true)
@@ -394,10 +492,10 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   const [liveLogos, setLiveLogos] = useState({ 
     homeUrl: '', 
     awayUrl: '', 
-    shape: 'shield', 
-    effect3D: false, 
-    effectAnimated: false,
-    displayMode: 'logoAndName',
+    shape: 'none', 
+    effect3D: '1', 
+    effectAnimated: '1',
+    displayMode: 'shield',
     ledFont: 'impact', 
     fontWeight: '900', 
     letterSpacing: 'normal',
@@ -936,11 +1034,23 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
           50% { transform: scale(1.6) translate(2%, 2%); }
           100% { transform: scale(1.5) translate(-2%, -2%); }
         }
+        /*
+          EL "¡GOL!" PALPITA, NO TIEMBLA.
+          Antes duraba 0,6 s y movia la ESCALA entre 1 y 1,05 sin parar. Sobre
+          un texto de 300 px ese 5% son unos 15 px de desplazamiento cada 0,3
+          segundos: se leia como un temblor, no como un latido.
+          Ahora la geometria queda QUIETA —el texto no se mueve ni un pixel— y
+          lo que respira es el brillo, a 1,6 s por ciclo. Se nota vivo y se
+          sigue leyendo desde la tribuna.
+        */
         @keyframes goalFlash {
-          0%, 100% { opacity: 1; transform: scale(1) translateY(-20px); text-shadow: 0 0 40px rgba(255,255,255,1); }
-          50% { opacity: 0.9; transform: scale(1.05) translateY(-20px); text-shadow: 0 0 80px rgba(255,255,255,1); }
+          0%, 100% { opacity: 1;    text-shadow: 0 0 40px rgba(255,255,255,0.95); }
+          50%      { opacity: 0.88; text-shadow: 0 0 95px rgba(255,255,255,1); }
         }
-        .animate-goal-flash { animation: goalFlash 0.6s ease-in-out infinite; }
+        .animate-goal-flash {
+          transform: translateY(-20px);
+          animation: goalFlash 1.6s ease-in-out infinite;
+        }
         .animate-sway-3d { animation: sway3d 8s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
         .animate-sway-2d { animation: sway2d 7s cubic-bezier(0.45, 0, 0.55, 1) infinite; will-change: transform; }
         .animate-parallax-pan { animation: parallaxPan 15s ease-in-out infinite; }

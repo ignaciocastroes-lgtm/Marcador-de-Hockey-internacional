@@ -51,18 +51,28 @@ export interface BoardLook {
   finishNames: Finish
 }
 
+/**
+ * APARIENCIA DE FÁBRICA — del montaje del club (ardi-montaje-pantallas).
+ * El escudo local reemplaza a la dirección externa del montaje: el marcador
+ * tiene que abrir sin internet. Si se importa el montaje, manda el montaje.
+ */
+/**
+ * APARIENCIA DE FÁBRICA — del montaje del club (ardi-montaje-pantallas).
+ * El escudo local reemplaza a la dirección externa que traía el montaje: el
+ * marcador tiene que abrir sin internet en el pabellón.
+ */
 export const DEFAULT_LOOK: BoardLook = {
-  homeUrl: '',
-  awayUrl: '',
-  ledFont: 'impact',
+  homeUrl: '/escudos/internacional-lo-espejo.webp',
+  awayUrl: '/escudos/ardi-visita.svg',
+  ledFont: 'dseg7',
   fontWeight: '900',
   letterSpacing: 'normal',
   boardBgColor: '#050505',
   boardTextColor: '#ffffff',
-  boardAccentColor: '#dc2626',
+  boardAccentColor: '#ffc800',
   possessionColor: '#22c55e',
   penaltiesColor: '#eab308',
-  finishDigits: 'solid',
+  finishDigits: 'fluor',
   finishNames: 'solid'
 }
 

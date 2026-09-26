@@ -91,30 +91,75 @@ export const DEFAULT_LAYOUT: LayoutConfig = { scale: 1, align: 'center', marcaUr
  * defecto, un equipo recién instalado pintaba animaciones que nadie pidió y
  * gastaba rendimiento en ellas. Lo ya configurado y guardado no cambia.
  */
+/**
+ * VALORES DE FÁBRICA — tomados del montaje del club (ardi-montaje-lanzadores).
+ * Es lo que ve una instalación nueva; una configuración ya guardada manda
+ * sobre esto y no se toca.
+ */
 export const DEFAULT_OVERLAYS: OverlaysConfig = {
   goal: {
-    enabled: false, boards: [1], duration: 5, text: '¡GOL!',
-    showPlayerNumber: true, showScore: true, showWatermark: true,
-    textColor: '#ffffff', scoreColor: '#facc15', useTeamColor: true,
+    enabled: true,
+    boards: [
+      1
+    ],
+    duration: 5,
+    text: '¡GOL!',
+    showPlayerNumber: true,
+    showScore: true,
+    showWatermark: true,
+    textColor: '#ffffff',
+    scoreColor: '#facc15',
+    useTeamColor: true,
     jerseyDesign: 'solid',
-    homeJ1: '#ef4444', homeJ2: '#ffffff', awayJ1: '#f59e0b', awayJ2: '#000000',
-    scale: 1, align: 'center', marcaUrl: ''
+    homeJ1: '#ef4444',
+    homeJ2: '#ffffff',
+    awayJ1: '#f59e0b',
+    awayJ2: '#000000',
+    scale: 1,
+    align: 'center',
+    marcaUrl: ''
   },
   final: {
-    enabled: false, boards: [1], winnerSeconds: 10, showFicha: true,
-    winnerText: '¡GANADOR!', drawText: 'EMPATE',
-    scale: 1, align: 'center', marcaUrl: ''
+    enabled: true,
+    boards: [
+      1
+    ],
+    winnerSeconds: 10,
+    showFicha: true,
+    winnerText: '¡GANADOR!',
+    drawText: 'EMPATE',
+    scale: 0.7,
+    align: 'center',
+    marcaUrl: ''
   },
   figura: {
-    enabled: false, boards: [1], trasGanador: 6, segundos: 8,
+    enabled: true,
+    boards: [
+      1
+    ],
+    trasGanador: 6,
+    segundos: 8,
     titulo: 'FIGURA DEL PARTIDO',
-    scale: 1, align: 'center', marcaUrl: ''
+    scale: 1,
+    align: 'center',
+    marcaUrl: ''
   },
   stats: {
-    enabled: false, boards: [1], breakDelay: 5, showInBreak: true,
-    showScorers: true, showGoalMinutes: true, showCards: true,
-    showFouls: true, showPossession: true, showByPeriod: true,
-    scale: 1, align: 'center', marcaUrl: ''
+    enabled: true,
+    boards: [
+      1
+    ],
+    breakDelay: 5,
+    showInBreak: true,
+    showScorers: true,
+    showGoalMinutes: true,
+    showCards: true,
+    showFouls: true,
+    showPossession: true,
+    showByPeriod: true,
+    scale: 1,
+    align: 'center',
+    marcaUrl: ''
   }
 }
 
