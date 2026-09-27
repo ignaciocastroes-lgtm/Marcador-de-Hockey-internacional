@@ -14,6 +14,8 @@
 // localStorage y viaja liviano al exportar la configuración del club.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { CLUBES_LIGA_CENTRAL } from '@/lib/liga-central'
+
 export const SHIELD_GALLERY_KEY = 'ardi-shield-gallery'
 export const SHIELD_GALLERY_EVENT = 'ardi-shield-gallery-updated'
 
@@ -32,18 +34,34 @@ export interface GalleryShield {
 const isUsableUrl = (u: string): boolean =>
   !!u && (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('/'))
 
+/**
+ * Los escudos de la liga vienen de fábrica en la galería, así que están a mano
+ * en el gestor de pantallas desde el primer día, sin tener que pegar una URL.
+ * Se marcan con `usedAt: 0` para que queden al final: cualquiera que el
+ * operador use de verdad los pasa por delante.
+ */
+const DE_FABRICA: GalleryShield[] = CLUBES_LIGA_CENTRAL.map(c => ({
+  url: c.escudo, label: c.nombre, usedAt: 0
+}))
+
+/** Los de fábrica que todavía no están en la lista guardada. */
+const completar = (lista: GalleryShield[]): GalleryShield[] => {
+  const tiene = new Set(lista.map(s => s.url))
+  return [...lista, ...DE_FABRICA.filter(s => !tiene.has(s.url))]
+}
+
 export function loadGallery(): GalleryShield[] {
   if (typeof window === 'undefined') return []
   try {
     const raw = localStorage.getItem(SHIELD_GALLERY_KEY)
-    if (!raw) return []
+    if (!raw) return completar([])
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter((s): s is GalleryShield => !!s && typeof s.url === 'string' && isUsableUrl(s.url))
+    return completar(parsed
+      .filter((s): s is GalleryShield => !!s && typeof s.url === 'string' && isUsableUrl(s.url)))
       .sort((a, b) => (b.usedAt || 0) - (a.usedAt || 0))
   } catch {
-    return []
+    return completar([])
   }
 }
 

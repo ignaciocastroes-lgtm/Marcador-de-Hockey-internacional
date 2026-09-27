@@ -31,10 +31,11 @@ export interface MatchStatsModalProps {
 
 /** Rótulo corto del periodo. Estaba escrito cuatro veces en este archivo. */
 const PERIODO_CORTO: Record<Period, string> = {
-  '1er_tiempo': '1T', '2do_tiempo': '2T', 'alargue': 'ET', 'penales': 'PEN',
+  '1er_tiempo': '1T', '2do_tiempo': '2T', 'alargue': 'ET1', 'alargue2': 'ET2', 'penales': 'PEN',
 }
 const PERIODO_LARGO: Record<Period, string> = {
-  '1er_tiempo': '1ER TIEMPO', '2do_tiempo': '2DO TIEMPO', 'alargue': 'ALARGUE', 'penales': 'TANDA DE PENALES',
+  '1er_tiempo': '1ER TIEMPO', '2do_tiempo': '2DO TIEMPO',
+  'alargue': '1ER ALARGUE', 'alargue2': '2DO ALARGUE', 'penales': 'TANDA DE PENALES',
 }
 
 export function MatchStatsModal({

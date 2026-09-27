@@ -1341,12 +1341,27 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         <Button onClick={toggleFullscreen} className={`h-10 font-bold text-xs ${theme.btn.shape} ${theme.btn.secondary}`}>
           <Maximize className="w-4 h-4 mr-1" /> PANTALLA
         </Button>
-        {/* Un partido suspendido usa el mismo mecanismo que el entretiempo: el
-            reloj se detiene y la planilla ya sabe registrar la reanudación. */}
-        <Button onClick={() => setShowIntermissionSelector(true)} disabled={matchEnded}
-          title="Entretiempo o partido suspendido: detiene el juego y abre el bloque de reanudación"
+        {/*
+          SUSPENDER Y DESCANSAR SON DOS BOTONES, NO UNO.
+          Compartían puerta, y en un partido oficial eso costó caro: con tiempo
+          por delante se dio un descanso de un minuto para ganar aire y, al
+          terminar, el descanso hizo lo que hace —avanzar de periodo y reponer
+          el reloj—, perdiendo el tiempo jugado. La suspensión, que era lo que
+          hacía falta, estaba dentro de ese mismo diálogo y no se encontró.
+          Ahora suspender es un botón propio y de un solo toque.
+        */}
+        <Button onClick={() => props.suspendMatch()} disabled={matchEnded || state.isIntermission}
+          title="SOS: congela el reloj donde está. Al reanudar se sigue en el mismo periodo y minuto."
+          className="h-10 font-bold text-[10px] leading-tight bg-red-800 hover:bg-red-700 disabled:opacity-40">
+          <Timer className="w-4 h-4 mr-1 shrink-0" /> SUSPENDER<br />PARTIDO
+        </Button>
+        <Button onClick={() => setShowIntermissionSelector(true)}
+          disabled={matchEnded || state.mainClock > 0}
+          title={state.mainClock > 0
+            ? 'Todavía queda tiempo de juego: para parar el partido, suspéndelo'
+            : 'Descanso entre periodos'}
           className="h-10 font-bold text-[10px] leading-tight bg-orange-700 hover:bg-orange-600 disabled:opacity-40">
-          <Timer className="w-4 h-4 mr-1 shrink-0" /> DESCANSO /<br />SUSPENDIDO
+          <Timer className="w-4 h-4 mr-1 shrink-0" /> DESCANSO
         </Button>
         <Button onClick={() => setShowDrawer(v => !v)}
           className={`h-10 font-bold text-xs ${showDrawer ? 'bg-blue-600 hover:bg-blue-500' : 'bg-zinc-800 hover:bg-zinc-700'}`}>

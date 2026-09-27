@@ -10,7 +10,12 @@ import { upsertHistory, aliviarEscudos, podarEscudos, HISTORY_ESCUDOS_KEY, type 
 // ─── Generador de IDs único (sin colisiones en loops síncronos) ──────────────
 const uid = () => crypto.randomUUID()
 
-export type Period = '1er_tiempo' | '2do_tiempo' | 'alargue' | 'penales'
+/**
+ * `alargue` es el PRIMER periodo de alargue y `alargue2` el segundo. El primero
+ * conserva su nombre antiguo a proposito: los partidos ya guardados lo traen
+ * asi y siguen siendo validos sin migrar nada.
+ */
+export type Period = '1er_tiempo' | '2do_tiempo' | 'alargue' | 'alargue2' | 'penales'
 
 export interface Team {
   id: string
@@ -214,6 +219,15 @@ export interface MatchConfig {
   isExpressMode: boolean
   allowOvertime: boolean
   allowPenalties: boolean
+  /** Minutos de CADA periodo de alargue. Son dos. */
+  overtimeDuration?: number
+  /**
+   * Como se resuelve el alargue:
+   *  'oro'     el partido termina en el instante del gol;
+   *  'plata'   termina al CERRAR un periodo de alargue si hay diferencia;
+   *  'ninguna' se juegan los dos periodos completos y despues se ve.
+   */
+  overtimeRule?: 'oro' | 'plata' | 'ninguna'
 }
 
 // REGLAMENTO 2026: Sanciones con Power Play Total (sin cancelación por gol)
@@ -323,17 +337,73 @@ const TIMEOUT_WARNING = 15
  * que al terminarlo hay que avanzar. Sin esto se volvia a jugar el mismo tiempo.
  * Devuelve null cuando el partido deberia terminar en vez de continuar.
  */
+/** Los dos periodos de alargue. */
+export const esAlargue = (p: Period): boolean => p === 'alargue' || p === 'alargue2'
+
+/**
+ * GOL DE ORO: el partido termina EN EL INSTANTE del gol.
+ *
+ * Se aplica sobre el estado YA con el gol sumado. Es distinto del gol de plata,
+ * que se evalua al cerrar el periodo y por eso vive en `siguientePeriodo`.
+ *
+ * Solo en alargue, solo con la regla activa, y solo si hay diferencia: un gol
+ * que deja el marcador igualado no resuelve nada.
+ */
+function aplicarGolDeOro(st: GameState): GameState {
+  if (!esAlargue(st.period)) return st
+  if (st.matchConfig.overtimeRule !== 'oro') return st
+  if (st.homeScore === st.awayScore) return st
+
+  const ganador = st.homeScore > st.awayScore ? 'home' : 'away'
+  return {
+    ...st,
+    isMatchEnded: true,
+    winner: ganador,
+    isMainClockRunning: false,
+    isPossessionLeftRunning: false,
+    isPossessionRightRunning: false,
+    timestamps: { ...st.timestamps, matchEnd: new Date().toISOString() },
+    matchLog: [...st.matchLog, {
+      id: uid(), timestamp: new Date().toISOString(), gameTime: st.mainClock,
+      period: st.period, eventType: 'fin' as const, team: ganador, actor: 'SISTEMA',
+      details: `GOL DE ORO: termina el partido ${st.homeScore} - ${st.awayScore}`
+    }]
+  }
+}
+
+/** Minutos de un periodo: el alargue tiene su propia duracion. */
+export function duracionPeriodo(cfg: MatchConfig, p: Period): number {
+  if (esAlargue(p)) return (cfg.overtimeDuration || cfg.periodDuration) * 60
+  return cfg.periodDuration * 60
+}
+
+/**
+ * A QUE PERIODO SE PASA, O SI EL PARTIDO TERMINA.
+ *
+ * El alargue son DOS periodos. Al cerrar el primero:
+ *  · con GOL DE PLATA y diferencia -> el partido termina ahi;
+ *  · empatados, o sin regla de plata -> se juega el segundo.
+ * Al cerrar el segundo, si siguen iguales, van a penales.
+ *
+ * El GOL DE ORO no pasa por aqui: termina el partido EN EL MOMENTO del gol,
+ * no al cerrar el periodo. Eso vive junto a los goles.
+ */
 function siguientePeriodo(prev: GameState): Period | null {
   const empatados = prev.homeScore === prev.awayScore
+  const cfg = prev.matchConfig
   switch (prev.period) {
     case '1er_tiempo':
       return '2do_tiempo'
     case '2do_tiempo':
-      if (empatados && prev.matchConfig.allowOvertime) return 'alargue'
-      if (empatados && prev.matchConfig.allowPenalties) return 'penales'
+      if (empatados && cfg.allowOvertime) return 'alargue'
+      if (empatados && cfg.allowPenalties) return 'penales'
       return null
     case 'alargue':
-      if (empatados && prev.matchConfig.allowPenalties) return 'penales'
+      // Con diferencia y gol de plata, el partido ya esta resuelto.
+      if (!empatados && cfg.overtimeRule === 'plata') return null
+      return 'alargue2'
+    case 'alargue2':
+      if (empatados && cfg.allowPenalties) return 'penales'
       return null
     default:
       return null
@@ -595,6 +665,13 @@ export function useGameState() {
    *
    * Ahora el latido compara contra estos espejos, y el updater es puro.
    */
+  /**
+   * El estado en el ultimo render, para que una accion pueda CONSULTARLO sin
+   * meter la comprobacion dentro de setState. Lo de dentro tiene que ser puro:
+   * React puede ejecutar esa funcion mas de una vez.
+   */
+  const estadoRef = useRef(state); estadoRef.current = state
+
   const espejoMain = useRef(state.mainClock);          espejoMain.current = state.mainClock
   const espejoTimeout = useRef(state.timeoutClock);    espejoTimeout.current = state.timeoutClock
   const espejoLeft = useRef(state.possessionClockLeft);   espejoLeft.current = state.possessionClockLeft
@@ -908,7 +985,25 @@ export function useGameState() {
   }, [])
 
   /** ENTRETIEMPO: cuenta atras y, al terminar, siguiente periodo. */
+  /**
+   * DESCANSO: solo entre periodos, nunca con tiempo de juego por delante.
+   *
+   * El descanso, al terminar, AVANZA de periodo y repone el reloj entero. Si
+   * se usa a mitad de un periodo, el tiempo jugado se pierde — y eso paso en
+   * un partido oficial: se dio un descanso de un minuto para ganar tiempo y al
+   * terminar el reloj volvio a cero del periodo siguiente.
+   *
+   * Un partido en juego con tiempo por delante solo se detiene SUSPENDIENDOLO,
+   * que congela el reloj y reanuda en el mismo minuto. Por eso esto ya no es
+   * un aviso: es un bloqueo.
+   */
   const startIntermission = useCallback((durationMinutes?: number) => {
+    if (estadoRef.current.mainClock > 0 && !estadoRef.current.isIntermission) {
+      toast.error(
+        'Todavia queda tiempo de juego: un descanso haria perder el periodo en curso. ' +
+        'Para parar el partido, suspendelo.', { duration: 8000 })
+      return
+    }
     playBuzzer()
     const duration = durationMinutes ? durationMinutes * 60 : INTERMISSION_DURATION
     setState(prev => ({
@@ -977,13 +1072,30 @@ export function useGameState() {
         isIntermission: false,
         pauseKind: undefined,
         isMainClockRunning: false,
-        mainClock: prev.initialClockTime,
+        // Cada periodo trae su duracion: el alargue tiene la suya.
+        mainClock: duracionPeriodo(prev.matchConfig, sig ?? prev.period),
         period: sig ?? prev.period,
         // Periodo nuevo: relojes de 45 y solicitudes de banca a cero
         possessionClockLeft: POSSESSION_DURATION,
         possessionClockRight: POSSESSION_DURATION,
         isPossessionLeftRunning: false,
         isPossessionRightRunning: false,
+        /**
+         * TIEMPOS DE BANCA A CERO AL EMPEZAR UN PERIODO.
+         *
+         * Aqui solo se limpiaban las SOLICITUDES pendientes, no los tiempos ya
+         * usados. `nextPeriod` si los reiniciaba, pero el camino normal —el
+         * descanso que termina y da paso al periodo siguiente— no. Existia un
+         * parche que los reiniciaba al detectar el cambio de periodo, pero
+         * vivia SOLO en CONTROL: en PISTA el fallo estaba descubierto.
+         *
+         * Consecuencia real: un equipo llegaba al segundo tiempo con sus dos
+         * tiempos de banca ya gastados y no podia pedir ninguno.
+         *
+         * Son dos por equipo en CADA periodo: 1T, 2T y los dos del alargue.
+         */
+        homeTimeoutsUsed: sig ? 0 : prev.homeTimeoutsUsed,
+        awayTimeoutsUsed: sig ? 0 : prev.awayTimeoutsUsed,
         homeTimeoutRequested: false,
         awayTimeoutRequested: false,
         matchLog: sig ? [...prev.matchLog, {
@@ -1056,7 +1168,7 @@ export function useGameState() {
     }
     return {
       ...prev, period, isIntermission: false,
-      mainClock: period === 'penales' ? 0 : prev.initialClockTime,
+      mainClock: period === 'penales' ? 0 : duracionPeriodo(prev.matchConfig, period),
       isMainClockRunning: false, isPossessionLeftRunning: false, isPossessionRightRunning: false
     }
   }), [])
@@ -1109,7 +1221,7 @@ export function useGameState() {
 
       return {
         ...prev, period: nextPeriodVal, currentPeriodNumber: nextNum,
-        mainClock: nextPeriodVal === 'penales' ? 0 : prev.initialClockTime,
+        mainClock: nextPeriodVal === 'penales' ? 0 : duracionPeriodo(prev.matchConfig, nextPeriodVal),
         isMainClockRunning: false, isIntermission: false,
         homeTimeoutsUsed: 0, awayTimeoutsUsed: 0,
         homeTimeoutRequested: false, awayTimeoutRequested: false,
@@ -1218,7 +1330,7 @@ export function useGameState() {
         matchLog: [...prev.matchLog, evento], goalAnimation
       }
     }
-    return {
+    return aplicarGolDeOro({
       ...prev,
       homeScore: team === 'home' ? prev.homeScore + 1 : prev.homeScore,
       awayScore: team === 'away' ? prev.awayScore + 1 : prev.awayScore,
@@ -1226,7 +1338,7 @@ export function useGameState() {
       possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION,
       isPossessionLeftRunning: false, isPossessionRightRunning: false,
       matchLog: [...prev.matchLog, evento], goalAnimation
-    }
+    })
   }), [])
 
   const adjustHomeScore = useCallback((delta: number, playerNumber?: string) => setState(prev => {
@@ -1240,13 +1352,14 @@ export function useGameState() {
       
       const goalAnimation = playerNumber !== undefined ? { id: uid(), team: 'home' as const, playerNumber, timestamp: Date.now() } : undefined;
 
-      return {
+      // El gol de oro se evalua sobre el estado YA con el gol sumado.
+      return aplicarGolDeOro({
         ...prev, homeScore: newScore, matchLog: [...prev.matchLog, event],
         isMainClockRunning: false,
         possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION,
         isPossessionLeftRunning: false, isPossessionRightRunning: false,
         ...(goalAnimation && { goalAnimation })
-      }
+      })
     }
     return { ...prev, homeScore: newScore }
   }), [])
@@ -1262,13 +1375,14 @@ export function useGameState() {
       
       const goalAnimation = playerNumber !== undefined ? { id: uid(), team: 'away' as const, playerNumber, timestamp: Date.now() } : undefined;
 
-      return {
+      // El gol de oro se evalua sobre el estado YA con el gol sumado.
+      return aplicarGolDeOro({
         ...prev, awayScore: newScore, matchLog: [...prev.matchLog, event],
         isMainClockRunning: false,
         possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION,
         isPossessionLeftRunning: false, isPossessionRightRunning: false,
         ...(goalAnimation && { goalAnimation })
-      }
+      })
     }
     return { ...prev, awayScore: newScore }
   }), [])

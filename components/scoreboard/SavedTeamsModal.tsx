@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Users, Trash2, Check, Search, Shield, Plus, X, Layers } from 'lucide-react'
+import { CLUBES_LIGA_CENTRAL, LIGA, type ClubCatalogo } from '@/lib/liga-central'
+import { rememberShield } from '@/lib/shield-gallery'
+import { Users, Trash2, Check, Shield, Plus, X, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -60,7 +62,6 @@ const rostersPorDefecto = (): Record<string, ExpressEntry[]> => {
 export function SavedTeamsModal({
   open, onClose, side, savedTeams, saveTeam, deleteTeam, serieId, onPick
 }: Props) {
-  const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<Team | null>(null)
   const [name, setName] = useState('')
   const [entries, setEntries] = useState<ExpressEntry[]>([])
@@ -69,7 +70,7 @@ export function SavedTeamsModal({
   const serie = serieId && serieId !== 'amistoso' ? serieId : ''
   const serieName = serie ? serieLabel(findSerie(serie)!) : 'Amistoso'
 
-  useEffect(() => { if (open) { setSearch(''); startNew() } }, [open]) // eslint-disable-line
+  useEffect(() => { if (open) startNew() }, [open]) // eslint-disable-line
 
   const startNew = () => {
     setEditing(null); setName('')
@@ -85,10 +86,29 @@ export function SavedTeamsModal({
     setDraft('')
   }
 
-  const listed = savedTeams.filter(t => {
-    const q = search.trim().toLowerCase()
-    return !q || t.name.toLowerCase().includes(q)
-  })
+  /** Sin buscador: la columna es la lista de clubes, tal cual. */
+  const listed = savedTeams
+
+  /** Del catálogo, los que todavía no están dados de alta. */
+  const yaEstan = new Set(savedTeams.map(t => t.name.trim().toUpperCase()))
+  const porAgregar = CLUBES_LIGA_CENTRAL.filter(c => !yaEstan.has(c.nombre.toUpperCase()))
+
+  /**
+   * Alta de un club del catálogo: nombre y escudo de una vez, con sus series
+   * vacías. No inventa planteles — las camisetas se cargan por serie.
+   * Queda abierto para editarlo, que es lo que uno quiere hacer enseguida.
+   */
+  const agregarDelCatalogo = (c: ClubCatalogo) => {
+    const t: Team = {
+      id: `team-${Date.now()}`,
+      name: c.nombre,
+      logo: c.escudo,
+      rosters: rostersPorDefecto(),
+    }
+    saveTeam(t)
+    rememberShield(c.escudo, c.nombre)
+    load(t)
+  }
 
   const addNumbers = () => {
     const nums = draft.split(/[,\s]+/).map(n => n.trim()).filter(n => /^\d{1,2}$/.test(n))
@@ -153,11 +173,18 @@ export function SavedTeamsModal({
 
           {/* ── Clubes ────────────────────────────────────────────────────── */}
           <div className="space-y-2">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-zinc-600 absolute left-2 top-1/2 -translate-y-1/2" />
-              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar club"
-                className="h-9 pl-7 text-xs bg-zinc-950 border-zinc-700" />
-            </div>
+            {/*
+              AQUÍ HABÍA UN BUSCADOR, Y ERA UNA TRAMPA.
+              Era un campo de texto idéntico al del nombre del club y quedaba
+              primero, así que uno escribía ahí el nombre del club nuevo: el
+              texto se iba al filtro, el campo real quedaba vacío y GUARDAR se
+              negaba. Parecía que la app "no dejaba agregar equipos".
+              Ahora esta columna sólo muestra clubes; el único campo de texto
+              del modal es el del nombre.
+            */}
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+              Tus clubes · {savedTeams.length}
+            </p>
 
             <div className="max-h-[320px] overflow-y-auto space-y-1.5">
               {listed.map(t => {
@@ -197,6 +224,31 @@ export function SavedTeamsModal({
             <Button onClick={startNew} variant="outline" className="w-full h-9 text-xs font-bold border-zinc-600">
               <Plus className="w-4 h-4 mr-1.5" /> CLUB NUEVO
             </Button>
+
+            {/* El catálogo de la liga: un toque y el club queda creado con su
+                escudo. Los que ya están no se ofrecen dos veces. */}
+            {porAgregar.length > 0 && (
+              <div className="pt-1">
+                <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1.5">
+                  {LIGA} · un toque para agregarlo
+                </p>
+                <div className="grid grid-cols-3 gap-1.5 max-h-[188px] overflow-y-auto pr-1">
+                  {porAgregar.map(c => (
+                    <button key={c.nombre} type="button" onClick={() => agregarDelCatalogo(c)}
+                      title={`Agregar ${c.nombre}`}
+                      className="flex flex-col items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-950 p-1.5
+                        hover:border-emerald-600 transition-colors touch-manipulation active:scale-[0.97]">
+                      <img src={c.escudo} alt="" loading="lazy"
+                        className="w-9 h-9 object-contain"
+                        onError={e => { e.currentTarget.style.opacity = '0.25' }} />
+                      <span className="text-[9px] font-bold text-zinc-400 leading-tight text-center line-clamp-2">
+                        {c.nombre}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Plantel de la serie en curso ──────────────────────────────── */}

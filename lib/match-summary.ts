@@ -29,7 +29,9 @@ export interface MatchSummary {
 }
 
 const PERIOD_LABEL: Record<Period, string> = {
-  '1er_tiempo': '1T', '2do_tiempo': '2T', 'alargue': 'ET', 'penales': 'PEN'
+  '1er_tiempo': '1T', '2do_tiempo': '2T',
+  // El alargue son dos periodos: se distinguen en la ficha y en el acta.
+  'alargue': 'ET1', 'alargue2': 'ET2', 'penales': 'PEN'
 }
 
 /** El reloj cuenta hacia atrás: el minuto jugado es la duración menos lo que resta. */

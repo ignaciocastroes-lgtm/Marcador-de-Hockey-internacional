@@ -171,6 +171,10 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
   const [expressGender, setExpressGender]         = useState('MASCULINA')
 
   const [expressOvertime, setExpressOvertime]     = useState(false)
+  /** Minutos de CADA uno de los dos periodos de alargue. */
+  const [expressOtDur, setExpressOtDur]           = useState(5)
+  /** Cómo se resuelve el alargue: oro, plata o se juegan los dos completos. */
+  const [expressOtRule, setExpressOtRule]         = useState<'oro' | 'plata' | 'ninguna'>('ninguna')
   const [expressPenalties, setExpressPenalties]   = useState(false)
 
   // ─── Flujo de partido ─────────────────────────────────────────────────────
@@ -312,6 +316,8 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
         homeRoster: expressHomePlayers.map(p => p.number),
         awayRoster: expressAwayPlayers.map(p => p.number),
         allowOvertime: expressOvertime,
+        overtimeDuration: expressOtDur,
+        overtimeRule: expressOtRule,
         allowPenalties: expressPenalties
       },
       { id: expressHomeLogo ? `express-home-saved` : 'express-home', name: hName, logo: expressHomeLogo },
@@ -870,8 +876,42 @@ export function PreMatchSetup(props: PreMatchSetupProps) {
               <h4 className="text-zinc-400 text-sm font-bold">Pacto Inicial (en caso de empate)</h4>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={expressOvertime} onChange={e => setExpressOvertime(e.target.checked)} className="w-4 h-4 accent-amber-500" />
-                <span className="text-white text-sm">Habrá Alargue (Tiempo Extra)</span>
+                <span className="text-white text-sm">Habrá Alargue — son <b>dos periodos</b></span>
               </label>
+
+              {/* El alargue son dos periodos, con su propia duración y su forma
+                  de resolverse. Todo se pacta antes de empezar. */}
+              {expressOvertime && (
+                <div className="ml-6 space-y-2 border-l-2 border-zinc-700 pl-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-zinc-400">Cada periodo dura</span>
+                    <input type="number" min={1} max={30} value={expressOtDur}
+                      onChange={e => setExpressOtDur(Math.max(1, Math.min(30, +e.target.value || 1)))}
+                      className="w-14 h-8 rounded-md bg-zinc-950 border border-zinc-700 px-2 text-sm text-white text-center" />
+                    <span className="text-[11px] text-zinc-400">minutos</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      ['ninguna', 'Se juegan los dos', 'Termina al cerrar el segundo'],
+                      ['oro',     'Gol de oro',        'Termina en el instante del gol'],
+                      ['plata',   'Gol de plata',      'Termina al cerrar un periodo si hay diferencia'],
+                    ] as const).map(([v, etiqueta, ayuda]) => (
+                      <button key={v} type="button" onClick={() => setExpressOtRule(v)} title={ayuda}
+                        className={`px-2.5 h-8 rounded-md text-[11px] font-bold transition-colors ${
+                          expressOtRule === v ? 'bg-amber-600 text-black' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}>
+                        {etiqueta}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-zinc-500 leading-snug">
+                    {expressOtRule === 'oro'
+                      ? 'Gol de oro: el primero que marca en el alargue gana y el partido termina ahí.'
+                      : expressOtRule === 'plata'
+                      ? 'Gol de plata: al cerrar cada periodo de alargue, si hay diferencia gana quien va arriba.'
+                      : 'Se juegan los dos periodos completos; si siguen iguales, van a penales.'}
+                  </p>
+                </div>
+              )}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={expressPenalties} onChange={e => setExpressPenalties(e.target.checked)} className="w-4 h-4 accent-amber-500" />
                 <span className="text-white text-sm">Habrá Penales</span>
