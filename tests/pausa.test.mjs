@@ -51,5 +51,23 @@ x = endIntermission(x)
 chk(x.period==='1er_tiempo' && x.mainClock===3*60,
   'suspender en el primer tiempo tambien vuelve donde estaba')
 
+
+// ── EL BUG: tocar un lado de la pista arrancaba el reloj con el partido
+// suspendido. `darPosesion` ya estaba guardada; el gesto de PISTA llamaba a
+// una copia sin guarda (resetPossessionLeft/Right). Ahora delegan en la misma.
+const darPosesion = (st, lado) => {
+  if (st.isIntermission || st.activeTimeout || st.isMatchEnded) return st
+  return { ...st, isMainClockRunning: true,
+    isPossessionLeftRunning: lado === 'left', isPossessionRightRunning: lado === 'right' }
+}
+let sus = { isIntermission: true, pauseKind: 'suspension', isMainClockRunning: false, activeTimeout: null, isMatchEnded: false, isPossessionLeftRunning: false }
+sus = darPosesion(sus, 'left')
+chk(sus.isMainClockRunning === false, 'partido suspendido: tocar un lado de la pista NO arranca el reloj')
+chk(sus.isPossessionLeftRunning === false, 'tampoco enciende el 45 de ese lado')
+
+let libre = { isIntermission: false, activeTimeout: null, isMainClockRunning: false, isMatchEnded: false }
+libre = darPosesion(libre, 'left')
+chk(libre.isMainClockRunning === true, 'partido en juego: tocar un lado SI arranca el reloj, como siempre')
+
 console.log(`\n${pasa} pasan, ${falla} fallan`)
 process.exit(falla?1:0)

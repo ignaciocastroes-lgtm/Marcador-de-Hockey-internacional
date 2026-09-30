@@ -1928,15 +1928,7 @@ export function useGameState() {
   const cancelActiveTimeout = useCallback(() => setState(prev => ({ ...prev, activeTimeout: null, timeoutClock: 0 })), [])
   const resetTimeouts        = useCallback(() => setState(prev => ({ ...prev, homeTimeoutsUsed: 0, awayTimeoutsUsed: 0, homeTimeoutRequested: false, awayTimeoutRequested: false, activeTimeout: null, timeoutClock: 0 })), [])
 
-  const resetPossessionLeft   = useCallback(() => setState(prev => ({ 
-    ...prev, possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION, 
-    isPossessionLeftRunning: true, isPossessionRightRunning: false, isMainClockRunning: true 
-  })), [])
-  const resetPossessionRight  = useCallback(() => setState(prev => ({ 
-    ...prev, possessionClockLeft: POSSESSION_DURATION, possessionClockRight: POSSESSION_DURATION, 
-    isPossessionLeftRunning: false, isPossessionRightRunning: true, isMainClockRunning: true 
-  })), [])
-  
+
   /**
    * DAR LA POSESION A UN EQUIPO. No es un interruptor.
    *
@@ -1965,6 +1957,23 @@ export function useGameState() {
           isMainClockRunning: true }
   }
 
+  /**
+   * EL BUG: en un partido SUSPENDIDO, tocar un lado de la pista arrancaba
+   * el reloj igual.
+   *
+   * `darPosesion`, mas abajo, es la accion canonica de "dar posesion": repone
+   * los 45, enciende el reloj principal, y esta guardada contra
+   * isIntermission/activeTimeout/isMatchEnded. Pero el gesto de tocar la mitad
+   * de la pista (PISTA, no CONTROL) no la llamaba a ELLA: llamaba a estas dos
+   * funciones, una copia SIN la guarda, escrita antes de que existiera
+   * `darPosesion`. Con el partido suspendido, "PARTIDO SUSPENDIDO" en el
+   * rotulo y el reloj corriendo por debajo con solo tocar la pista.
+   *
+   * Ahora delegan en `darPosesion`: una sola implementacion, con su guarda.
+   */
+  const resetPossessionLeft  = useCallback(() => setState(prev => darPosesion(prev, 'left')), [])
+  const resetPossessionRight = useCallback(() => setState(prev => darPosesion(prev, 'right')), [])
+  
   const togglePossessionLeft  = useCallback(() => setState(prev => darPosesion(prev, 'left')), [])
   const togglePossessionRight = useCallback(() => setState(prev => darPosesion(prev, 'right')), [])
   
