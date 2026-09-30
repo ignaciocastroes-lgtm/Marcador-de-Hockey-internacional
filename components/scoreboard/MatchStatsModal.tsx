@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { PERIODO_CORTO, PERIODO_LARGO, PERIODOS_ORDEN, numeroDePeriodo } from '@/lib/periodos'
 import { Globe, Download, Save, RotateCcw } from 'lucide-react'
 import { openMatchReport, downloadMatchJSON, reportOptsFor } from '@/lib/match-report'
 import { buildSummary } from '@/lib/match-summary'
@@ -29,14 +30,6 @@ export interface MatchStatsModalProps {
   onSaveAndReset?: () => void
 }
 
-/** Rótulo corto del periodo. Estaba escrito cuatro veces en este archivo. */
-const PERIODO_CORTO: Record<Period, string> = {
-  '1er_tiempo': '1T', '2do_tiempo': '2T', 'alargue': 'ET1', 'alargue2': 'ET2', 'penales': 'PEN',
-}
-const PERIODO_LARGO: Record<Period, string> = {
-  '1er_tiempo': '1ER TIEMPO', '2do_tiempo': '2DO TIEMPO',
-  'alargue': '1ER ALARGUE', 'alargue2': '2DO ALARGUE', 'penales': 'TANDA DE PENALES',
-}
 
 export function MatchStatsModal({
   open, onClose, state,
@@ -199,8 +192,7 @@ export function MatchStatsModal({
             <div className="w-full overflow-x-auto pb-2 border-b border-zinc-700">
               {(() => {
                 const allGoals = (state.matchLog || []).filter(e => e.eventType === 'gol' && !e.anulado).sort((a, b) => {
-                  const o: Record<string, number> = { '1er_tiempo': 1, '2do_tiempo': 2, 'alargue': 3, 'penales': 4 }
-                  if (o[a.period] !== o[b.period]) return o[a.period] - o[b.period]
+                  if (a.period !== b.period) return numeroDePeriodo(a.period) - numeroDePeriodo(b.period)
                   return a.gameTime - b.gameTime
                 })
                 let cH = 0; let cA = 0
@@ -356,7 +348,7 @@ export function MatchStatsModal({
           <div className="bg-zinc-800 border border-zinc-600 rounded-lg p-3">
             <h3 className="text-yellow-400 font-bold text-sm mb-2">REGISTRO CRONOLÓGICO DE INCIDENCIAS</h3>
             {/* Con la tanda de penales: el registro la omitía y los tiros no se veían. */}
-            {(['1er_tiempo', '2do_tiempo', 'alargue', 'penales'] as Period[]).map(period => {
+            {PERIODOS_ORDEN.map(period => {
               const events = (state.matchLog || []).filter(e => e.period === period).sort((a, b) => b.gameTime - a.gameTime)
               if (events.length === 0) return null
               const periodLabel = PERIODO_LARGO[period]

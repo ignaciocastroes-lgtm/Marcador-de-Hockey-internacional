@@ -60,7 +60,13 @@ export function minutosPorDorsal(state: GameState, team: 'home' | 'away'): Recor
   const dorsalDe = new Map(roster.map(p => [p.id, p.number]))
 
   const adentro = new Set((idsFinal || []).map(id => dorsalDe.get(id)).filter(Boolean) as string[])
-  const periodoLargo = state.initialClockTime || 25 * 60
+  // Cada periodo dura lo suyo: el alargue no dura lo mismo que el tiempo
+  // reglamentario. (Sin la config, se cae al reloj inicial como antes.)
+  const cfg = state.matchConfig
+  const largo = (p: string): number => {
+    const min = (p === 'alargue' || p === 'alargue2') ? (cfg?.overtimeDuration || cfg?.periodDuration) : cfg?.periodDuration
+    return min ? min * 60 : (state.initialClockTime || 25 * 60)
+  }
   const seg: Record<string, number> = {}
 
   // Cambios de este equipo, del mas nuevo al mas viejo.
@@ -71,9 +77,10 @@ export function minutosPorDorsal(state: GameState, team: 'home' | 'away'): Recor
   // Los periodos JUGADOS son todos hasta el actual, tengan o no eventos.
   // Antes se tomaban de los que aparecian en el registro: un periodo sin un
   // solo evento no contaba, y la titular que lo jugo entero quedaba en cero.
-  const ORDEN = ['1er_tiempo', '2do_tiempo', 'alargue']
+  const ORDEN = ['1er_tiempo', '2do_tiempo', 'alargue', 'alargue2']
+  const enElRegistro = (p: string) => (state.matchLog || []).some(e => e.period === p)
   const hasta = state.period === 'penales'
-    ? ((state.matchLog || []).some(e => e.period === 'alargue') ? 2 : 1)
+    ? (enElRegistro('alargue2') ? 3 : enElRegistro('alargue') ? 2 : 1)
     : ORDEN.indexOf(state.period)
   const jugados = ORDEN.slice(0, Math.max(0, hasta) + 1).reverse()
 
@@ -91,7 +98,7 @@ export function minutosPorDorsal(state: GameState, team: 'home' | 'away'): Recor
       else adentro.add(c.actor)
       reloj = c.gameTime
     }
-    const tramoInicial = Math.max(0, periodoLargo - reloj)
+    const tramoInicial = Math.max(0, largo(p) - reloj)
     adentro.forEach(d => { seg[d] = (seg[d] || 0) + tramoInicial })
   }
 

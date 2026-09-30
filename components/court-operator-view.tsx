@@ -38,6 +38,7 @@ import { HOTKEY_EVENT, OPEN_HOTKEYS_EVENT } from '@/lib/hotkeys'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
 import { RefereeActions } from '@/components/scoreboard/RefereeActions'
 import { useTheme } from '@/lib/themes'
+import { PERIODO_CORTO } from '@/lib/periodos'
 
 import {
   MIN_TOTAL_PLAYERS, getDisplayNumber, getStaffLabel, getStaffName,
@@ -537,7 +538,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
     // preguntando el resultado, jugadores saliendo y el arbitro acercandose a
     // la mesa— y habia que cerrarla para ver el marcador final. Ahora se
     // genera solo cuando se pide, con el boton ESTADÍSTICAS.
-    props.setMatchPhase('finalizado' as MatchPhase)
+    props.setMatchPhase('post-partido')
     props.endMatch()
     setShowEndConfirm(false)
   }
@@ -559,6 +560,14 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   // ─── Chicharra nativa ──────────────────────────────────────────────────────
 
   const buzz = useCallback((ms = 800) => { playHorn(ms, loadAudioConfig()) }, [])
+
+  // Gol de oro: el partido termina solo en el motor; la chicharra suena al verlo.
+  const finVisto = useRef(state.isMatchEnded)
+  useEffect(() => {
+    const ultimo = state.matchLog[state.matchLog.length - 1]
+    if (!finVisto.current && state.isMatchEnded && ultimo?.details?.startsWith('GOL DE ORO')) buzz(3000)
+    finVisto.current = state.isMatchEnded
+  }, [state.isMatchEnded, state.matchLog, buzz])
   const skipNextBuzzer = useRef(false)
 
   useEffect(() => { armAudio(); return () => { releaseAudio() } }, [])
@@ -1002,7 +1011,7 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           </span>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-[10px] font-bold text-zinc-500">
-              {state.period === '1er_tiempo' ? '1T' : state.period === '2do_tiempo' ? '2T' : state.period === 'alargue' ? 'ET' : 'PEN'}
+              {PERIODO_CORTO[state.period]}
             </span>
             <div className={`w-2 h-2 rounded-full ${state.isMainClockRunning ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
           </div>
@@ -1021,7 +1030,8 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               <SelectContent className="bg-zinc-900 border-zinc-700">
                 <SelectItem value="1er_tiempo">1er Tiempo</SelectItem>
                 <SelectItem value="2do_tiempo">2do Tiempo</SelectItem>
-                {state.matchConfig.allowOvertime && <SelectItem value="alargue">Alargue</SelectItem>}
+                {state.matchConfig.allowOvertime && <SelectItem value="alargue">1er Alargue</SelectItem>}
+                {state.matchConfig.allowOvertime && <SelectItem value="alargue2">2do Alargue</SelectItem>}
                 {state.matchConfig.allowPenalties && <SelectItem value="penales">Penales</SelectItem>}
               </SelectContent>
             </Select>

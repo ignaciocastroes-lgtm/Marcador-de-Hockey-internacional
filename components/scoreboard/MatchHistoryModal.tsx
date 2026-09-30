@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from 'react'
+import { PERIODO_CORTO } from '@/lib/periodos'
 import { toast } from 'sonner'
 import {
   History, X, Trash2, Search, Trophy, Target,
@@ -27,8 +28,7 @@ const fmtDate = (iso: string) => {
   catch { return iso }
 }
 
-const periodLabel = (p: string) =>
-  p === '1er_tiempo' ? '1T' : p === '2do_tiempo' ? '2T' : p === 'alargue' ? 'ET' : 'PEN'
+const periodLabel = (p: string) => (PERIODO_CORTO as Record<string, string>)[p] ?? p
 
 const fmtGameTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
 

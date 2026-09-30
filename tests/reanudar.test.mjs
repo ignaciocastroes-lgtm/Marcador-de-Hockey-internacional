@@ -2,8 +2,10 @@
 import fs from 'node:fs'
 import { execFileSync } from 'node:child_process'
 
-const src = fs.readFileSync(new URL('../lib/resume-import.ts', import.meta.url), 'utf8')
-  .replace(/^import[^\n]*\n/gm, '').replace(/export /g, '')
+// resume-import.ts usa el orden de periodos de lib/periodos.ts: se ejecutan juntos.
+const quitar = t => t.replace(/^import[^\n]*\n/gm, '').replace(/export /g, '')
+const src = quitar(fs.readFileSync(new URL('../lib/periodos.ts', import.meta.url), 'utf8')) + '\n' +
+  quitar(fs.readFileSync(new URL('../lib/resume-import.ts', import.meta.url), 'utf8'))
 const casos = String.raw`
 let pasa = 0, falla = 0
 const chk = (c: boolean, m: string) => { c ? pasa++ : falla++; console.log((c ? 'PASA' : 'FALLA') + ' — ' + m) }

@@ -4,6 +4,10 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { emptyMatchAdjustments, type MatchAdjustments, type TeamAdjustments } from '@/lib/court-rules'
 import { toast } from 'sonner'
+import {
+  esAlargue, duracionPeriodo, siguientePeriodo, aplicarGolDeOro,
+  numeroDePeriodo, PERIODO_NOMBRE,
+} from '@/lib/periodos'
 import { buildMatchJSON, buildMatchArticle, reportOptsFor, type MatchJSON } from '@/lib/match-report'
 import { upsertHistory, aliviarEscudos, podarEscudos, HISTORY_ESCUDOS_KEY, type CronicaGuardada } from '@/lib/history'
 
@@ -337,78 +341,7 @@ const TIMEOUT_WARNING = 15
  * que al terminarlo hay que avanzar. Sin esto se volvia a jugar el mismo tiempo.
  * Devuelve null cuando el partido deberia terminar en vez de continuar.
  */
-/** Los dos periodos de alargue. */
-export const esAlargue = (p: Period): boolean => p === 'alargue' || p === 'alargue2'
-
-/**
- * GOL DE ORO: el partido termina EN EL INSTANTE del gol.
- *
- * Se aplica sobre el estado YA con el gol sumado. Es distinto del gol de plata,
- * que se evalua al cerrar el periodo y por eso vive en `siguientePeriodo`.
- *
- * Solo en alargue, solo con la regla activa, y solo si hay diferencia: un gol
- * que deja el marcador igualado no resuelve nada.
- */
-function aplicarGolDeOro(st: GameState): GameState {
-  if (!esAlargue(st.period)) return st
-  if (st.matchConfig.overtimeRule !== 'oro') return st
-  if (st.homeScore === st.awayScore) return st
-
-  const ganador = st.homeScore > st.awayScore ? 'home' : 'away'
-  return {
-    ...st,
-    isMatchEnded: true,
-    winner: ganador,
-    isMainClockRunning: false,
-    isPossessionLeftRunning: false,
-    isPossessionRightRunning: false,
-    timestamps: { ...st.timestamps, matchEnd: new Date().toISOString() },
-    matchLog: [...st.matchLog, {
-      id: uid(), timestamp: new Date().toISOString(), gameTime: st.mainClock,
-      period: st.period, eventType: 'fin' as const, team: ganador, actor: 'SISTEMA',
-      details: `GOL DE ORO: termina el partido ${st.homeScore} - ${st.awayScore}`
-    }]
-  }
-}
-
-/** Minutos de un periodo: el alargue tiene su propia duracion. */
-export function duracionPeriodo(cfg: MatchConfig, p: Period): number {
-  if (esAlargue(p)) return (cfg.overtimeDuration || cfg.periodDuration) * 60
-  return cfg.periodDuration * 60
-}
-
-/**
- * A QUE PERIODO SE PASA, O SI EL PARTIDO TERMINA.
- *
- * El alargue son DOS periodos. Al cerrar el primero:
- *  · con GOL DE PLATA y diferencia -> el partido termina ahi;
- *  · empatados, o sin regla de plata -> se juega el segundo.
- * Al cerrar el segundo, si siguen iguales, van a penales.
- *
- * El GOL DE ORO no pasa por aqui: termina el partido EN EL MOMENTO del gol,
- * no al cerrar el periodo. Eso vive junto a los goles.
- */
-function siguientePeriodo(prev: GameState): Period | null {
-  const empatados = prev.homeScore === prev.awayScore
-  const cfg = prev.matchConfig
-  switch (prev.period) {
-    case '1er_tiempo':
-      return '2do_tiempo'
-    case '2do_tiempo':
-      if (empatados && cfg.allowOvertime) return 'alargue'
-      if (empatados && cfg.allowPenalties) return 'penales'
-      return null
-    case 'alargue':
-      // Con diferencia y gol de plata, el partido ya esta resuelto.
-      if (!empatados && cfg.overtimeRule === 'plata') return null
-      return 'alargue2'
-    case 'alargue2':
-      if (empatados && cfg.allowPenalties) return 'penales'
-      return null
-    default:
-      return null
-  }
-}
+// Los periodos (orden, rotulos, siguiente, duracion, gol de oro) viven en lib/periodos.ts.
 
 const initialReferees: RefereeData = {
   principal: '', segundo: '', auxiliar: '', cronometrista: '', encargadoPista: ''
@@ -964,11 +897,11 @@ export function useGameState() {
     config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null, resume: ResumeParams
   ) => {
     const now = new Date().toISOString()
-    const periodNumber = resume.period === '1er_tiempo' ? 1 : resume.period === '2do_tiempo' ? 2 : 3
+    const periodNumber = numeroDePeriodo(resume.period)
     const resumeEvent: MatchEvent = {
       id: uid(), timestamp: now, gameTime: resume.clockTime, period: resume.period,
       eventType: 'inicio', team: null, actor: 'SISTEMA',
-      details: `Partido REANUDADO desde ${resume.period === '1er_tiempo' ? '1er Tiempo' : resume.period === '2do_tiempo' ? '2do Tiempo' : 'Prorroga'} - ${Math.floor(resume.clockTime / 60)}:${(resume.clockTime % 60).toString().padStart(2, '0')} - Marcador: ${resume.homeScore}-${resume.awayScore}`
+      details: `Partido REANUDADO desde ${PERIODO_NOMBRE[resume.period]} - ${Math.floor(resume.clockTime / 60)}:${(resume.clockTime % 60).toString().padStart(2, '0')} - Marcador: ${resume.homeScore}-${resume.awayScore}`
     }
     setState(() => ({
       ...initialState, matchConfig: config, isMatchConfigured: true, matchPhase: 'en-juego',
@@ -1101,7 +1034,7 @@ export function useGameState() {
         matchLog: sig ? [...prev.matchLog, {
           id: uid(), timestamp: new Date().toISOString(), gameTime: prev.initialClockTime,
           period: sig, eventType: 'periodo' as const, team: null, actor: '',
-          details: `Comienza ${sig.replace('_', ' ')}`
+          details: `Comienza ${PERIODO_NOMBRE[sig]}`
         }] : prev.matchLog
       }
     })
@@ -1158,7 +1091,7 @@ export function useGameState() {
   })), [])
 
   const setPeriod = useCallback((period: Period) => setState(prev => {
-    if (period === 'alargue' && !prev.matchConfig.allowOvertime) {
+    if (esAlargue(period) && !prev.matchConfig.allowOvertime) {
       toast.error('REGLA DE JUEGO: El Alargue no está habilitado en la configuración inicial de este partido.')
       return prev
     }
@@ -1173,55 +1106,43 @@ export function useGameState() {
     }
   }), [])
 
+  /**
+   * AVANZAR DE PERIODO A MANO (el boton ">").
+   *
+   * Aqui habia una segunda cadena de if/else, escrita aparte de
+   * `siguientePeriodo`, que no conocia el segundo alargue: desde el primero
+   * saltaba directo a penales, asi que este boton NUNCA podia llegar al 2do
+   * alargue. Ahora pregunta a la misma funcion que usa el fin del descanso.
+   */
   const nextPeriod = useCallback(() => {
     setState(prev => {
-      const now = new Date().toISOString()
-      let nextPeriodVal: Period
-      let nextNum = prev.currentPeriodNumber + 1
-      let periodName = ''
-
-      if (prev.period === '1er_tiempo') {
-        nextPeriodVal = '2do_tiempo'; periodName = '2do Tiempo'
-      } else if (prev.period === '2do_tiempo') {
-        if (prev.matchConfig.allowOvertime) {
-          nextPeriodVal = 'alargue'; periodName = 'Prorroga'
-        } else if (prev.matchConfig.allowPenalties) {
-          nextPeriodVal = 'penales'; periodName = 'Penales'; nextNum = 4
-        } else {
-          toast.error('Configuración de Partido: No hay alargue ni penales configurados. El partido debe finalizar.')
-          return prev
-        }
-      } else if (prev.period === 'alargue') {
-        if (prev.matchConfig.allowPenalties) {
-          nextPeriodVal = 'penales'; periodName = 'Penales'; nextNum = 4
-        } else {
-          toast.error('Configuración de Partido: No hay penales configurados. El partido debe finalizar.')
-          return prev
-        }
-      } else {
-        return prev 
+      const sig = siguientePeriodo(prev)
+      if (!sig) {
+        toast.error('No hay un periodo siguiente: con esta configuración el partido debe finalizar.')
+        return prev
       }
 
+      const now = new Date().toISOString()
       const periodEndEvent: MatchEvent = {
         id: uid(), timestamp: now, gameTime: prev.mainClock, period: prev.period,
         eventType: 'periodo', team: null, actor: 'SISTEMA',
-        details: `Fin del ${prev.period === '1er_tiempo' ? '1er Tiempo' : prev.period === '2do_tiempo' ? '2do Tiempo' : 'Periodo'}`
+        details: `Fin del ${PERIODO_NOMBRE[prev.period]}`
       }
       const periodStartEvent: MatchEvent = {
         id: uid(), timestamp: now,
-        gameTime: nextPeriodVal === 'penales' ? 0 : prev.initialClockTime,
-        period: nextPeriodVal, eventType: 'periodo', team: null, actor: 'SISTEMA',
-        details: `Inicio de ${periodName}`
+        gameTime: sig === 'penales' ? 0 : duracionPeriodo(prev.matchConfig, sig),
+        period: sig, eventType: 'periodo', team: null, actor: 'SISTEMA',
+        details: `Inicio del ${PERIODO_NOMBRE[sig]}`
       }
 
       const newTimestamps = { ...prev.timestamps }
       if (prev.period === '1er_tiempo') newTimestamps.period1End = now
-      if (nextPeriodVal === '2do_tiempo') newTimestamps.period2Start = now
-      if (nextPeriodVal === 'alargue') { newTimestamps.period2End = now; newTimestamps.overtimeStart = now }
+      if (sig === '2do_tiempo') newTimestamps.period2Start = now
+      if (sig === 'alargue') { newTimestamps.period2End = now; newTimestamps.overtimeStart = now }
 
       return {
-        ...prev, period: nextPeriodVal, currentPeriodNumber: nextNum,
-        mainClock: nextPeriodVal === 'penales' ? 0 : duracionPeriodo(prev.matchConfig, nextPeriodVal),
+        ...prev, period: sig, currentPeriodNumber: numeroDePeriodo(sig),
+        mainClock: sig === 'penales' ? 0 : duracionPeriodo(prev.matchConfig, sig),
         isMainClockRunning: false, isIntermission: false,
         homeTimeoutsUsed: 0, awayTimeoutsUsed: 0,
         homeTimeoutRequested: false, awayTimeoutRequested: false,
@@ -2064,7 +1985,7 @@ export function useGameState() {
        * Si aquí el marcador sigue igualado en esas instancias, el partido no
        * está definido y no corresponde declarar empate.
        */
-      const fueADesempate = prev.period === 'alargue' || prev.period === 'penales'
+      const fueADesempate = esAlargue(prev.period) || prev.period === 'penales'
         || prev.homePenalties > 0 || prev.awayPenalties > 0
 
       let winner: 'home' | 'away' | 'draw' | null = 'draw'

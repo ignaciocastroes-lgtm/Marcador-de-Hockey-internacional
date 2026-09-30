@@ -34,7 +34,7 @@ import { defaultHomeName } from '@/lib/club-brand'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { toast } from 'sonner'
-import { Play, Pause, RotateCcw, Plus, Minus, Bell, Timer, Clock, Settings, Upload, Square, Coffee, AlertTriangle, Goal, AlertCircle, History, FileText, ChevronRight, Shield, LayoutGrid, LayoutDashboard, ZoomIn, ZoomOut, Palette, Volume2, Lock, Unlock, VolumeX, Keyboard } from 'lucide-react'
+import { Play, Pause, RotateCcw, Plus, Minus, Bell, Timer, Clock, Settings, Upload, Square, Coffee, AlertTriangle, Goal, AlertCircle, History, FileText, ChevronRight, Shield, LayoutGrid, LayoutDashboard, ZoomIn, ZoomOut, Palette, Volume2, Lock, Unlock, VolumeX, Keyboard, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -45,6 +45,7 @@ import type { GameState, Period, Team, MatchRecord, MatchConfig, Sanction, Playe
 
 import { RefereeActions } from '@/components/scoreboard/RefereeActions'
 import { GLOBAL_THEMES, saveTheme, loadTheme, type SkinKey, type ThemeConfig } from '@/lib/themes'
+import { PERIODO_CORTO, esAlargue } from '@/lib/periodos'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
 import { BenchModal, type BenchStaffUI } from '@/components/scoreboard/BenchModal'
 import { PosModal } from '@/components/scoreboard/PosModal'
@@ -122,15 +123,24 @@ export function OperatorView(props: OperatorViewProps) {
   const [customIntermissionMinutes, setCustomIntermissionMinutes] = useState('')
 
   const [isEditMode, setIsEditMode] = useState(false)
+  /**
+   * GIRO LOCAL DE COLUMNAS — solo esta pantalla, solo mientras esta abierta.
+   *
+   * No es lo mismo que "GIRAR PISTA" (a que lado ataca cada equipo en el dibujo
+   * de la cancha). Esto solo decide si el panel LOCAL se dibuja a la izquierda
+   * o a la derecha en ESTA pantalla, para que el operador que se sienta mirando
+   * la pista tenga el mismo lado fisico en los botones.
+   *
+   * No se guarda ni viaja: no toca el estado del partido, la proyeccion, el
+   * marcador ni los atajos (que siguen siendo "gol local"/"gol visita").
+   */
+  const [columnasInvertidas, setColumnasInvertidas] = useState(false)
   const [showAdminMenu, setShowAdminMenu] = useState(false)
 
   // ─── MEMORIA DE TEMA Y ESCALAS ──────────────────────────────────
   const [currentSkinKey, setCurrentSkinKey] = useState<SkinKey>('neon-original')
   const [panelScales, setPanelScales] = useState({ clock: 100, possession: 100, teamHome: 100, teamAway: 100, events: 100 })
   
-  // 🏆 GOL DE ORO Y ALARGUE
-  const [goldenGoal, setGoldenGoal] = useState(false)
-  const [overtimeMinutes, setOvertimeMinutes] = useState(5)
 
   // 🛡️ SEGURO DEL RELOJ (Modo Edición de Tiempo)
   const [isTimeEditMode, setIsTimeEditMode] = useState(false)
@@ -207,11 +217,6 @@ export function OperatorView(props: OperatorViewProps) {
       try { setPanelScales(JSON.parse(savedScales)) } catch(e){}
     }
 
-    const savedGG = localStorage.getItem('ardi-golden-goal')
-    if (savedGG) setGoldenGoal(savedGG === 'true')
-    const savedOT = localStorage.getItem('ardi-overtime-mins')
-    if (savedOT) setOvertimeMinutes(parseInt(savedOT))
-    
     const savedTimeEdit = localStorage.getItem('ardi-time-edit')
     if (savedTimeEdit) setIsTimeEditMode(savedTimeEdit === 'true')
     
@@ -230,17 +235,6 @@ export function OperatorView(props: OperatorViewProps) {
       localStorage.setItem('ardi-scales', JSON.stringify(next))
       return next
     })
-  }
-
-  const handleGoldenGoalChange = (val: boolean) => {
-    setGoldenGoal(val)
-    localStorage.setItem('ardi-golden-goal', String(val))
-  }
-
-  const handleOvertimeChange = (val: string) => {
-    const parsed = parseInt(val) || 5;
-    setOvertimeMinutes(parsed)
-    localStorage.setItem('ardi-overtime-mins', String(parsed))
   }
 
   const handleTimeEditChange = (val: boolean) => {
@@ -286,6 +280,18 @@ export function OperatorView(props: OperatorViewProps) {
     playHorn(durationMs, loadAudioConfig())
     props.playBuzzer()
   }, [props]);
+
+  /**
+   * GOL DE ORO: el partido termina SOLO, sin que nadie pulse FIN. Antes lo
+   * hacia esta vista con su propio interruptor y sonaba la chicharra 3 s; ahora
+   * termina el motor y la chicharra suena aqui, al ver el cierre.
+   */
+  const finVisto = useRef(state.isMatchEnded)
+  useEffect(() => {
+    const ultimo = state.matchLog[state.matchLog.length - 1]
+    if (!finVisto.current && state.isMatchEnded && ultimo?.details?.startsWith('GOL DE ORO')) triggerAutoBuzzer(3000)
+    finVisto.current = state.isMatchEnded
+  }, [state.isMatchEnded, state.matchLog, triggerAutoBuzzer])
 
   const handleBuzzerPress = () => {
     if (stopSynthTimeout.current) clearTimeout(stopSynthTimeout.current);
@@ -456,13 +462,6 @@ export function OperatorView(props: OperatorViewProps) {
         if (team === 'home') props.adjustHomeScore(1, playerNumber)
         else props.adjustAwayScore(1, playerNumber)
 
-        if (state.period === 'alargue' && goldenGoal) {
-          setTimeout(() => {
-            triggerAutoBuzzer(3000); 
-            props.setMatchPhase('finalizado' as MatchPhase);
-            props.endMatch();
-          }, 800);
-        }
         break
       case 'penal':
         if (team === 'home') props.adjustHomePenalties(1)
@@ -482,7 +481,7 @@ export function OperatorView(props: OperatorViewProps) {
     // preguntando el resultado, jugadores saliendo y el arbitro acercandose a
     // la mesa— y habia que cerrarla para ver el marcador final. Ahora se
     // genera solo cuando se pide, con el boton ESTADÍSTICAS.
-    props.setMatchPhase('finalizado' as MatchPhase)
+    props.setMatchPhase('post-partido')
     props.endMatch()
     setShowEndConfirm(false)
   }
@@ -593,9 +592,9 @@ export function OperatorView(props: OperatorViewProps) {
               </div>
             )}
 
-            {state.period === 'alargue' && isTimeResetAllowed && (
-              <Button onClick={() => props.setMainClockTime(overtimeMinutes)} disabled={matchEnded} className={`mt-2 w-full h-8 font-bold text-xs animate-in slide-in-from-top-2 ${theme.btn.shape} bg-purple-700 hover:bg-purple-600 text-white shadow-lg`}>
-                <Clock className="w-3 h-3 mr-2 inline-block"/> REINICIAR RELOJ A {overtimeMinutes}:00
+            {esAlargue(state.period) && isTimeResetAllowed && (
+              <Button onClick={() => props.setMainClockTime(state.matchConfig.overtimeDuration || state.matchConfig.periodDuration)} disabled={matchEnded} className={`mt-2 w-full h-8 font-bold text-xs animate-in slide-in-from-top-2 ${theme.btn.shape} bg-purple-700 hover:bg-purple-600 text-white shadow-lg`}>
+                <Clock className="w-3 h-3 mr-2 inline-block"/> REINICIAR RELOJ A {state.matchConfig.overtimeDuration || state.matchConfig.periodDuration}:00
               </Button>
             )}
           </div>
@@ -618,7 +617,7 @@ export function OperatorView(props: OperatorViewProps) {
               </div>
               <div className="flex items-center justify-center gap-2 mt-2 sm:mt-4">
                 <span className={`text-xs sm:text-sm font-bold transition-colors ${theme.clock.label}`}>
-                  {state.period === '1er_tiempo' ? '1T' : state.period === '2do_tiempo' ? '2T' : state.period === 'alargue' ? 'ET' : 'PEN'}
+                  {PERIODO_CORTO[state.period]}
                 </span>
                 <div className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${state.isMainClockRunning ? 'bg-green-500 animate-pulse' : (theme.id === 'alto-contraste' ? 'bg-white' : 'bg-red-500')}`} />
               </div>
@@ -662,7 +661,8 @@ export function OperatorView(props: OperatorViewProps) {
                   <SelectContent className="bg-zinc-900 border-zinc-700">
                     <SelectItem value="1er_tiempo">1er Tiempo</SelectItem>
                     <SelectItem value="2do_tiempo">2do Tiempo</SelectItem>
-                    {state.matchConfig.allowOvertime  && <SelectItem value="alargue">Alargue (P1 / P2)</SelectItem>}
+                    {state.matchConfig.allowOvertime  && <SelectItem value="alargue">1er Alargue</SelectItem>}
+                    {state.matchConfig.allowOvertime  && <SelectItem value="alargue2">2do Alargue</SelectItem>}
                     {state.matchConfig.allowPenalties && <SelectItem value="penales">Penales</SelectItem>}
                   </SelectContent>
                 </Select>
@@ -737,21 +737,20 @@ export function OperatorView(props: OperatorViewProps) {
                         </span>
                       </button>
 
-                      {/* REGLAS DE PARTIDO */}
-                      <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 space-y-3">
+                      {/* REGLAS DE ALARGUE — solo lectura.
+                          Aqui habia un interruptor de gol de oro y un campo de
+                          minutos guardados en ESTE navegador. Contradecian lo pactado
+                          en el prepartido: un "gol de oro" que quedo encendido de otro
+                          partido terminaba solo uno que iba por gol de plata. Ahora las
+                          reglas viven en el partido y aqui solo se muestran. */}
+                      <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 space-y-2">
                         <Label className="text-amber-400 text-xs font-black uppercase tracking-widest flex items-center"><Goal className="w-4 h-4 mr-2"/> Reglas de Alargue</Label>
-                        
-                        <div className="flex items-center justify-between bg-zinc-800 p-2 rounded border border-zinc-700">
-                          <span className="text-zinc-300 text-xs font-bold">Gol de Oro (Muerte Súbita)</span>
-                          <button onClick={() => handleGoldenGoalChange(!goldenGoal)} className={`w-12 h-6 rounded-full transition-colors ${goldenGoal ? 'bg-green-500' : 'bg-zinc-600'} relative shadow-inner`}>
-                            <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${goldenGoal ? 'left-7' : 'left-1'} shadow`} />
-                          </button>
-                        </div>
-                        
-                        <div className="flex items-center justify-between bg-zinc-800 p-2 rounded border border-zinc-700">
-                          <span className="text-zinc-300 text-xs font-bold">Minutos por tiempo (Alargue)</span>
-                          <Input type="number" min="1" max="20" value={overtimeMinutes} onChange={e => handleOvertimeChange(e.target.value)} className="w-16 h-7 text-xs bg-zinc-900 border-zinc-600 text-center font-bold" />
-                        </div>
+                        <p className="text-zinc-200 text-xs font-bold">
+                          {state.matchConfig.allowOvertime
+                            ? `2 periodos de ${state.matchConfig.overtimeDuration || state.matchConfig.periodDuration} min · ${({ oro: 'gol de oro', plata: 'gol de plata', ninguna: 'se juegan los dos' } as Record<string, string>)[state.matchConfig.overtimeRule || 'ninguna']}`
+                            : 'Este partido no tiene alargue'}
+                        </p>
+                        <p className="text-[10px] text-zinc-500 leading-snug">Se definen al iniciar el partido y no se cambian a mitad de camino.</p>
                       </div>
 
                       {/* AUDIO ENGINE */}
@@ -1039,8 +1038,15 @@ export function OperatorView(props: OperatorViewProps) {
       </div>
 
       {/* ── Tarjetas de Equipos ─────────────────────────────────── */}
+      <div className="flex items-center justify-end mb-1">
+        <button type="button" onClick={() => setColumnasInvertidas(v => !v)}
+          title="Solo en esta pantalla: intercambia qué equipo va a la izquierda. No afecta el marcador ni la proyección."
+          className="flex items-center gap-1.5 px-2.5 h-7 rounded-md text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
+          <ArrowLeftRight className="w-3.5 h-3.5" /> GIRAR LADO
+        </button>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-        {(['home', 'away'] as const).map(side => {
+        {(columnasInvertidas ? ['away', 'home'] as const : ['home', 'away'] as const).map(side => {
           const isHome     = side === 'home'
           const teamName   = isHome ? homeTeamName : awayTeamName
           const score      = isHome ? state.homeScore : state.awayScore
@@ -1129,7 +1135,7 @@ export function OperatorView(props: OperatorViewProps) {
           <h3 className={`text-xs font-bold mb-3 flex items-center ${theme.clock.label}`}><History className="w-4 h-4 mr-1" /> ÚLTIMOS EVENTOS</h3>
           <div className="flex flex-wrap gap-2">
             {(state.matchLog || []).slice(-10).reverse().map(e => {
-              const period = e.period === '1er_tiempo' ? '1T' : e.period === '2do_tiempo' ? '2T' : e.period === 'alargue' ? 'ET' : 'PEN'
+              const period = PERIODO_CORTO[e.period]
               const mins   = Math.floor(e.gameTime / 60).toString().padStart(2, '0')
               const team   = e.team === 'home' ? 'L' : 'V'
               

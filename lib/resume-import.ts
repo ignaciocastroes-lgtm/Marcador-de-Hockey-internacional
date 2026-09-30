@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Period } from '@/hooks/use-game-state'
+import { PERIODOS_ORDEN } from '@/lib/periodos'
 
 export interface Reanudacion {
   periodo: Period
@@ -22,7 +23,7 @@ export interface Reanudacion {
   faltasVisita: number
 }
 
-const PERIODOS: Period[] = ['1er_tiempo', '2do_tiempo', 'alargue', 'penales']
+const PERIODOS: Period[] = PERIODOS_ORDEN
 const aPeriodo = (v: unknown): Period =>
   (PERIODOS.includes(String(v).trim() as Period) ? String(v).trim() : '1er_tiempo') as Period
 const aNum = (v: unknown): number => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) && n >= 0 ? n : 0 }

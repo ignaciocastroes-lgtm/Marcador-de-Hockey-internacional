@@ -20,6 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { GameState, MatchEvent } from '@/hooks/use-game-state'
+import { PERIODO_NOMBRE } from '@/lib/periodos'
 import { buildSummary, playedMinute, fmtDuration } from '@/lib/match-summary'
 import { defaultHomeLogo, defaultHomeName } from '@/lib/club-brand'
 import { documentoCronica, conBarraCronica, escHtml } from '@/lib/cronica-doc'
@@ -61,10 +62,7 @@ export function reportOptsFor(
 /** Un solo escapador de HTML para la crónica: el de `cronica-doc`. */
 const esc = escHtml
 
-const PERIODO: Record<string, string> = {
-  '1er_tiempo': '1er tiempo', '2do_tiempo': '2do tiempo',
-  'alargue': 'Alargue', 'penales': 'Penales'
-}
+const PERIODO: Record<string, string> = PERIODO_NOMBRE
 
 const TARJETA: Record<string, { nombre: string; color: string }> = {
   yellow: { nombre: 'Amarilla', color: '#eab308' },
@@ -166,7 +164,7 @@ export function buildMatchArticle(state: GameState, o: ReportOpts): string {
         <thead><tr><th style="width:66px">Minuto</th><th style="width:104px">Periodo</th><th>Qué pasó</th></tr></thead>
         <tbody>${relevantes.map(e => `
           <tr class="${e.anulado ? 'ardi-anulado' : ''}">
-            <td style="font-variant-numeric:tabular-nums">${esc(playedMinute(state, e.gameTime))}</td>
+            <td style="font-variant-numeric:tabular-nums">${esc(playedMinute(state, e.gameTime, e.period))}</td>
             <td style="color:var(--ardi-dim);white-space:nowrap">${esc(PERIODO[e.period] || e.period)}</td>
             <td>${e.team ? `<b>${esc(e.team === 'home' ? o.homeTeamName : o.awayTeamName)}</b> · ` : ''}${esc(e.details || e.eventType)}${e.actor && e.actor !== 'SISTEMA' && e.actor !== '?' && !(e.details || '').includes(`#${e.actor}`)
               ? ` <span style="color:var(--ardi-dim)">#${esc(e.actor)}</span>` : ''}</td>
@@ -422,7 +420,7 @@ export function buildMatchJSON(state: GameState, o: ReportOpts): MatchJSON {
       .filter(e => e.eventType === 'gol' || e.eventType.startsWith('tarjeta') ||
         (e.eventType === 'ajuste' && /ANULAD|SUSPENDIDO|REANUDADO/.test(e.details || '')))
       .map(e => ({
-        minuto: playedMinute(state, e.gameTime),
+        minuto: playedMinute(state, e.gameTime, e.period),
         periodo: e.period,
         equipo: e.team === 'home' ? 'local' : e.team === 'away' ? 'visita' : null,
         texto: e.details || e.eventType,

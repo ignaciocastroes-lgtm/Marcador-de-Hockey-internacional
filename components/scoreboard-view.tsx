@@ -6,6 +6,7 @@ import { loadLayouts, OVERLAY_LAYOUT_EVENT, type AllLayouts } from '@/lib/overla
 
 import { RelojVivo, COLOR_ALERTA } from '@/components/scoreboard/RelojVivo'
 import { FiguraOverlay } from '@/components/scoreboard/FiguraOverlay'
+import { PERIODO_MARCADOR } from '@/lib/periodos'
 import { calcularFigura } from '@/lib/figura'
 import { WinnerOverlay } from '@/components/scoreboard/WinnerOverlay'
 
@@ -934,6 +935,16 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
   const relojAlerta = !state.activeTimeout && !state.isIntermission &&
     state.mainClock > 0 && state.mainClock <= 10
   const possessionZero = unifiedPossession === 0
+  /**
+   * LOS 45 INDIVIDUALES (P2 / P3) TAMBIEN AVISAN.
+   * El 45 unificado de P1 se ponia rojo y pulsaba en los ultimos diez segundos,
+   * pero los dos individuales seguian verdes hasta el cero. Mismo criterio:
+   * rojo si esta corriendo con diez o menos, y rojo fijo en cero.
+   */
+  const rojoPosLeft  = (state.isPossessionLeftRunning  && state.possessionClockLeft  > 0 && state.possessionClockLeft  <= 10) || state.possessionClockLeft  === 0
+  const rojoPosRight = (state.isPossessionRightRunning && state.possessionClockRight > 0 && state.possessionClockRight <= 10) || state.possessionClockRight === 0
+  const pulsaPosLeft  = state.isPossessionLeftRunning  && state.possessionClockLeft  > 0 && state.possessionClockLeft  <= 10
+  const pulsaPosRight = state.isPossessionRightRunning && state.possessionClockRight > 0 && state.possessionClockRight <= 10
   
   const homeSanctions = state.sanctions?.filter(s => s.team === 'home' && s.remainingTime > 0 && !s.isBench && s.type !== 'yellow') || []
   const awaySanctions = state.sanctions?.filter(s => s.team === 'away' && s.remainingTime > 0 && !s.isBench && s.type !== 'yellow') || []
@@ -1234,8 +1245,8 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
 
         <Draggable id="period" pos={positions['period']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[300px] p-4">
           <span className="font-bold tracking-[0.2em] mb-[15px] text-[35px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>PERIODO</span>
-          <div className={`leading-none bg-black shadow-inner flex items-center justify-center ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.boardAccentColor || '#dc2626'), borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, fontSize: '180px', width: '240px', height: '220px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
-            {state.period === '1er_tiempo' ? '1' : state.period === '2do_tiempo' ? '2' : state.period === 'alargue' ? 'E' : 'P'}
+          <div className={`leading-none bg-black shadow-inner flex items-center justify-center ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.boardAccentColor || '#dc2626'), borderColor: `${liveLogos.boardAccentColor || '#dc2626'}66`, fontSize: PERIODO_MARCADOR[state.period].length > 1 ? '120px' : '180px', width: '240px', height: '220px', borderRadius: '30px', borderWidth: '6px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+            {PERIODO_MARCADOR[state.period]}
           </div>
         </Draggable>
 
@@ -1284,7 +1295,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         <Draggable id="homePossession" pos={positions['homePossession']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[350px] p-4">
           <div className="w-full bg-[#0a0a0a] border-[6px] border-zinc-900 rounded-[30px] p-[20px] shadow-2xl flex flex-col items-center pointer-events-none">
             <span className="font-bold tracking-widest mb-[5px] text-[30px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>POSESION</span>
-            <div className={`leading-none bg-black flex items-center justify-center w-full h-[110px] ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.possessionColor || '#22c55e', `0 0 30px ${liveLogos.possessionColor || '#22c55e'}`), borderColor: `${liveLogos.possessionColor || '#22c55e'}4d`, fontSize: '130px', borderRadius: '20px', borderWidth: '4px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+            <div className={`leading-none bg-black flex items-center justify-center w-full h-[110px] ${digitFxClass} ${pulsaPosLeft ? 'animate-possession-warning' : ''}`} style={{ ...customNumberStyle, ...numFx((rojoPosLeft ? '#ef4444' : (liveLogos.possessionColor || '#22c55e')), `0 0 30px ${(rojoPosLeft ? '#ef4444' : (liveLogos.possessionColor || '#22c55e'))}`), borderColor: `${(rojoPosLeft ? '#ef4444' : (liveLogos.possessionColor || '#22c55e'))}4d`, fontSize: '130px', borderRadius: '20px', borderWidth: '4px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
               {(state.possessionClockLeft || 0).toString().padStart(2, '0')}
             </div>
           </div>
@@ -1322,7 +1333,7 @@ export function ScoreboardView({ state, onSaveAndReset, boardId, isPreview = fal
         <Draggable id="awayPossession" pos={positions['awayPossession']} editMode={editMode} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onToggleVisibility={toggleVisibility} onScale={handleScaleElement} className="w-[350px] p-4">
           <div className="w-full bg-[#0a0a0a] border-[6px] border-zinc-900 rounded-[30px] p-[20px] shadow-2xl flex flex-col items-center pointer-events-none">
             <span className="font-bold tracking-widest mb-[5px] text-[30px]" style={{ color: liveLogos.boardTextColor || '#a1a1aa' }}>POSESION</span>
-            <div className={`leading-none bg-black flex items-center justify-center w-full h-[110px] ${digitFxClass}`} style={{ ...customNumberStyle, ...numFx(liveLogos.possessionColor || '#22c55e', `0 0 30px ${liveLogos.possessionColor || '#22c55e'}`), borderColor: `${liveLogos.possessionColor || '#22c55e'}4d`, fontSize: '130px', borderRadius: '20px', borderWidth: '4px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
+            <div className={`leading-none bg-black flex items-center justify-center w-full h-[110px] ${digitFxClass} ${pulsaPosRight ? 'animate-possession-warning' : ''}`} style={{ ...customNumberStyle, ...numFx((rojoPosRight ? '#ef4444' : (liveLogos.possessionColor || '#22c55e')), `0 0 30px ${(rojoPosRight ? '#ef4444' : (liveLogos.possessionColor || '#22c55e'))}`), borderColor: `${(rojoPosRight ? '#ef4444' : (liveLogos.possessionColor || '#22c55e'))}4d`, fontSize: '130px', borderRadius: '20px', borderWidth: '4px', transform: 'translateZ(0)', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
               {(state.possessionClockRight || 0).toString().padStart(2, '0')}
             </div>
           </div>

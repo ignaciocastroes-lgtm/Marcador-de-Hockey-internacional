@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { GameState, MatchEvent, Period } from '@/hooks/use-game-state'
+import { PERIODO_CORTO, PERIODOS_ORDEN, duracionPeriodo } from '@/lib/periodos'
 
 export interface GoalLine { minute: string; number: string; team: 'home' | 'away' }
 export interface CardLine { number: string; type: 'yellow' | 'blue' | 'red'; isBench: boolean }
@@ -28,15 +29,16 @@ export interface MatchSummary {
   awayPenalties: number
 }
 
-const PERIOD_LABEL: Record<Period, string> = {
-  '1er_tiempo': '1T', '2do_tiempo': '2T',
-  // El alargue son dos periodos: se distinguen en la ficha y en el acta.
-  'alargue': 'ET1', 'alargue2': 'ET2', 'penales': 'PEN'
-}
+const PERIOD_LABEL = PERIODO_CORTO
 
 /** El reloj cuenta hacia atrás: el minuto jugado es la duración menos lo que resta. */
-export function playedMinute(state: GameState, gameTime: number): string {
-  const total = state.initialClockTime || 0
+export function playedMinute(state: GameState, gameTime: number, period?: Period): string {
+  // Cada periodo tiene su duracion: los alargues duran lo pactado (p. ej. 5 min),
+  // no los 25 del tiempo reglamentario. Con la duracion equivocada, un gol al
+  // minuto 1 del alargue se contaba como el minuto 21.
+  const total = period && state.matchConfig?.periodDuration
+    ? duracionPeriodo(state.matchConfig, period)
+    : (state.initialClockTime || 0)
   const jugado = Math.max(0, total - gameTime)
   const m = Math.floor(jugado / 60)
   const s = jugado % 60
@@ -58,7 +60,7 @@ function teamSummary(
   // la tabla de goleadores. Queda en el registro cronologico, marcado.
   const goals: GoalLine[] = log
     .filter(e => e.eventType === 'gol' && !e.anulado && e.team === team && periods.includes(e.period))
-    .map(e => ({ minute: playedMinute(state, e.gameTime), number: e.actor || '—', team }))
+    .map(e => ({ minute: playedMinute(state, e.gameTime, e.period), number: e.actor || '—', team }))
 
   const tally = new Map<string, number>()
   goals.forEach(g => tally.set(g.number, (tally.get(g.number) || 0) + 1))
@@ -92,12 +94,12 @@ function teamSummary(
 export function buildSummary(state: GameState, scope: 'primer_tiempo' | 'completo'): MatchSummary {
   const periods: Period[] = scope === 'primer_tiempo'
     ? ['1er_tiempo']
-    : ['1er_tiempo', '2do_tiempo', 'alargue', 'penales']
+    : PERIODOS_ORDEN
 
   const goalsIn = (p: Period, team: 'home' | 'away') =>
     (state.matchLog || []).filter(e => e.eventType === 'gol' && !e.anulado && e.team === team && e.period === p).length
 
-  const byPeriod = (scope === 'primer_tiempo' ? (['1er_tiempo'] as Period[]) : (['1er_tiempo', '2do_tiempo', 'alargue'] as Period[]))
+  const byPeriod = (scope === 'primer_tiempo' ? (['1er_tiempo'] as Period[]) : (['1er_tiempo', '2do_tiempo', 'alargue', 'alargue2'] as Period[]))
     .filter(p => p === '1er_tiempo' || p === '2do_tiempo' || goalsIn(p, 'home') + goalsIn(p, 'away') > 0)
     .map(p => ({ label: PERIOD_LABEL[p], home: goalsIn(p, 'home'), away: goalsIn(p, 'away') }))
 
