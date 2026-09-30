@@ -117,6 +117,17 @@ export function OperatorView(props: OperatorViewProps) {
    * terminado de verdad.
    */
   const matchEnded = state.isMatchEnded
+  /**
+   * Si cada equipo tiene un gol vigente (sin anular) que anular. Sale del
+   * REGISTRO, no del marcador: si la mesa ya corrigio un gol cargado por
+   * error, el marcador puede seguir en 0 sin que quede ningun gol en el acta
+   * — eso NO habilita "Anular gol", porque no hay decision arbitral que
+   * deshacer.
+   */
+  const puedeAnular = {
+    home: (state.matchLog || []).some(e => e.eventType === 'gol' && e.team === 'home' && !e.anulado),
+    away: (state.matchLog || []).some(e => e.eventType === 'gol' && e.team === 'away' && !e.anulado),
+  }
 
 
   const [showIntermissionSelector, setShowIntermissionSelector] = useState(false)
@@ -633,6 +644,7 @@ export function OperatorView(props: OperatorViewProps) {
               enTanda={state.period === 'penales'}
               disabled={matchEnded}
               detenido={state.isIntermission || !!state.activeTimeout}
+              puedeAnular={puedeAnular}
               // En juego el boton COBRA el penal (para el reloj y repone a
               // 0:05 si hace falta); la conversion se carga como gol normal.
               // En la tanda, en cambio, suma al contador de penales.

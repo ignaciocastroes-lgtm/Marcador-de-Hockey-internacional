@@ -244,6 +244,60 @@ export function resolveToggle(
 }
 
 
+/**
+ * AL SANCIONAR EN PISTA CON AZUL O ROJA, SALE DE LA LISTA DE CANCHA.
+ *
+ * EL BUG QUE RESUELVE: sancionar nunca tocaba `courtIds`. El sancionado
+ * quedaba INVISIBLE —lo filtraba `isPlayerAvailable`— pero su id seguia
+ * adentro de la lista. Si la mesa traia un suplente a mano para cubrir el
+ * hueco (usando el cambio normal), ese suplente se AGREGABA sin que nadie
+ * saliera de verdad: `courtIds` crecia sin limite. Un equipo con 4 azules
+ * simultaneas y sus 3 suplentes de refuerzo terminaba con 8 ids ahi adentro,
+ * aunque el marcador de "en pista" mostrara 4 todo el tiempo.
+ *
+ * Al anular, `isPlayerAvailable` deja de filtrar a las 4 sancionadas, que
+ * REAPARECEN de golpe — encima de los 3 suplentes, que nunca se fueron.
+ * "Todos entran a la pista": el equipo se ve con 8, mucho mas de lo legal.
+ *
+ * LA REGLA: la primera sancion simultanea YA representa la inferioridad
+ * correcta (5 -> 4, el piso). Sancionar a alguien mas mientras el equipo ya
+ * esta en el piso bajaria a 3, 2, 1 — ahi SI hace falta un suplente para no
+ * pasar por debajo del piso.
+ *
+ * Al anular no hay nada que deshacer: la sancionada ya quedo bien afuera de
+ * `courtIds` desde el principio, asi que anular solo la vuelve ELEGIBLE.
+ * Vuelve a la pista con un cambio normal, cuando la mesa decida, como
+ * cualquier suplente — no de golpe ni por encima de nadie.
+ */
+export function aplicarSalidaPorSancion(
+  courtIds: string[], sancionadoId: string, players: Player[],
+  team: 'home' | 'away', cardHistory: CardHistory[], sanctions: Sanction[]
+): string[] {
+  if (!courtIds.includes(sancionadoId)) return courtIds
+  const sinSancionado = courtIds.filter(id => id !== sancionadoId)
+
+  const max = getMaxAllowed(sanctions, team)
+  const lineupActual = getLineup(players, sinSancionado, team, cardHistory, sanctions)
+  if (lineupActual.count >= max) return sinSancionado   // la primera: ya queda en el piso, nadie entra
+
+  // Desde la segunda sancion simultanea: sin esto, el equipo seguiria bajando.
+  const enPista = new Set(sinSancionado)
+  // `isPlayerAvailable`, no solo `!isPlayerExpelled`: hace falta excluir tambien
+  // a quien YA esta cumpliendo una azul (penalizado, no expulsado). Sin esto,
+  // el primer intento de esta funcion podia "traer de la banca" a alguien que
+  // en realidad seguia sancionado, porque ya no figuraba en `courtIds`.
+  const disponibles = players.filter(p =>
+    !enPista.has(p.id) && !isBenchOnly(p) && !p.isDisabled &&
+    isPlayerAvailable(p, team, cardHistory, sanctions)
+  )
+  const necesitaArquero = !lineupActual.goalie
+  const candidato = (necesitaArquero ? disponibles.find(isGoalie) : undefined)
+    || disponibles.find(p => !isGoalie(p))
+    || disponibles[0]
+
+  return candidato ? [...sinSancionado, candidato.id] : sinSancionado
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AJUSTES DE PARTIDO
 // El plantel base viene de matchConfig y es lo que firmaron los capitanes: no se

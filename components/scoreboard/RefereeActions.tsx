@@ -36,6 +36,17 @@ interface Props {
   detenido?: boolean
   onPenal: (team: 'home' | 'away') => void
   onAnular: (team: 'home' | 'away') => void
+  /**
+   * EL BUG: con el marcador en 0-0, "Anular gol" abria igual la confirmacion,
+   * y al confirmar la mesa veia "Gol ANULADO" en un aviso de EXITO — sin que
+   * nada cambiara (no hay gol que anular; `annulGoal` ya se protegia con un
+   * `if (!ultimo) return` silencioso). El operador pedia anular, la app decia
+   * que si, y no pasaba nada: eso se siente como que el sistema se trabo.
+   *
+   * Se resuelve ANTES de ofrecer el boton: si el equipo no tiene un gol
+   * vigente que anular, ni se muestra la confirmacion ni se dispara el aviso.
+   */
+  puedeAnular: { home: boolean; away: boolean }
   /** Se cierra el contenedor tras confirmar, si lo hay. */
   onDone?: () => void
 }
@@ -43,7 +54,7 @@ interface Props {
 type Pendiente = { accion: 'penal' | 'anular'; team: 'home' | 'away' } | null
 
 export function RefereeActions({
-  homeTeamName, awayTeamName, enTanda, disabled, detenido, onPenal, onAnular, onDone
+  homeTeamName, awayTeamName, enTanda, disabled, detenido, puedeAnular, onPenal, onAnular, onDone
 }: Props) {
   const [pendiente, setPendiente] = useState<Pendiente>(null)
 
@@ -59,10 +70,12 @@ export function RefereeActions({
     const nombre = pendiente.team === 'home' ? homeTeamName : awayTeamName
     if (pendiente.accion === 'penal') {
       onPenal(pendiente.team)
-    } else {
+    } else if (puedeAnular[pendiente.team]) {
       onAnular(pendiente.team)
       toast.warning(`Gol de ${nombre} ANULADO por el árbitro`, { duration: 5000 })
     }
+    // Si no hay nada que anular, no se llama a onAnular ni se avisa exito:
+    // el boton ya deberia estar deshabilitado, pero esto es el segundo cerrojo.
     setPendiente(null)
     onDone?.()
   }
@@ -125,9 +138,10 @@ export function RefereeActions({
         </p>
         <div className="grid grid-cols-2 gap-2">
           {equipos.map(e => (
-            <Button key={e.team} disabled={disabled} onClick={() => pedir('anular', e.team)}
+            <Button key={e.team} disabled={disabled || !puedeAnular[e.team]} onClick={() => pedir('anular', e.team)}
+              title={!puedeAnular[e.team] ? `${e.name} no tiene un gol vigente para anular` : undefined}
               variant="outline"
-              className="h-10 text-[11px] font-bold border-red-900 text-red-300 hover:bg-red-950">
+              className="h-10 text-[11px] font-bold border-red-900 text-red-300 hover:bg-red-950 disabled:opacity-30">
               <span className="truncate">{e.name}</span>
             </Button>
           ))}

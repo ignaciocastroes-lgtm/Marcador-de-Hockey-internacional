@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import { emptyMatchAdjustments, type MatchAdjustments, type TeamAdjustments } from '@/lib/court-rules'
+import { emptyMatchAdjustments, aplicarSalidaPorSancion, getDisplayNumber, type MatchAdjustments, type TeamAdjustments } from '@/lib/court-rules'
 import { toast } from 'sonner'
 import {
   esAlargue, duracionPeriodo, siguientePeriodo, aplicarGolDeOro,
@@ -1591,8 +1591,26 @@ export function useGameState() {
 
       const willStopClock = !(isBench || duration === 0);
 
+      /**
+       * Azul o roja EN PISTA: la sancionada sale de `courtIds` ya mismo, y si
+       * hace falta para no bajar del piso, entra un suplente de la banca.
+       * Bench/colectiva no toca nada de esto: esos ya no estan en pista.
+       */
+      let courtIdsPatch: Partial<GameState> = {}
+      if (!isBench && (finalCard === 'blue' || finalCard === 'red')) {
+        const roster = team === 'home' ? prev.matchConfig.homePlayers : prev.matchConfig.awayPlayers
+        const sancionado = (roster || []).find(p => getDisplayNumber(p) === playerNumber || p.number === playerNumber)
+        if (sancionado) {
+          const key = team === 'home' ? 'homeCourtIds' : 'awayCourtIds'
+          const actuales = (team === 'home' ? prev.homeCourtIds : prev.awayCourtIds) || []
+          const nuevos = aplicarSalidaPorSancion(actuales, sancionado.id, roster, team, finalCardHistory, finalSanctions)
+          if (nuevos !== actuales) courtIdsPatch = { [key]: nuevos }
+        }
+      }
+
       return {
-        ...prev, sanctions: finalSanctions, cardHistory: finalCardHistory, matchLog: finalMatchLog,
+        ...prev, ...courtIdsPatch,
+        sanctions: finalSanctions, cardHistory: finalCardHistory, matchLog: finalMatchLog,
         isMainClockRunning: willStopClock ? false : prev.isMainClockRunning,
         isPossessionLeftRunning: willStopClock ? false : prev.isPossessionLeftRunning,
         isPossessionRightRunning: willStopClock ? false : prev.isPossessionRightRunning,
