@@ -1,0 +1,1194 @@
+"use client"
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════
+ * PANEL CONTROL — CONGELADO DESDE LA 3.5
+ * ══════════════════════════════════════════════════════════════════════════
+ *
+ * Esta vista NO se amplia. Se mantiene por una razon concreta: es el panel de
+ * botones grandes, el que usa alguien sin entrenamiento, y el que sigue
+ * corriendo en dos clubes. Tambien es el respaldo cuando PISTA no sirve —sin
+ * plantel cargado, con la tablet muerta, desde un notebook prestado—.
+ *
+ * Congelado significa:
+ *   · Se corrigen BUGS y se aplican cambios de reglamento.
+ *   · NO se agregan funciones nuevas: esas van a PISTA.
+ *   · Todo lo compartido (atajos, motor de tarjetas, relojes, audio) vive
+ *     fuera y lo consumen los dos paneles. Si algo hay que tocar en los dos,
+ *     es senal de que no estaba compartido y hay que sacarlo.
+ *
+ * El motivo de fondo: mantener dos interfaces con funciones propias fue lo
+ * que produjo los atajos duplicados, los dos editores de plantel y las dos
+ * vias de sancion. Una sola crece; la otra sostiene.
+ */
+
+import { RigidClock } from '@/components/scoreboard/RigidClock'
+import { RelojVivo } from '@/components/scoreboard/RelojVivo'
+import {
+  loadHotkeys, keyLabel, DEFAULT_HOTKEYS, HOTKEYS_CHANGED_EVENT, HOTKEY_EVENT,
+  OPEN_HOTKEYS_EVENT, type HotkeyMap
+} from '@/lib/hotkeys'
+
+import { defaultHomeName } from '@/lib/club-brand'
+
+import { useState, useRef, useEffect, useCallback } from 'react'
+import Image from 'next/image'
+import { toast } from 'sonner'
+import { Play, Pause, RotateCcw, Plus, Minus, Bell, Timer, Clock, Settings, Upload, Square, Coffee, AlertTriangle, Goal, AlertCircle, History, FileText, ChevronRight, Shield, LayoutGrid, LayoutDashboard, ZoomIn, ZoomOut, Palette, Volume2, Lock, Unlock, VolumeX, Keyboard, ArrowLeftRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { INTERMISSION_DURATION } from '@/hooks/use-game-state'
+import type { GameState, Period, Team, MatchRecord, MatchConfig, Sanction, Player, RefereeData, MatchEvent, MatchPhase, CardHistory } from '@/hooks/use-game-state'
+
+import { RefereeActions } from '@/components/scoreboard/RefereeActions'
+import { GLOBAL_THEMES, saveTheme, loadTheme, type SkinKey, type ThemeConfig } from '@/lib/themes'
+import { PERIODO_CORTO, esAlargue } from '@/lib/periodos'
+import { SanctionsList } from '@/components/scoreboard/SanctionsList'
+import { BenchModal, type BenchStaffUI } from '@/components/scoreboard/BenchModal'
+import { PosModal } from '@/components/scoreboard/PosModal'
+import { MatchStatsModal } from '@/components/scoreboard/MatchStatsModal'
+import { PreMatchSetup } from '@/components/scoreboard/PreMatchSetup'
+import { MatchHistoryModal } from '@/components/scoreboard/MatchHistoryModal'
+import { playHorn, playBeep, stopHorn, armAudio, loadAudioConfig } from '@/lib/audio-engine'
+
+// ─── MOTOR DE TEMAS GLOBALES (SKIN ENGINE) ─────────────────────────────────
+interface ResumeParams { period: Period; clockTime: number; homeScore: number; awayScore: number; homeFouls: number; awayFouls: number; }
+
+interface OperatorViewProps {
+  state: GameState; savedTeams: Team[]; matchHistory: MatchRecord[]; playBuzzer: () => void;
+  configureMatch: (config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null) => void;
+  configureMatchWithResume?: (config: MatchConfig, homeTeam: Team | null, awayTeam: Team | null, resume: ResumeParams) => void;
+  setMatchPhase: (phase: MatchPhase) => void;
+  toggleMainClock: () => void; resetMainClock: () => void; setMainClockTime: (minutes: number) => void;
+  adjustMainClock: (seconds: number) => void; setPeriod: (period: Period) => void; nextPeriod: () => void;
+  adjustHomeScore: (delta: number, playerNumber?: string) => void; adjustAwayScore: (delta: number, playerNumber?: string) => void;
+  adjustHomeFouls: (delta: number) => void; adjustAwayFouls: (delta: number) => void; resetFouls: () => void;
+  adjustHomePenalties: (delta: number) => void;
+  scorePenalty: (team: 'home' | 'away', playerNumber?: string) => void
+  awardPenalty: (team: 'home' | 'away') => void;
+  annulGoal: (team: 'home' | 'away') => void;
+  correctScore: (team: 'home' | 'away') => void; adjustAwayPenalties: (delta: number) => void;
+  startIntermission: (durationMinutes?: number) => void;
+  suspendMatch: () => void; endIntermission: () => void;
+  addYellowCard: (team: 'home' | 'away') => void; resetYellowCards: (team: 'home' | 'away') => void;
+  addSanction: (team: 'home' | 'away', type: 'yellow' | 'blue' | 'red', playerNumber: string, isBench?: boolean, staffId?: string, sanctionType?: 'direct' | 'collective') => void;
+  addBenchSanction: (team: 'home' | 'away', sentCard: 'yellow' | 'red', directInfractor: { id: string, name: string, role: string, number: string }, collectiveTargets: Array<{ id: string, name: string, role: string, number: string }>) => void;
+  removeSanction: (sanctionId: string) => void; clearSanctions: (team?: 'home' | 'away') => void;
+  requestTimeoutHome: () => void; requestTimeoutAway: () => void; grantTimeoutHome: () => void;
+  grantTimeoutAway: () => void; cancelTimeoutRequest: (team: 'home' | 'away') => void;
+  cancelActiveTimeout: () => void; resetTimeouts: () => void; togglePossessionLeft: () => void;
+  togglePossessionRight: () => void; resetPossessionLeft: () => void; resetPossessionRight: () => void;
+  resetAndPausePossession: () => void; endMatch: () => void;
+  saveTeam: (team: Team) => void; deleteTeam: (teamId: string) => void; saveMatchToHistory: () => void;
+  clearHistory: () => void; deleteMatchFromHistory: (id: string) => void; resetForNewMatch: () => void; resetAll: () => void; closeMatchEndModal: () => void;
+  onSaveAndReset?: () => void;
+}
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60); const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+export function OperatorView(props: OperatorViewProps) {
+  const { state } = props
+  const homeTeamName = state.homeTeam?.name || defaultHomeName()
+  const awayTeamName = state.awayTeam?.name || 'VISITA'
+  const homeSanctions = state.sanctions?.filter(s => s.team === 'home') || []
+  const awaySanctions = state.sanctions?.filter(s => s.team === 'away') || []
+
+  const [posModalOpen, setPosModalOpen]     = useState(false)
+  const [posModalTeam, setPosModalTeam]     = useState<'home' | 'away'>('home')
+  const [posModalAction, setPosModalAction] = useState<'gol' | 'penal' | 'yellow' | 'blue' | 'red'>('gol')
+  const [benchModalOpen, setBenchModalOpen] = useState(false)
+  const [benchModalTeam, setBenchModalTeam] = useState<'home' | 'away'>('home')
+  const [benchModalCard, setBenchModalCard] = useState<'yellow' | 'red'>('yellow')
+  const [benchStaffList, setBenchStaffList] = useState<BenchStaffUI[]>([])
+  const [showStats, setShowStats] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [showEndConfirm, setShowEndConfirm]       = useState(false)
+  /**
+   * Mismo arreglo que en la vista Pista: el bloqueo de fin de partido lee
+   * directo de `state.isMatchEnded` (persistido), no de un `useState` local
+   * que se reiniciaba en `false` cada vez que se cambiaba a Pista y se
+   * volvía a Control, desbloqueando todo aunque el partido siguiera
+   * terminado de verdad.
+   */
+  const matchEnded = state.isMatchEnded
+  /**
+   * Si cada equipo tiene un gol vigente (sin anular) que anular. Sale del
+   * REGISTRO, no del marcador: si la mesa ya corrigio un gol cargado por
+   * error, el marcador puede seguir en 0 sin que quede ningun gol en el acta
+   * — eso NO habilita "Anular gol", porque no hay decision arbitral que
+   * deshacer.
+   */
+  const puedeAnular = {
+    home: (state.matchLog || []).some(e => e.eventType === 'gol' && e.team === 'home' && !e.anulado),
+    away: (state.matchLog || []).some(e => e.eventType === 'gol' && e.team === 'away' && !e.anulado),
+  }
+
+
+  const [showIntermissionSelector, setShowIntermissionSelector] = useState(false)
+  const [customIntermissionMinutes, setCustomIntermissionMinutes] = useState('')
+
+  const [isEditMode, setIsEditMode] = useState(false)
+  /**
+   * GIRO LOCAL DE COLUMNAS — solo esta pantalla, solo mientras esta abierta.
+   *
+   * No es lo mismo que "GIRAR PISTA" (a que lado ataca cada equipo en el dibujo
+   * de la cancha). Esto solo decide si el panel LOCAL se dibuja a la izquierda
+   * o a la derecha en ESTA pantalla, para que el operador que se sienta mirando
+   * la pista tenga el mismo lado fisico en los botones.
+   *
+   * No se guarda ni viaja: no toca el estado del partido, la proyeccion, el
+   * marcador ni los atajos (que siguen siendo "gol local"/"gol visita").
+   */
+  const [columnasInvertidas, setColumnasInvertidas] = useState(false)
+  const [showAdminMenu, setShowAdminMenu] = useState(false)
+
+  // ─── MEMORIA DE TEMA Y ESCALAS ──────────────────────────────────
+  const [currentSkinKey, setCurrentSkinKey] = useState<SkinKey>('neon-original')
+  const [panelScales, setPanelScales] = useState({ clock: 100, possession: 100, teamHome: 100, teamAway: 100, events: 100 })
+  
+
+  // 🛡️ SEGURO DEL RELOJ (Modo Edición de Tiempo)
+  const [isTimeEditMode, setIsTimeEditMode] = useState(false)
+  const [isTimeResetAllowed, setIsTimeResetAllowed] = useState(false)
+
+  /**
+   * ⌨️ ATAJOS DE TECLADO — LECTURA DEL SISTEMA ÚNICO
+   *
+   * Esta vista sólo MUESTRA las teclas en los tooltips de sus botones; quien
+   * las escucha es `app/page`, y quien las edita es el modal de teclas.
+   *
+   * Antes leía de 'ardi-hotkeys' (seis acciones) mientras el resto de la
+   * estación usaba 'ardi-hotkeys-v2' (catorce). Y su editor propio
+   * (`HotkeyInput`) hacía rato que no se renderizaba en ninguna parte, así
+   * que la clave vieja ya no la podía cambiar nadie: si el operador
+   * remapeaba una tecla en el modal, CONTROL seguía mostrando la anterior.
+   * Los tooltips mentían, en silencio y sin manera de notarlo.
+   *
+   * Ahora lee del mismo lugar que todos y se refresca con el evento de
+   * cambio, así que lo que dice el botón es lo que hace la tecla.
+   */
+  const [hotkeys, setHotkeys] = useState<HotkeyMap>(DEFAULT_HOTKEYS)
+
+  useEffect(() => {
+    const refresh = () => setHotkeys(loadHotkeys())
+    refresh()
+    window.addEventListener(HOTKEYS_CHANGED_EVENT, refresh)
+    window.addEventListener('storage', refresh)
+    return () => {
+      window.removeEventListener(HOTKEYS_CHANGED_EVENT, refresh)
+      window.removeEventListener('storage', refresh)
+    }
+  }, [])
+
+  /**
+   * ACCIONES DE VISTA — la otra mitad del teclado universal.
+   *
+   * `app/page` escucha el teclado y resuelve solo lo que es del estado del
+   * partido (reloj, goles, faltas, posesión). Dos acciones no puede
+   * resolverlas desde afuera, porque dependen de qué diálogo tiene abierto la
+   * vista: cerrar lo abierto y abrir el selector de descanso. Para esas emite
+   * un evento que atiende la vista que esté montada.
+   *
+   * PISTA lo escuchaba desde el principio; CONTROL no. Resultado: en el panel
+   * clásico las teclas de descanso y de cerrar diálogo no hacían nada, sin
+   * ningún aviso — el mismo atajo funcionaba o no según el modo, que es justo
+   * lo que la homologación tiene que terminar.
+   */
+  useEffect(() => {
+    const onHotkey = (e: Event) => {
+      const action = (e as CustomEvent).detail as string
+      if (action === 'undo') {
+        setShowIntermissionSelector(false); setShowEndConfirm(false)
+        setShowResetConfirm(false); setShowStats(false)
+        setShowHistory(false); setPosModalOpen(false); setBenchModalOpen(false)
+        setShowAdminMenu(false)
+      } else if (action === 'intermission' && !matchEnded) {
+        setShowIntermissionSelector(true)
+      }
+    }
+    window.addEventListener(HOTKEY_EVENT, onHotkey)
+    return () => window.removeEventListener(HOTKEY_EVENT, onHotkey)
+  }, [matchEnded])
+
+  // 🤖 CONTROL DE SILENCIO (Bypass Chicharra)
+  const skipNextClockStartBuzzer = useRef(false)
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('ardi-theme') as SkinKey
+    if (savedTheme && GLOBAL_THEMES[savedTheme]) setCurrentSkinKey(savedTheme)
+
+    const savedScales = localStorage.getItem('ardi-scales')
+    if (savedScales) {
+      try { setPanelScales(JSON.parse(savedScales)) } catch(e){}
+    }
+
+    const savedTimeEdit = localStorage.getItem('ardi-time-edit')
+    if (savedTimeEdit) setIsTimeEditMode(savedTimeEdit === 'true')
+    
+    const savedTimeReset = localStorage.getItem('ardi-time-reset')
+    if (savedTimeReset) setIsTimeResetAllowed(savedTimeReset === 'true')
+  }, [])
+
+  const handleThemeChange = (val: SkinKey) => {
+    setCurrentSkinKey(val)
+    saveTheme(val)
+  }
+
+  const handleScaleChange = (panel: keyof typeof panelScales, delta: number) => {
+    setPanelScales(prev => {
+      const next = { ...prev, [panel]: Math.max(80, Math.min(120, prev[panel] + delta)) }
+      localStorage.setItem('ardi-scales', JSON.stringify(next))
+      return next
+    })
+  }
+
+  const handleTimeEditChange = (val: boolean) => {
+    setIsTimeEditMode(val)
+    localStorage.setItem('ardi-time-edit', String(val))
+  }
+
+  const handleTimeResetChange = (val: boolean) => {
+    setIsTimeResetAllowed(val)
+    localStorage.setItem('ardi-time-reset', String(val))
+  }
+
+  // ─── LISTENER GLOBAL DE TECLADO (HOTKEYS) ─────────────────
+  // Los atajos viven en app/page: una sola definicion para toda la estacion
+  // de trabajo. Antes estaban duplicados aqui y en la vista Pista, asi que
+  // cambiar de modo cambiaba el teclado bajo las manos del operador.
+
+
+  const theme = GLOBAL_THEMES[currentSkinKey] 
+
+  // ─── AUDIO ENGINE NATIVO ──────────────────────────────────
+  const [buzzerMode, setBuzzerMode] = useState<'click' | 'hold'>('click')
+  
+  const stopSynthTimeout = useRef<NodeJS.Timeout | null>(null)
+  const buzzerInterval = useRef<NodeJS.Timeout | null>(null) 
+
+  const nativeAudioCtx = useRef<AudioContext | null>(null)
+  const activeOscillators = useRef<OscillatorNode[]>([])
+
+  useEffect(() => {
+    armAudio()
+  }, [])
+
+  // El sonido lo produce lib/audio-engine, el mismo que usa la vista Pista:
+  // envolvente para que no chasquee y margen de amplitud para que no recorte.
+  const startNativeSynth = useCallback(() => { playHorn(60000, loadAudioConfig()) }, [])
+  const stopNativeSynth  = useCallback(() => { stopHorn() }, [])
+
+  const triggerAutoBuzzer = useCallback((durationMs = 800) => {
+    if (stopSynthTimeout.current) clearTimeout(stopSynthTimeout.current)
+    // Sin condicion de tipo: antes, si buzzerType no era exactamente
+    // 'native-synth', la mesa se quedaba muda sin avisar.
+    playHorn(durationMs, loadAudioConfig())
+    props.playBuzzer()
+  }, [props]);
+
+  /**
+   * GOL DE ORO: el partido termina SOLO, sin que nadie pulse FIN. Antes lo
+   * hacia esta vista con su propio interruptor y sonaba la chicharra 3 s; ahora
+   * termina el motor y la chicharra suena aqui, al ver el cierre.
+   */
+  const finVisto = useRef(state.isMatchEnded)
+  useEffect(() => {
+    const ultimo = state.matchLog[state.matchLog.length - 1]
+    if (!finVisto.current && state.isMatchEnded && ultimo?.details?.startsWith('GOL DE ORO')) triggerAutoBuzzer(3000)
+    finVisto.current = state.isMatchEnded
+  }, [state.isMatchEnded, state.matchLog, triggerAutoBuzzer])
+
+  const handleBuzzerPress = () => {
+    if (stopSynthTimeout.current) clearTimeout(stopSynthTimeout.current);
+
+    startNativeSynth();
+    if (buzzerMode === 'click') {
+      stopSynthTimeout.current = setTimeout(stopNativeSynth, 800);
+    }
+  };
+
+  const handleBuzzerRelease = () => {
+    if (buzzerMode === 'hold') stopNativeSynth();
+  };
+
+  // 🤖 AUTOMATIZACIÓN DE LA CHICHARRA Y BEEPS INTELIGENTES 🤖
+  const prevPossLRun = useRef(state.isPossessionLeftRunning);
+  const prevPossRRun = useRef(state.isPossessionRightRunning);
+  const prevPossLeft = useRef(state.possessionClockLeft);
+  const prevPossRight = useRef(state.possessionClockRight);
+  const prevTimeoutClock = useRef(state.timeoutClock);
+  const prevActiveTimeout = useRef(state.activeTimeout);
+  const prevIntermission = useRef(state.isIntermission);
+  const prevClockRunning = useRef(state.isMainClockRunning);
+  const prevMainClock = useRef(state.mainClock);
+  const prevHomeFouls = useRef(state.homeFouls);
+  const prevAwayFouls = useRef(state.awayFouls);
+  const prevPeriodRef = useRef(state.period);
+
+  useEffect(() => {
+    // 🔴 Resetear timeouts al cambiar periodo
+    if (prevPeriodRef.current !== state.period) {
+      props.resetTimeouts();
+      prevPeriodRef.current = state.period;
+    }
+
+    // 🚨 PITAZO FINAL LLEGAR A CERO (Cualquier reloj)
+    if ((prevPossLeft.current > 0 && state.possessionClockLeft === 0) || 
+        (prevPossRight.current > 0 && state.possessionClockRight === 0)) {
+        triggerAutoBuzzer(800);
+    }
+    
+    if (!prevActiveTimeout.current && state.activeTimeout) triggerAutoBuzzer(500); 
+    if (prevActiveTimeout.current && !state.activeTimeout) triggerAutoBuzzer(1500); 
+    if (prevIntermission.current && !state.isIntermission) triggerAutoBuzzer(1500); 
+
+    // Inicio / Fin de Reloj Principal.
+    //
+    // Dar posesion arranca tambien el reloj de juego, asi que sin esta guarda
+    // cada play de los 45 sonaba la chicharra: en un partido son unas cuarenta
+    // veces. La vista Pista ya lo resolvia asi; aqui faltaba.
+    const posesionRecienDada =
+      (!prevPossLRun.current && state.isPossessionLeftRunning) ||
+      (!prevPossRRun.current && state.isPossessionRightRunning)
+
+    if (!prevClockRunning.current && state.isMainClockRunning) {
+        if (skipNextClockStartBuzzer.current) skipNextClockStartBuzzer.current = false;
+        else if (!posesionRecienDada) triggerAutoBuzzer(500);
+    }
+    if (prevMainClock.current > 0 && state.mainClock === 0) {
+        triggerAutoBuzzer(2000); 
+    }
+
+    // Faltas (10ma Directa)
+    const checkFoulLimit = (prev: number, curr: number) => curr > prev && curr >= 10 && curr % 5 === 0;
+    if (checkFoulLimit(prevHomeFouls.current, state.homeFouls) || checkFoulLimit(prevAwayFouls.current, state.awayFouls)) {
+      if (state.isMainClockRunning) props.toggleMainClock(); 
+      triggerAutoBuzzer(1500); 
+      toast.error("¡Límite de Faltas Alcanzado! (Tiro Libre Directo)", { duration: 5000, position: 'top-center' });
+    }
+
+    // ⏰ BEEPS INTELIGENTES RELOJ PRINCIPAL (10 segundos a 1 segundo)
+    if (state.isMainClockRunning && state.mainClock <= 10 && state.mainClock > 0 && prevMainClock.current !== state.mainClock) {
+        playBeep('tick', loadAudioConfig())
+    }
+
+    // ⏰ BEEPS INTELIGENTES POSESIÓN (10, 8, 6, 4, 3, 2, 1)
+    const checkPossessionBeep = (curr: number, prev: number) => {
+        if (curr === 0 || curr >= prev) return;
+        if (curr <= 10 && curr > 3 && curr % 2 === 0) {
+            triggerAutoBuzzer(200);
+        } else if (curr <= 3 && curr > 0) {
+            triggerAutoBuzzer(200);
+        }
+    };
+
+    if (state.isPossessionLeftRunning) checkPossessionBeep(state.possessionClockLeft, prevPossLeft.current);
+    if (state.isPossessionRightRunning) checkPossessionBeep(state.possessionClockRight, prevPossRight.current);
+
+    // Actualizar Refs
+    prevPossLeft.current = state.possessionClockLeft;
+    prevPossRight.current = state.possessionClockRight;
+    prevTimeoutClock.current = state.timeoutClock;
+    prevActiveTimeout.current = state.activeTimeout;
+    prevIntermission.current = state.isIntermission;
+    prevPossLRun.current = state.isPossessionLeftRunning
+    prevPossRRun.current = state.isPossessionRightRunning
+    prevClockRunning.current = state.isMainClockRunning;
+    prevMainClock.current = state.mainClock;
+    prevHomeFouls.current = state.homeFouls;
+    prevAwayFouls.current = state.awayFouls;
+
+  }, [
+    state.possessionClockLeft, state.possessionClockRight, 
+    state.activeTimeout, state.timeoutClock, 
+    state.isIntermission, state.isMainClockRunning, state.mainClock,
+    state.homeFouls, state.awayFouls, state.period,
+    triggerAutoBuzzer, props
+  ]);
+
+  useEffect(() => {
+    return () => {
+      stopNativeSynth();
+      if (buzzerInterval.current) clearInterval(buzzerInterval.current);
+      if (stopSynthTimeout.current) clearTimeout(stopSynthTimeout.current);
+      if (nativeAudioCtx.current && nativeAudioCtx.current.state !== 'closed') {
+        nativeAudioCtx.current.close().catch(()=> { /* ignore */ });
+      }
+    }
+  }, [stopNativeSynth]);
+
+  // El selector de tipo de sonido y la carga de MP3 vivian aqui. Escribian en
+  // un estado que nadie reproducia: subir un archivo no daba error y en el
+  // partido no sonaba nada. El sonido —sintetizada, estadio o archivo propio—
+  // se elige en AJUSTES DE AUDIO, que es el que si toca `lib/audio-engine.ts`.
+
+  // ─── Reset ────────────────────────────────────────────────────────────────
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+  const getPlayerYellowCount = (team: 'home' | 'away', playerNumber: string) =>
+    (state.cardHistory || []).filter(c => !c.anulada && c.team === team && c.cardType === 'yellow' && c.playerNumber === playerNumber).length
+
+  const getCurrentRoster  = (team: 'home' | 'away') => team === 'home' ? (state.matchConfig.homeRoster || []) : (state.matchConfig.awayRoster || [])
+  const getCurrentPlayers = (team: 'home' | 'away') => team === 'home' ? (state.matchConfig.homePlayers || []) : (state.matchConfig.awayPlayers || [])
+
+  const openPosModal = (team: 'home' | 'away', action: 'gol' | 'penal' | 'yellow' | 'blue' | 'red') => {
+    if (matchEnded) {
+      toast.error("El partido finalizó. Presiona 'REANUDAR' para hacer cambios.");
+      return;
+    }
+
+    if (state.isMainClockRunning) props.toggleMainClock()
+    setPosModalTeam(team)
+    setPosModalAction(action)
+    setPosModalOpen(true)
+    handleBuzzerPress()
+    setTimeout(handleBuzzerRelease, 300) 
+  }
+
+  const handlePosSelectPlayer = (playerNumber: string, isBench = false) => {
+    const team   = posModalTeam
+    const action = posModalAction
+
+    if (!isBench && ['DT', 'AY1', 'AY2', 'AX1', 'AX2'].includes(playerNumber.toUpperCase())) {
+      toast.warning("Para sancionar al Cuerpo Técnico, utiliza el botón morado 'BANCA / DT' ubicado en la parte inferior.")
+      return
+    }
+
+    const isAlreadyExpelled = state.cardHistory?.some(c => !c.anulada && c.team === team && c.playerNumber === playerNumber && c.cardType === 'red')
+    if (isAlreadyExpelled) {
+      toast.error(`El jugador #${playerNumber} ya se encuentra EXPULSADO. No puede realizar acciones en cancha ni recibir más tarjetas.`)
+      return
+    }
+
+    switch (action) {
+      case 'gol':
+        // 🛡️ REGLA: Dispara la animación pasando el número del jugador
+        if (team === 'home') props.adjustHomeScore(1, playerNumber)
+        else props.adjustAwayScore(1, playerNumber)
+
+        break
+      case 'penal':
+        if (team === 'home') props.adjustHomePenalties(1)
+        else props.adjustAwayPenalties(1)
+        break
+      case 'yellow': case 'blue': case 'red':
+        props.addSanction(team, action, playerNumber, false)
+        props.resetAndPausePossession()
+        break
+    }
+    setPosModalOpen(false)
+  }
+
+  const confirmEndMatch = () => {
+    // La planilla NO se abre sola al terminar. Antes saltaba encima del
+    // operador justo cuando el partido acababa —que es cuando hay gente
+    // preguntando el resultado, jugadores saliendo y el arbitro acercandose a
+    // la mesa— y habia que cerrarla para ver el marcador final. Ahora se
+    // genera solo cuando se pide, con el boton ESTADÍSTICAS.
+    props.setMatchPhase('post-partido')
+    props.endMatch()
+    setShowEndConfirm(false)
+  }
+
+  const handleFullReset = () => {
+    props.resetAll()
+    setShowResetConfirm(false)
+    setShowStats(false)
+    setShowAdminMenu(false) // Cerrar menú al reiniciar
+  }
+
+  const homeTimeoutsUsed = state.homeTimeoutsUsed || 0
+  const awayTimeoutsUsed = state.awayTimeoutsUsed || 0
+
+  // 🛡️ REGLA: El Reloj principal NUNCA debe mostrar el tiempo muerto en la vista Operador.
+  const clockTextColor = state.isIntermission ? (theme.id === 'alto-contraste' ? 'text-white' : 'text-amber-400') : theme.clock.textMain
+  const clockTextStyle = theme.clock.font
+  const clockContainerClass = state.isMainClockRunning 
+    ? `${theme.clock.containerMain} ${theme.id === 'alto-contraste' ? 'border-white' : 'border-red-700 shadow-[0_0_30px_rgba(239,68,68,0.4)]'}`
+    : theme.clock.containerMain
+
+  if (state.matchPhase === 'pre-partido' && !state.isMatchConfigured) {
+    return <PreMatchSetup state={state} savedTeams={props.savedTeams} configureMatch={props.configureMatch} configureMatchWithResume={props.configureMatchWithResume} saveTeam={props.saveTeam} deleteTeam={props.deleteTeam} />
+  }
+
+  return (
+    <div className={`h-full ${theme.globalBg} p-2 sm:p-4 overflow-y-auto flex flex-col transition-colors duration-500`}>
+
+      <BenchModal 
+        open={benchModalOpen} 
+        onClose={() => setBenchModalOpen(false)} 
+        team={benchModalTeam} 
+        cardType={benchModalCard} 
+        homeTeamName={homeTeamName} 
+        awayTeamName={awayTeamName} 
+        staffList={benchStaffList} 
+        onStaffListChange={setBenchStaffList} 
+        cardHistory={state.cardHistory || []} 
+        onApply={(team, card, direct, collective) => { 
+          if(!matchEnded) {
+            props.addBenchSanction(team, card, direct, collective);
+            props.resetAndPausePossession();
+          } 
+        }} 
+      />
+      <PosModal open={posModalOpen} onClose={() => setPosModalOpen(false)} team={posModalTeam} action={posModalAction} homeTeamName={homeTeamName} awayTeamName={awayTeamName} roster={getCurrentRoster(posModalTeam)} cardHistory={state.cardHistory || []} onSelectPlayer={handlePosSelectPlayer} getPlayerYellowCount={getPlayerYellowCount} getCurrentPlayers={getCurrentPlayers} onOpenBenchModal={(team, card, list) => { if(!matchEnded) { setBenchStaffList(list); setBenchModalCard(card); setBenchModalTeam(team); setBenchModalOpen(true) } }} />
+      <MatchHistoryModal open={showHistory} onClose={() => setShowHistory(false)} matchHistory={props.matchHistory || []} deleteMatchFromHistory={props.deleteMatchFromHistory} clearHistory={props.clearHistory} />
+
+      <MatchStatsModal open={showStats} onClose={() => setShowStats(false)} state={state} homeTeamName={homeTeamName} awayTeamName={awayTeamName} matchEnded={matchEnded} onSaveMatchToHistory={props.saveMatchToHistory} onSaveAndReset={props.onSaveAndReset} />
+
+      {/* ── PANEL RELOJ PRINCIPAL Y CONTROLES MAESTROS ─────────────────────────── */}
+      <div
+        className={`${theme.panelBase} p-3 sm:p-4 mb-3 shrink-0 transition-all ${isEditMode ? 'border-dashed border-yellow-500' : ''}`}
+        style={{ transform: `scale(${panelScales.clock / 100})`, transformOrigin: 'top center' }}
+      >
+        {/* BARRA DE HERRAMIENTAS MODO DISEÑO */}
+        {isEditMode && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 p-3 bg-zinc-900 border border-yellow-500/50 rounded-lg shadow-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-400 text-xs font-black uppercase tracking-widest flex items-center"><Palette className="w-4 h-4 mr-1"/> Panel de Diseño / Escala</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-md border border-zinc-700">
+                <span className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider">TEMA VISUAL:</span>
+                <Select value={currentSkinKey} onValueChange={(val: SkinKey) => handleThemeChange(val)}>
+                  <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-600 text-white w-[180px] font-bold"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-zinc-800 border-zinc-700">
+                    {Object.values(GLOBAL_THEMES).map(t => (
+                      <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-md border border-zinc-700">
+                <span className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider">TAMAÑO (RELOJ):</span>
+                <Button onClick={() => handleScaleChange('clock', -5)} size="sm" variant="ghost" className="h-6 w-6 p-0 text-yellow-400 hover:text-yellow-300 hover:bg-zinc-800"><ZoomOut className="w-4 h-4" /></Button>
+                <span className="text-white text-xs font-mono w-8 text-center">{panelScales.clock}%</span>
+                <Button onClick={() => handleScaleChange('clock', 5)} size="sm" variant="ghost" className="h-6 w-6 p-0 text-yellow-400 hover:text-yellow-300 hover:bg-zinc-800"><ZoomIn className="w-4 h-4" /></Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-stretch justify-center w-full max-w-[1400px] mx-auto">
+          
+          {/* LADO IZQUIERDO: PLAY MUDO y Ajustes de Tiempo */}
+          <div className="order-2 lg:order-1 flex-1 flex flex-col gap-2 justify-center lg:max-w-sm">
+            <div className="flex gap-2 h-14 sm:h-16">
+              <Button 
+                onClick={() => { skipNextClockStartBuzzer.current = true; props.toggleMainClock(); }} 
+                disabled={matchEnded} 
+                className={`flex-1 text-2xl sm:text-3xl font-black ${theme.btn.shape} ${state.isMainClockRunning ? theme.btn.danger : 'bg-green-700 hover:bg-green-600 text-white shadow-md'}`}
+                title={`Iniciar/Pausar (SIN Chicharra) [Atajo: ${keyLabel(hotkeys, 'clockMute')}]`}
+              >
+                {state.isMainClockRunning ? <Pause className="w-6 h-6 sm:w-10 sm:h-10" /> : <div className="flex items-center"><Play className="w-6 h-6 sm:w-8 sm:h-8" /><VolumeX className="w-4 h-4 ml-2 opacity-60"/></div>}
+              </Button>
+              {/* 🛡️ EL BOTÓN DE RESET ESTÁ AISLADO AQUÍ */}
+              {isTimeResetAllowed && (
+                <Button onClick={props.resetMainClock} disabled={matchEnded} className={`w-16 sm:w-20 shrink-0 ${theme.btn.shape} ${theme.btn.secondary} border-red-900/50 text-red-400 hover:bg-red-900/30`} title="Resetear Tiempo Actual"><RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" /></Button>
+              )}
+            </div>
+            
+            {isTimeEditMode && (
+              <div className="grid grid-cols-4 gap-1 sm:gap-2 mt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                {[{ val: -60, label: '-1m' }, { val: -10, label: '-10s' }, { val: 10, label: '+10s' }, { val: 60, label: '+1m' }].map(btn => (
+                  <Button key={btn.val} onClick={() => props.adjustMainClock(btn.val)} disabled={matchEnded} className={`h-10 sm:h-12 font-bold text-[10px] sm:text-sm ${theme.btn.shape} ${theme.btn.secondary}`}>{btn.label}</Button>
+                ))}
+              </div>
+            )}
+
+            {esAlargue(state.period) && isTimeResetAllowed && (
+              <Button onClick={() => props.setMainClockTime(state.matchConfig.overtimeDuration || state.matchConfig.periodDuration)} disabled={matchEnded} className={`mt-2 w-full h-8 font-bold text-xs animate-in slide-in-from-top-2 ${theme.btn.shape} bg-purple-700 hover:bg-purple-600 text-white shadow-lg`}>
+                <Clock className="w-3 h-3 mr-2 inline-block"/> REINICIAR RELOJ A {state.matchConfig.overtimeDuration || state.matchConfig.periodDuration}:00
+              </Button>
+            )}
+          </div>
+
+          <div className="order-1 lg:order-2 flex-[1.5] flex flex-col items-center justify-center">
+            <div className={`relative px-4 sm:px-8 py-6 sm:py-8 w-full max-w-2xl flex flex-col items-center justify-center transition-all duration-300 ${clockContainerClass}`}>
+              <span className={`text-xs sm:text-sm font-black tracking-widest block text-center mb-1 sm:mb-2 transition-colors ${state.isIntermission ? (theme.id === 'alto-contraste' ? 'text-white' : 'text-amber-400') : theme.clock.label}`}>
+                {state.isIntermission
+                  ? (state.pauseKind === 'suspension' ? 'PARTIDO SUSPENDIDO' : 'DESCANSO')
+                  : 'TIEMPO DE JUEGO'}
+              </span>
+              <div className={`w-[220px] sm:w-[320px] lg:w-[420px] mx-auto flex justify-center text-6xl sm:text-8xl lg:text-[7rem] leading-none tabular-nums transition-colors duration-300 ${clockTextColor}`} style={{...clockTextStyle, fontVariantNumeric: 'tabular-nums'}}>
+{/* El reloj principal muestra SIEMPRE el tiempo de juego. Antes, con un
+                    tiempo muerto activo, esta misma cifra pasaba a mostrar la
+                    cuenta del timeout: el operador perdia de vista el minuto del
+                    partido justo cuando el arbitro pregunta por el. El timeout
+                    tiene su propio panel, que ya existe. */}
+                <RelojVivo segundos={state.mainClock} corriendo={state.isMainClockRunning}
+                  sinAlerta={state.isIntermission || !!state.activeTimeout} />
+              </div>
+              <div className="flex items-center justify-center gap-2 mt-2 sm:mt-4">
+                <span className={`text-xs sm:text-sm font-bold transition-colors ${theme.clock.label}`}>
+                  {PERIODO_CORTO[state.period]}
+                </span>
+                <div className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${state.isMainClockRunning ? 'bg-green-500 animate-pulse' : (theme.id === 'alto-contraste' ? 'bg-white' : 'bg-red-500')}`} />
+              </div>
+            </div>
+          </div>
+
+          {/* Las decisiones del arbitro, junto al reloj: es el hueco que
+              quedaba libre y es donde el operador ya esta mirando cuando el
+              arbitro señala el punto de penal. */}
+          <div className="w-full lg:w-auto lg:min-w-[230px] order-4 lg:order-2 bg-zinc-900/60 border border-zinc-700 rounded-xl p-2">
+            <RefereeActions
+              homeTeamName={homeTeamName} awayTeamName={awayTeamName}
+              enTanda={state.period === 'penales'}
+              disabled={matchEnded}
+              detenido={state.isIntermission || !!state.activeTimeout}
+              puedeAnular={puedeAnular}
+              // En juego el boton COBRA el penal (para el reloj y repone a
+              // 0:05 si hace falta); la conversion se carga como gol normal.
+              // En la tanda, en cambio, suma al contador de penales.
+              onPenal={t => state.period === 'penales' ? props.scorePenalty(t) : props.awardPenalty(t)}
+              onAnular={t => props.annulGoal(t)}
+            />
+          </div>
+
+          {/* LADO DERECHO: PLAY SONORO, Periodo, Controles Maestros */}
+          <div className="order-3 lg:order-3 flex-1 flex flex-col gap-2 justify-center lg:max-w-sm">
+            <div className="flex gap-2 h-14 sm:h-16">
+              <Button 
+                onClick={() => { skipNextClockStartBuzzer.current = false; props.toggleMainClock(); }} 
+                disabled={matchEnded} 
+                className={`flex-1 text-2xl sm:text-3xl font-black ${theme.btn.shape} ${state.isMainClockRunning ? theme.btn.danger : theme.btn.primary}`}
+                title={`Iniciar/Pausar (CON Chicharra) [Atajo: ${keyLabel(hotkeys, 'clockSound')}]`}
+              >
+                {state.isMainClockRunning ? <Pause className="w-6 h-6 sm:w-10 sm:h-10" /> : <div className="flex items-center"><Play className="w-6 h-6 sm:w-8 sm:h-8" /><Bell className="w-5 h-5 ml-2 opacity-90"/></div>}
+              </Button>
+            </div>
+
+            <div className="flex gap-2 h-12 sm:h-14">
+              <div className="flex flex-1 gap-1">
+                <Select value={state.period} onValueChange={v => props.setPeriod(v as Period)} disabled={matchEnded}>
+                  <SelectTrigger className={`w-full h-full text-xs sm:text-sm font-bold ${theme.btn.shape} ${theme.btn.secondary}`}><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-700">
+                    <SelectItem value="1er_tiempo">1er Tiempo</SelectItem>
+                    <SelectItem value="2do_tiempo">2do Tiempo</SelectItem>
+                    {state.matchConfig.allowOvertime  && <SelectItem value="alargue">1er Alargue</SelectItem>}
+                    {state.matchConfig.allowOvertime  && <SelectItem value="alargue2">2do Alargue</SelectItem>}
+                    {state.matchConfig.allowPenalties && <SelectItem value="penales">Penales</SelectItem>}
+                  </SelectContent>
+                </Select>
+                <Button onClick={props.nextPeriod} disabled={matchEnded} title={`Siguiente periodo [Atajo: ${keyLabel(hotkeys, 'nextPeriod')}]`} className={`h-full w-10 sm:w-12 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><ChevronRight className="w-5 h-5" /></Button>
+              </div>
+              
+              <Button 
+                onPointerDown={handleBuzzerPress}
+                onPointerUp={handleBuzzerRelease}
+                onPointerLeave={handleBuzzerRelease}
+                title={`Chicharra manual [Atajo: ${keyLabel(hotkeys, 'buzzer')}]`}
+                className={`flex-[1.5] h-full px-2 font-black select-none ${theme.btn.shape} ${theme.btn.danger}`}
+              >
+                <Bell className="w-4 h-4 sm:w-5 sm:h-5 mr-1" /> CHICHARRA
+              </Button>
+            </div>
+
+            {/* 🛡️ MENÚ ADMINISTRATIVO (ACORDEÓN) */}
+            <div className="flex flex-col gap-2 mt-auto pt-2">
+              <div className="flex gap-2 h-10 sm:h-12">
+                <Button 
+                  onClick={() => setShowAdminMenu(!showAdminMenu)} 
+                  className={`flex-1 h-full font-bold ${theme.btn.shape} ${showAdminMenu ? 'bg-zinc-700 text-white border-zinc-600' : theme.btn.secondary}`}
+                >
+                  <LayoutDashboard className="w-4 h-4 mr-2" /> {showAdminMenu ? 'OCULTAR MENÚ' : 'MENÚ DE PARTIDO'}
+                </Button>
+                <Dialog>
+                  <DialogTrigger asChild><Button className={`h-full w-12 sm:w-14 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Settings className="w-4 h-4" /></Button></DialogTrigger>
+                  <DialogContent className="bg-zinc-900 border-zinc-700 text-white max-w-md p-0 overflow-hidden" aria-describedby={undefined}>
+                    <DialogHeader className="p-4 bg-black border-b border-zinc-800"><DialogTitle className="text-amber-400 font-black flex items-center"><Settings className="w-5 h-5 mr-2"/> Ajustes de Partido y Audio</DialogTitle></DialogHeader>
+                    
+                    <div className="p-4 space-y-5 max-h-[75vh] overflow-y-auto">
+                      
+                      {/* 🛡️ PANEL DE SEGURIDAD DE CONTROLES */}
+                      <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 space-y-3">
+                        <Label className="text-amber-400 text-xs font-black uppercase tracking-widest flex items-center"><Shield className="w-4 h-4 mr-2"/> Seguridad de Reloj</Label>
+                        
+                        <div className="flex items-center justify-between bg-zinc-800 p-2 rounded border border-zinc-700">
+                          <div className="flex flex-col">
+                            <span className="text-zinc-300 text-xs font-bold">Modo Edición de Tiempo</span>
+                            <span className="text-zinc-500 text-[10px]">(Muestra botones manuales de ± Segundos)</span>
+                          </div>
+                          <button onClick={() => handleTimeEditChange(!isTimeEditMode)} className={`w-12 h-6 rounded-full transition-colors ${isTimeEditMode ? 'bg-green-500' : 'bg-zinc-600'} relative shadow-inner`}>
+                            <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all flex items-center justify-center ${isTimeEditMode ? 'left-7' : 'left-1'} shadow`}>
+                              {isTimeEditMode ? <Unlock className="w-2.5 h-2.5 text-green-600" /> : <Lock className="w-2.5 h-2.5 text-zinc-600" />}
+                            </div>
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between bg-zinc-800 p-2 rounded border border-red-900/30">
+                          <div className="flex flex-col">
+                            <span className="text-red-400 text-xs font-bold">Botón de Reinicio (Peligro)</span>
+                            <span className="text-zinc-500 text-[10px]">(Muestra el botón para resetear el reloj actual)</span>
+                          </div>
+                          <button onClick={() => handleTimeResetChange(!isTimeResetAllowed)} className={`w-12 h-6 rounded-full transition-colors ${isTimeResetAllowed ? 'bg-red-500' : 'bg-zinc-600'} relative shadow-inner`}>
+                            <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all flex items-center justify-center ${isTimeResetAllowed ? 'left-7' : 'left-1'} shadow`}>
+                              {isTimeResetAllowed ? <Unlock className="w-2.5 h-2.5 text-red-600" /> : <Lock className="w-2.5 h-2.5 text-zinc-600" />}
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Los atajos se configuran en la barra superior del page:
+                          una sola definicion para toda la estacion de trabajo. */}
+                      <button onClick={() => window.dispatchEvent(new Event(OPEN_HOTKEYS_EVENT))}
+                        className="w-full bg-zinc-950 p-3 rounded-lg border border-zinc-800 hover:border-blue-600 text-left transition-colors">
+                        <span className="text-amber-400 text-xs font-black uppercase tracking-widest flex items-center">
+                          <Keyboard className="w-4 h-4 mr-2"/> Atajos de teclado y mando
+                        </span>
+                        <span className="block text-[10px] text-zinc-500 mt-1">
+                          14 acciones configurables, iguales en las tres vistas. Tocar para abrir.
+                        </span>
+                      </button>
+
+                      {/* REGLAS DE ALARGUE — solo lectura.
+                          Aqui habia un interruptor de gol de oro y un campo de
+                          minutos guardados en ESTE navegador. Contradecian lo pactado
+                          en el prepartido: un "gol de oro" que quedo encendido de otro
+                          partido terminaba solo uno que iba por gol de plata. Ahora las
+                          reglas viven en el partido y aqui solo se muestran. */}
+                      <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 space-y-2">
+                        <Label className="text-amber-400 text-xs font-black uppercase tracking-widest flex items-center"><Goal className="w-4 h-4 mr-2"/> Reglas de Alargue</Label>
+                        <p className="text-zinc-200 text-xs font-bold">
+                          {state.matchConfig.allowOvertime
+                            ? `2 periodos de ${state.matchConfig.overtimeDuration || state.matchConfig.periodDuration} min · ${({ oro: 'gol de oro', plata: 'gol de plata', ninguna: 'se juegan los dos' } as Record<string, string>)[state.matchConfig.overtimeRule || 'ninguna']}`
+                            : 'Este partido no tiene alargue'}
+                        </p>
+                        <p className="text-[10px] text-zinc-500 leading-snug">Se definen al iniciar el partido y no se cambian a mitad de camino.</p>
+                      </div>
+
+                      {/* AUDIO ENGINE */}
+                      <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 space-y-4">
+                        <Label className="text-amber-400 text-xs font-black uppercase tracking-widest flex items-center"><Volume2 className="w-4 h-4 mr-2"/> Motor de Sonido</Label>
+                        
+                        <div>
+                          <Label className="text-zinc-400 text-xs">Modo de Activación del Botón</Label>
+                          <Select value={buzzerMode} onValueChange={(val: 'click'|'hold') => setBuzzerMode(val)}>
+                            <SelectTrigger className="bg-zinc-800 border-zinc-600 mt-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent className="bg-zinc-800 border-zinc-600">
+                              <SelectItem value="click">👆 Toque Único (Recomendado)</SelectItem>
+                              <SelectItem value="hold">⏱️ Pulso Mantenido</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <Button 
+                          onPointerDown={() => { handleBuzzerPress(); if(buzzerMode==='click') setTimeout(handleBuzzerRelease, 800); }} 
+                          onPointerUp={handleBuzzerRelease}
+                          onPointerLeave={handleBuzzerRelease}
+                          className="w-full h-10 bg-amber-600 hover:bg-amber-500 font-black text-sm select-none"
+                        >
+                          <Bell className="w-4 h-4 mr-2" /> PROBAR SONIDO
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {/* CONTENIDO DEL ACORDEÓN (MENÚ ADMINISTRATIVO OCULTO) */}
+              {showAdminMenu && (
+                <div className="grid grid-cols-2 gap-1 sm:gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <Button onClick={() => setIsEditMode(!isEditMode)} className={`h-10 sm:h-12 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${isEditMode ? 'bg-yellow-500 text-black border-none' : theme.btn.secondary}`}>
+                    <LayoutGrid className="w-3 h-3 sm:mr-1" /> {isEditMode ? 'SALIR DISEÑO' : 'DISEÑO'}
+                  </Button>
+                  
+                  {matchEnded ? (
+                    <Button onClick={() => {
+                      props.closeMatchEndModal(); // 🛡️ REPARADO: Ahora limpia el letrero gigante de FIN DEL PARTIDO
+                      props.setMatchPhase('en-curso' as MatchPhase);
+                      toast.info("Partido reanudado. Controles desbloqueados.", { position: 'top-center' });
+                    }} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs bg-green-600 hover:bg-green-500 text-white rounded-md`}>
+                      <Play className="w-3 h-3 sm:mr-1" /> REANUDAR
+                    </Button>
+                  ) : (
+                    <Button onClick={() => setShowEndConfirm(true)} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${theme.btn.timeout}`}>
+                      <Square className="w-3 h-3 sm:mr-1" /> FIN
+                    </Button>
+                  )}
+                  
+                  <Button onClick={() => setShowStats(true)} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${theme.btn.penal}`}>
+                    <FileText className="w-3 h-3 sm:mr-1" /> ESTADÍSTICAS
+                  </Button>
+
+                  <Button onClick={() => setShowHistory(true)} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${theme.btn.secondary}`}>
+                    <History className="w-3 h-3 sm:mr-1" /> HISTORIAL
+                  </Button>
+                  
+                  <Button onClick={() => setShowResetConfirm(true)} className={`h-10 sm:h-12 px-1 font-bold text-[10px] sm:text-xs ${theme.btn.shape} ${theme.btn.danger}`}>
+                    <RotateCcw className="w-3 h-3 sm:mr-1" /> NUEVO
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Dialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+        <DialogContent className="bg-zinc-900 border-2 border-red-700 text-white max-w-md" aria-describedby={undefined}>
+          <DialogHeader className="sr-only"><DialogTitle>Confirmar Reset</DialogTitle></DialogHeader>
+          <div className="text-center p-4">
+            <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-black text-red-500 mb-2">NUEVO PARTIDO / RESETEAR</h2>
+            <p className="text-zinc-400 mb-6">Esta acción borrará todos los datos actuales y NO se guardarán en el historial.</p>
+            <div className="flex gap-3">
+              <Button onClick={() => setShowResetConfirm(false)} variant="outline" className="flex-1 h-14 font-bold border-zinc-600">CANCELAR</Button>
+              <Button onClick={handleFullReset} className="flex-1 h-14 font-black bg-red-600 hover:bg-red-500 text-lg">SÍ, RESETEAR</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEndConfirm} onOpenChange={setShowEndConfirm}>
+        <DialogContent className="bg-zinc-900 border-2 border-red-700 text-white max-w-md" aria-describedby={undefined}>
+          <DialogHeader className="sr-only"><DialogTitle>Confirmar Fin</DialogTitle></DialogHeader>
+          <div className="text-center p-4">
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-black text-red-500 mb-2">FINALIZAR PARTIDO</h2>
+            <p className="text-zinc-400 mb-6">Se bloquean los controles de juego y quedan listas las estadísticas.</p>
+            <div className="flex gap-3">
+              <Button onClick={() => setShowEndConfirm(false)} variant="outline" className="flex-1 h-14 font-bold border-zinc-600">CANCELAR</Button>
+              <Button onClick={confirmEndMatch} className="flex-1 h-14 font-black bg-red-600 hover:bg-red-500 text-lg">SÍ, FINALIZAR</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showIntermissionSelector} onOpenChange={setShowIntermissionSelector}>
+        <DialogContent className="bg-zinc-900 border-2 border-amber-600 text-white max-w-md" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="text-amber-400 text-xl font-black text-center">DETENER EL PARTIDO</DialogTitle>
+          </DialogHeader>
+          {/* Suspender NO es descansar: el descanso avanza de periodo al
+              terminar, la suspension vuelve al mismo periodo y minuto. */}
+          <div className="mx-4 bg-zinc-950 border-2 border-red-800 rounded-xl p-3">
+            <p className="text-[11px] text-zinc-400 leading-snug mb-2">
+              <b className="text-red-300">Partido suspendido</b> — el reloj queda
+              congelado y al reanudar se sigue en este mismo periodo y minuto.
+            </p>
+            <Button onClick={() => { props.suspendMatch(); setShowIntermissionSelector(false) }}
+              className="w-full h-12 font-black bg-red-800 hover:bg-red-700">
+              SUSPENDER PARTIDO
+            </Button>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              <Button onClick={() => { props.startIntermission(2); setShowIntermissionSelector(false) }} className="h-16 text-lg sm:text-xl font-black bg-amber-800 hover:bg-amber-700">2 MIN</Button>
+              <Button onClick={() => { props.startIntermission(5); setShowIntermissionSelector(false) }} className="h-16 text-lg sm:text-xl font-black bg-amber-700 hover:bg-amber-600">5 MIN</Button>
+              <Button onClick={() => { props.startIntermission(10); setShowIntermissionSelector(false) }} className="h-16 text-lg sm:text-xl font-black bg-amber-600 hover:bg-amber-500 border-2 border-amber-400">10 MIN</Button>
+            </div>
+            <div className="border-t border-zinc-700 pt-4">
+              <Label className="text-zinc-400 text-xs">Personalizado (minutos):</Label>
+              <div className="flex gap-2 mt-2">
+                <Input type="number" min="1" max="30" value={customIntermissionMinutes} onChange={e => setCustomIntermissionMinutes(e.target.value)} placeholder="Ej: 15" className="bg-zinc-800 border-zinc-600 flex-1 font-bold text-center" />
+                <Button onClick={() => { props.startIntermission(parseInt(customIntermissionMinutes) || 10); setShowIntermissionSelector(false); setCustomIntermissionMinutes('') }} disabled={!customIntermissionMinutes} className="bg-amber-700 hover:bg-amber-600 font-bold px-6">INICIAR</Button>
+              </div>
+            </div>
+            <Button onClick={() => setShowIntermissionSelector(false)} variant="outline" className="w-full border-zinc-600">CANCELAR</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Panel de Posesión + Timeouts (REDISEÑADO RESPONSIVE Y CENTRADO) ──────────────────── */}
+      <div
+        className={`${theme.panelBase} p-2 sm:p-3 md:p-4 mb-3 shrink-0 transition-all ${isEditMode ? 'border-dashed border-yellow-500' : ''}`}
+        style={{ transform: `scale(${panelScales.possession / 100})`, transformOrigin: 'top center' }}
+      >
+        {isEditMode && (
+          <div className="flex items-center justify-center gap-2 mb-2 pb-2 border-b border-yellow-500/30">
+            <span className="text-yellow-400 text-xs font-bold">PANEL POSESIÓN Y BANCA</span>
+            <Button onClick={() => handleScaleChange('possession', -5)} size="sm" variant="outline" className="h-6 w-6 p-0 border-yellow-500 text-yellow-400"><ZoomOut className="w-3 h-3" /></Button>
+            <span className="text-yellow-400 text-xs">{panelScales.possession}%</span>
+            <Button onClick={() => handleScaleChange('possession', 5)} size="sm" variant="outline" className="h-6 w-6 p-0 border-yellow-500 text-yellow-400"><ZoomIn className="w-3 h-3" /></Button>
+          </div>
+        )}
+
+        {/* COMPONENTE CENTRAL EXTRAÍDO PARA RESPONSIVIDAD */}
+        {(() => {
+          const CenterBlock = () => (
+            <div className="flex flex-col items-center justify-center w-[120px] sm:w-[140px] shrink-0">
+              {state.activeTimeout ? (
+                <div className={`bg-green-900/60 border-2 border-green-500 rounded-xl p-2 sm:p-3 text-center shadow-[0_0_20px_#22c55e] w-full`}>
+                  <span className="text-[10px] sm:text-xs text-green-400 font-black block leading-none mb-1">T. MUERTO</span>
+                  <div className={`w-full flex justify-center text-2xl sm:text-3xl font-black leading-none tabular-nums tracking-tight ${state.timeoutClock <= 15 ? 'text-red-400 animate-pulse' : 'text-green-400'}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>{formatTime(state.timeoutClock)}</div>
+                  <Button onClick={props.cancelActiveTimeout} disabled={matchEnded} size="sm" className={`mt-2 h-6 text-[10px] w-full font-bold ${theme.btn.shape} ${theme.btn.danger}`}>FIN</Button>
+                </div>
+              ) : state.isIntermission ? (
+                <div className={`bg-amber-900/60 border-2 border-amber-500 rounded-xl p-2 sm:p-3 text-center shadow-[0_0_20px_#f59e0b] w-full`}>
+                  <span className="text-[10px] sm:text-xs text-amber-400 font-black block leading-none mb-1">DESCANSO</span>
+                  <div className="flex gap-1 mt-2 w-full">
+                    <Button onClick={props.endIntermission} disabled={matchEnded} size="sm" className={`h-6 px-0 text-[10px] flex-1 font-bold ${theme.btn.shape} ${theme.btn.danger}`}>FIN</Button>
+                    <Button onClick={() => setShowIntermissionSelector(true)} disabled={matchEnded} size="sm" className={`h-6 px-0 text-[10px] flex-1 font-bold ${theme.btn.shape} ${theme.btn.secondary}`}>+ MIN</Button>
+                  </div>
+                </div>
+              ) : (
+                /* El rotulo paso de "DESCANSO" a "DESCANSO / SUSPENDER" pero
+                   el bloque mide 140 px fijos: el texto se desbordaba y
+                   empujaba el icono fuera del boton. Va en dos lineas. */
+                <Button onClick={() => setShowIntermissionSelector(true)} disabled={state.isIntermission || matchEnded} title={`Descanso o suspensión [Atajo: ${keyLabel(hotkeys, 'intermission')}]`} className={`font-bold w-full text-[10px] h-12 sm:h-14 px-1 flex flex-col gap-0.5 leading-tight ${theme.btn.shape} ${theme.btn.foul}`}>
+                  <Timer className="w-4 h-4 shrink-0" />
+                  <span className="hidden sm:block text-center">DESCANSO<br />SUSPENDER</span>
+                </Button>
+              )}
+            </div>
+          );
+
+          return (
+            <div className="w-full flex flex-col gap-3 sm:gap-4">
+              {/* BLOQUE CENTRAL MÓVIL (Arriba) */}
+              <div className="flex justify-center lg:hidden">
+                <CenterBlock />
+              </div>
+
+              {/* GRID PRINCIPAL PERFECTAMENTE CENTRADO */}
+              <div className="grid grid-cols-2 lg:grid-cols-[1fr_auto_1fr] gap-2 sm:gap-4 lg:gap-8 w-full max-w-[1400px] mx-auto items-center">
+
+                {/* LOCAL — su lugar en pantalla sigue a GIRAR LADO, igual que las tarjetas de abajo. */}
+                <div style={{ order: columnasInvertidas ? 3 : 1 }} className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-end w-full">
+                  {/* BOTONES */}
+                  <div className="w-full lg:w-40 xl:w-48 space-y-1 lg:mt-0 order-2 lg:order-1">
+                    <Button onClick={() => state.homeTimeoutRequested ? props.cancelTimeoutRequest('home') : props.requestTimeoutHome()} disabled={matchEnded || state.period === 'penales' || homeTimeoutsUsed >= 2 || !!state.activeTimeout} className={`w-full h-8 sm:h-9 font-bold text-[9px] sm:text-xs disabled:opacity-50 px-1 ${theme.btn.shape} ${state.homeTimeoutRequested ? theme.btn.danger : theme.btn.secondary}`}>
+                      {state.homeTimeoutRequested ? 'CANCELAR SOLICITUD' : 'SOLICITAR T.B.'}
+                    </Button>
+                    <Button onClick={props.grantTimeoutHome} disabled={matchEnded || state.period === 'penales' || !state.homeTimeoutRequested || homeTimeoutsUsed >= 2 || !!state.activeTimeout} className={`w-full h-8 sm:h-9 font-bold text-[9px] sm:text-xs disabled:opacity-50 px-1 ${theme.btn.shape} ${theme.btn.timeout}`}>
+                      <Coffee className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> CONCEDER ({homeTimeoutsUsed}/2)
+                    </Button>
+                  </div>
+
+                  {/* SEMÁFOROS */}
+                  <div className="flex flex-row lg:flex-col justify-center gap-3 sm:gap-4 w-full lg:w-auto bg-black/20 lg:bg-transparent p-2 rounded-lg order-1 lg:order-2 shrink-0">
+                    <div className="flex flex-col items-center">
+                      <div className={`w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-full border-2 sm:border-4 transition-all ${state.homeTimeoutRequested ? 'bg-green-500 border-white shadow-[0_0_20px_#22c55e]' : 'bg-transparent border-green-900/50'}`} />
+                      <span className={`text-[8px] sm:text-[9px] mt-1 font-bold ${theme.clock.label} text-center leading-tight`}>TIEMPO<br/>BANCA</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <div className={`w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-full border-2 sm:border-4 transition-all ${state.isHomeFoul10Active ? 'bg-red-500 border-white shadow-[0_0_20px_#ef4444] animate-pulse' : 'bg-transparent border-red-900/50'}`} />
+                      <span className={`text-[8px] sm:text-[9px] mt-1 font-bold ${theme.clock.label} text-center leading-tight`}>FALTA<br/>T. LIBRE</span>
+                    </div>
+                  </div>
+
+                  {/* 45s LOCAL */}
+                  <div className="flex flex-col items-center gap-1 sm:gap-2 w-full lg:w-[130px] shrink-0 order-3 lg:order-3">
+                    <span className={`text-[10px] sm:text-xs font-bold ${theme.clock.label} w-full text-center truncate`}>{homeTeamName.substring(0, 8)} — POS</span>
+                    {/* FIJAMOS EL ANCHO AQUÍ PARA EVITAR EL BAILE */}
+                    <div className={`w-[100px] sm:w-[130px] flex justify-center text-3xl sm:text-5xl font-black tabular-nums tracking-tight transition-colors ${state.possessionClockLeft <= 10 && state.isPossessionLeftRunning ? (theme.id === 'alto-contraste' ? 'text-white' : 'text-red-500 animate-pulse') : theme.clock.textPos}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>
+                      {formatTime(state.possessionClockLeft)}
+                    </div>
+                    <div className="flex gap-1 sm:gap-2 w-full mt-1">
+                      {/* Un solo boton: da la posesion y reinicia los 45. No
+                          pausa —la bocha siempre la tiene alguien— asi que ya
+                          no hay boton de reset al lado ni icono de pausa. */}
+                      <Button onClick={props.togglePossessionLeft} disabled={matchEnded || state.isIntermission || !!state.activeTimeout} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionLeftRunning ? theme.btn.danger : theme.btn.primary}`} title={`Dar posesión y reiniciar los 45 [${keyLabel(hotkeys, 'possLeftToggle')}]`}>
+                        <Play className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BLOQUE CENTRAL PC (Oculto en Móvil) — siempre al medio */}
+                <div style={{ order: 2 }} className="hidden lg:flex justify-center shrink-0">
+                  <CenterBlock />
+                </div>
+
+                {/* VISITA — su lugar en pantalla sigue a GIRAR LADO. */}
+                <div style={{ order: columnasInvertidas ? 1 : 3 }} className="flex flex-col gap-3 lg:flex-row-reverse lg:items-center lg:justify-end w-full">
+                  
+                  {/* BOTONES */}
+                  <div className="w-full lg:w-40 xl:w-48 space-y-1 lg:mt-0 order-2 lg:order-1">
+                    <Button onClick={() => state.awayTimeoutRequested ? props.cancelTimeoutRequest('away') : props.requestTimeoutAway()} disabled={matchEnded || state.period === 'penales' || awayTimeoutsUsed >= 2 || !!state.activeTimeout} className={`w-full h-8 sm:h-9 font-bold text-[9px] sm:text-xs disabled:opacity-50 px-1 ${theme.btn.shape} ${state.awayTimeoutRequested ? theme.btn.danger : theme.btn.secondary}`}>
+                      {state.awayTimeoutRequested ? 'CANCELAR SOLICITUD' : 'SOLICITAR T.B.'}
+                    </Button>
+                    <Button onClick={props.grantTimeoutAway} disabled={matchEnded || state.period === 'penales' || !state.awayTimeoutRequested || awayTimeoutsUsed >= 2 || !!state.activeTimeout} className={`w-full h-8 sm:h-9 font-bold text-[9px] sm:text-xs disabled:opacity-50 px-1 ${theme.btn.shape} ${theme.btn.timeout}`}>
+                      <Coffee className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> CONCEDER ({awayTimeoutsUsed}/2)
+                    </Button>
+                  </div>
+
+                  {/* SEMÁFOROS */}
+                  <div className="flex flex-row lg:flex-col justify-center gap-3 sm:gap-4 w-full lg:w-auto bg-black/20 lg:bg-transparent p-2 rounded-lg order-1 lg:order-2 shrink-0">
+                    <div className="flex flex-col items-center">
+                      <div className={`w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-full border-2 sm:border-4 transition-all ${state.awayTimeoutRequested ? 'bg-green-500 border-white shadow-[0_0_20px_#22c55e]' : 'bg-transparent border-green-900/50'}`} />
+                      <span className={`text-[8px] sm:text-[9px] mt-1 font-bold ${theme.clock.label} text-center leading-tight`}>TIEMPO<br/>BANCA</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <div className={`w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-full border-2 sm:border-4 transition-all ${state.isAwayFoul10Active ? 'bg-red-500 border-white shadow-[0_0_20px_#ef4444] animate-pulse' : 'bg-transparent border-red-900/50'}`} />
+                      <span className={`text-[8px] sm:text-[9px] mt-1 font-bold ${theme.clock.label} text-center leading-tight`}>FALTA<br/>T. LIBRE</span>
+                    </div>
+                  </div>
+
+                  {/* 45s VISITA */}
+                  <div className="flex flex-col items-center gap-1 sm:gap-2 w-full lg:w-[130px] shrink-0 order-3 lg:order-3">
+                    <span className={`text-[10px] sm:text-xs font-bold ${theme.clock.label} w-full text-center truncate`}>{awayTeamName.substring(0, 8)} — POS</span>
+                    {/* FIJAMOS EL ANCHO AQUÍ PARA EVITAR EL BAILE */}
+                    <div className={`w-[100px] sm:w-[130px] flex justify-center text-3xl sm:text-5xl font-black tabular-nums tracking-tight transition-colors ${state.possessionClockRight <= 10 && state.isPossessionRightRunning ? (theme.id === 'alto-contraste' ? 'text-white' : 'text-red-500 animate-pulse') : theme.clock.textPos}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>
+                      {formatTime(state.possessionClockRight)}
+                    </div>
+                    <div className="flex gap-1 sm:gap-2 w-full mt-1">
+                      {/* Un solo boton: da la posesion y reinicia los 45. No
+                          pausa —la bocha siempre la tiene alguien— asi que ya
+                          no hay boton de reset al lado ni icono de pausa. */}
+                      <Button onClick={props.togglePossessionRight} disabled={matchEnded || state.isIntermission || !!state.activeTimeout} size="sm" className={`flex-1 h-8 sm:h-10 lg:h-12 ${theme.btn.shape} ${state.isPossessionRightRunning ? theme.btn.danger : theme.btn.primary}`} title={`Dar posesión y reiniciar los 45 [${keyLabel(hotkeys, 'possRightToggle')}]`}>
+                        <Play className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* ── Tarjetas de Equipos ─────────────────────────────────── */}
+      <div className="flex items-center justify-end mb-1">
+        <button type="button" onClick={() => setColumnasInvertidas(v => !v)}
+          title="Solo en esta pantalla: intercambia qué equipo va a la izquierda. No afecta el marcador ni la proyección."
+          className="flex items-center gap-1.5 px-2.5 h-7 rounded-md text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors">
+          <ArrowLeftRight className="w-3.5 h-3.5" /> GIRAR LADO
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        {(columnasInvertidas ? ['away', 'home'] as const : ['home', 'away'] as const).map(side => {
+          const isHome     = side === 'home'
+          const teamName   = isHome ? homeTeamName : awayTeamName
+          const score      = isHome ? state.homeScore : state.awayScore
+          const fouls      = isHome ? state.homeFouls : state.awayFouls
+          const penalties  = isHome ? state.homePenalties : state.awayPenalties
+          const foulActive = isHome ? state.isHomeFoul10Active : state.isAwayFoul10Active
+          const sanctions  = isHome ? homeSanctions : awaySanctions
+          
+          const teamPanelBase = isHome ? theme.teamHomeBase : theme.teamAwayBase
+          const textColor     = isHome ? 'text-blue-400' : 'text-amber-400'
+          const panelKey      = isHome ? 'teamHome' : 'teamAway'
+          const panelScale    = isHome ? panelScales.teamHome : panelScales.teamAway
+
+          const finalTextColor = theme.id === 'alto-contraste' ? 'text-white' : textColor;
+
+          return (
+            <div key={side}
+              className={`${teamPanelBase} p-3 sm:p-4 flex flex-col transition-all ${isEditMode ? 'border-dashed border-yellow-500' : ''}`}
+              style={{ transform: `scale(${panelScale / 100})`, transformOrigin: 'top center' }}
+            >
+              {isEditMode && (
+                <div className="flex items-center justify-center gap-2 mb-2 pb-2 border-b border-yellow-500/30">
+                  <span className="text-yellow-400 text-xs font-bold">{isHome ? 'EQUIPO LOCAL' : 'EQUIPO VISITA'}</span>
+                  <Button onClick={() => handleScaleChange(panelKey, -5)} size="sm" variant="outline" className="h-6 w-6 p-0 border-yellow-500 text-yellow-400"><ZoomOut className="w-3 h-3" /></Button>
+                  <span className="text-yellow-400 text-xs">{panelScale}%</span>
+                  <Button onClick={() => handleScaleChange(panelKey, 5)} size="sm" variant="outline" className="h-6 w-6 p-0 border-yellow-500 text-yellow-400"><ZoomIn className="w-3 h-3" /></Button>
+                </div>
+              )}
+              <h2 className={`${finalTextColor} font-black text-lg sm:text-2xl text-center mb-3 sm:mb-4 shrink-0 uppercase`}>{teamName}</h2>
+
+              <div className={`grid ${state.matchConfig.allowPenalties ? 'grid-cols-3' : 'grid-cols-2'} gap-2 sm:gap-3 mb-3 sm:mb-4 shrink-0`}>
+                <div className="bg-black/50 rounded-lg p-2 sm:p-3 text-center">
+                  <span className={`text-[10px] sm:text-xs font-bold block ${theme.clock.label}`}>GOLES</span>
+                  <span className={`text-4xl sm:text-5xl font-black tabular-nums block min-w-[60px] mx-auto ${theme.id === 'alto-contraste' ? 'text-white' : 'text-red-500'}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>{score}</span>
+                  <div className="flex justify-center gap-1 mt-2">
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeScore(-1) : props.adjustAwayScore(-1)} disabled={matchEnded} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Minus className="w-4 h-4" /></Button>
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeScore(1) : props.adjustAwayScore(1)} disabled={matchEnded} title={`Gol ${isHome ? 'local' : 'visita'} [Atajo: ${keyLabel(hotkeys, isHome ? 'homeGoal' : 'awayGoal')}]`} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
+                  </div>
+                </div>
+                <div className={`rounded-lg p-3 text-center transition-colors ${foulActive ? (theme.id === 'alto-contraste' ? 'border-4 border-white' : 'bg-red-900/50 border-2 border-red-500 animate-pulse') : 'bg-black/50 border-2 border-transparent'}`}>
+                  <span className={`text-[10px] sm:text-xs font-bold block ${theme.clock.label}`}>FALTAS</span>
+                  <span className={`text-4xl sm:text-5xl font-black tabular-nums block min-w-[60px] mx-auto ${foulActive ? (theme.id==='alto-contraste'?'text-white':'text-red-500') : (theme.id==='alto-contraste'?'text-[#FFFF00]':'text-amber-400')}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>{fouls}</span>
+                  <div className="flex justify-center gap-1 mt-2">
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeFouls(-1) : props.adjustAwayFouls(-1)} disabled={matchEnded} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Minus className="w-4 h-4" /></Button>
+                    <Button size="sm" onClick={() => isHome ? props.adjustHomeFouls(1) : props.adjustAwayFouls(1)} disabled={matchEnded} title={`Falta ${isHome ? 'local' : 'visita'} [Atajo: ${keyLabel(hotkeys, isHome ? 'homeFoul' : 'awayFoul')}]`} className={`h-8 w-8 p-0 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
+                  </div>
+                </div>
+                {state.matchConfig.allowPenalties && (
+                  <div className="bg-black/50 rounded-lg p-3 text-center">
+                    <span className={`text-[10px] sm:text-xs font-bold block ${theme.clock.label}`}>PENALES</span>
+                    <span className={`text-4xl sm:text-5xl font-black tabular-nums block min-w-[60px] mx-auto ${theme.id === 'alto-contraste' ? 'text-white' : 'text-purple-400'}`} style={{...theme.clock.font, fontVariantNumeric: 'tabular-nums'}}>{penalties}</span>
+                    <div className="flex justify-center gap-1 mt-2">
+                      <Button size="sm" onClick={() => isHome ? props.adjustHomePenalties(-1) : props.adjustAwayPenalties(-1)} disabled={state.period !== 'penales' || matchEnded || state.isIntermission} className={`h-8 w-8 p-0 disabled:opacity-50 ${theme.btn.shape} ${theme.btn.secondary}`}><Minus className="w-4 h-4" /></Button>
+                      <Button size="sm" onClick={() => isHome ? props.adjustHomePenalties(1) : props.adjustAwayPenalties(1)} disabled={state.period !== 'penales' || matchEnded || state.isIntermission} className={`h-8 w-8 p-0 disabled:opacity-50 ${theme.btn.shape} ${theme.btn.secondary}`}><Plus className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={`grid ${state.matchConfig.allowPenalties ? 'grid-cols-2' : 'grid-cols-1'} gap-2 sm:gap-3 mb-3 shrink-0`}>
+                <Button onClick={() => openPosModal(side, 'gol')} disabled={matchEnded} className={`h-14 sm:h-16 text-xl font-black ${theme.btn.shape} ${theme.btn.primary}`}>
+                  <Goal className="w-6 h-6 mr-2" /> + GOL
+                </Button>
+                {state.matchConfig.allowPenalties && (
+                  <Button onClick={() => openPosModal(side, 'penal')} disabled={state.period !== 'penales' || matchEnded || state.isIntermission} className={`h-14 sm:h-16 text-lg font-black disabled:opacity-30 ${theme.btn.shape} ${state.period === 'penales' ? theme.btn.penal : theme.btn.secondary}`}>
+                    <Square className="w-5 h-5 mr-2" /> + PENAL
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 shrink-0">
+                <Button onClick={() => openPosModal(side, 'yellow')} disabled={matchEnded} className={`h-12 font-black ${theme.btn.shape} ${theme.btn.cardY}`}>AMARILLA</Button>
+                <Button onClick={() => openPosModal(side, 'blue')}   disabled={matchEnded} className={`h-12 font-black ${theme.btn.shape} ${theme.btn.cardB}`}>AZUL</Button>
+                <Button onClick={() => openPosModal(side, 'red')}    disabled={matchEnded} className={`h-12 font-black ${theme.btn.shape} ${theme.btn.cardR}`}>ROJA</Button>
+              </div>
+
+              <SanctionsList sanctions={sanctions} onRemove={(id) => { if(!matchEnded) props.removeSanction(id) }} />
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Últimos eventos ───────────────────────────────────────────────── */}
+      {(state.matchLog || []).length > 0 && (
+        <div className={`${theme.panelBase} p-3 shrink-0 mb-4`}>
+          <h3 className={`text-xs font-bold mb-3 flex items-center ${theme.clock.label}`}><History className="w-4 h-4 mr-1" /> ÚLTIMOS EVENTOS</h3>
+          <div className="flex flex-wrap gap-2">
+            {(state.matchLog || []).slice(-10).reverse().map(e => {
+              const period = PERIODO_CORTO[e.period]
+              const mins   = Math.floor(e.gameTime / 60).toString().padStart(2, '0')
+              const team   = e.team === 'home' ? 'L' : 'V'
+              
+              const eventStyles: Record<string, string> = {
+                gol:              'bg-green-900/40 text-green-400 border-green-700',
+                falta:            'bg-orange-900/40 text-orange-400 border-orange-700',
+                tarjeta_amarilla: 'bg-yellow-900/40 text-yellow-400 border-yellow-700',
+                tarjeta_azul:     'bg-blue-900/40 text-blue-400 border-blue-700',
+                tarjeta_roja:     'bg-red-900/40 text-red-400 border-red-700',
+                timeout:          'bg-purple-900/40 text-purple-400 border-purple-700',
+                penal:            'bg-indigo-900/40 text-indigo-400 border-indigo-700',
+                penal_ronda:      'bg-indigo-900/40 text-indigo-400 border-indigo-700',
+                inicio:           'bg-blue-900/40 text-blue-400 border-blue-700',
+                fin:              'bg-red-900/40 text-red-400 border-red-700',
+                periodo:          'bg-zinc-800 text-zinc-300 border-zinc-600'
+              };
+              
+              const evLabels: Record<string, string> = {
+                gol: 'GOL', falta: 'FALTA', tarjeta_amarilla: 'AMARILLA', tarjeta_azul: 'AZUL', 
+                tarjeta_roja: 'ROJA', timeout: 'T.M', penal: 'PENAL', penal_ronda: 'TANDA',
+                inicio: 'INICIO', fin: 'FIN', periodo: 'PERIODO'
+              };
+
+              const pillClass = eventStyles[e.eventType] || 'bg-zinc-800 text-zinc-300 border-zinc-600';
+              const evLabel = evLabels[e.eventType] || e.eventType.toUpperCase();
+
+              return (
+                <div key={e.id} className={`flex items-center gap-1.5 px-2 py-1 rounded-md border font-bold text-[10px] uppercase shadow-sm ${pillClass} max-w-[140px] truncate cursor-help`} title={`${evLabel} - ${e.details || ''}`}>
+                  <span>{period} {mins}'</span>
+                  <span>{team}</span>
+                  <span>#{e.actor}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* La pista dinámica vive ahora en el modo PISTA, que la superó: allí es
+          mesa de mando, no vista de sólo lectura. Mantenerla también aquí
+          significaba dos implementaciones de lo mismo. */}
+    </div>
+  )
+}

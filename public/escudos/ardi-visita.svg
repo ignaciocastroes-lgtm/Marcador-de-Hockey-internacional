@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" width="200" height="240" role="img" aria-label="Escudo generico ARDI - Visita">
+  <defs>
+    <linearGradient id="vBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#3f4650"/>
+      <stop offset="45%"  stop-color="#262b33"/>
+      <stop offset="100%" stop-color="#12151a"/>
+    </linearGradient>
+    <linearGradient id="vRim" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0%"   stop-color="#ffe9ad"/>
+      <stop offset="35%"  stop-color="#e0ac34"/>
+      <stop offset="65%"  stop-color="#9a6d12"/>
+      <stop offset="100%" stop-color="#e8c976"/>
+    </linearGradient>
+    <linearGradient id="vSheen" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.34"/>
+      <stop offset="42%"  stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.34"/>
+    </linearGradient>
+    <linearGradient id="vBand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#ffe9ad"/>
+      <stop offset="100%" stop-color="#d3a03a"/>
+    </linearGradient>
+    <radialGradient id="vBall" cx="0.35" cy="0.30" r="0.75">
+      <stop offset="0%"   stop-color="#ffffff"/>
+      <stop offset="45%"  stop-color="#e7edf5"/>
+      <stop offset="100%" stop-color="#8b97a6"/>
+    </radialGradient>
+    <path id="vShape" d="M100 10 L186 36 L186 126 C186 178 148 212 100 230 C52 212 14 178 14 126 L14 36 Z"/>
+    <clipPath id="vClip"><use href="#vShape"/></clipPath>
+  </defs>
+
+  <use href="#vShape" fill="#0a0c10"/>
+  <use href="#vShape" fill="url(#vBody)"/>
+
+  <g clip-path="url(#vClip)">
+    <path d="M14 152 C60 132 140 132 186 152 L186 240 L14 240 Z" fill="#000000" opacity="0.22"/>
+
+    <!-- Palos cruzados en X: mismo palo dos veces, girado en espejo sobre el
+         centro. Los ganchos quedan abiertos hacia afuera, como el gesto real
+         de dos palos cruzados sobre la pista. -->
+    <g stroke="#f2d493" stroke-opacity="0.96" stroke-linecap="round" fill="none" stroke-width="12">
+      <path d="M100 40 L100 132 C100 145 108 151 121 151" transform="rotate(-26 100 100)"/>
+      <path d="M100 40 L100 132 C100 145 92 151 79 151"  transform="rotate(26 100 100)"/>
+    </g>
+
+    <circle cx="100" cy="158" r="14" fill="url(#vBall)"/>
+    <circle cx="100" cy="158" r="14" fill="none" stroke="#0a0c10" stroke-opacity="0.45" stroke-width="1.5"/>
+
+    <path d="M14 180 L186 180 L186 206 L14 206 Z" fill="url(#vBand)"/>
+    <text x="100" y="200" text-anchor="middle"
+      font-family="'Arial Black','Impact',sans-serif" font-size="26" font-weight="900"
+      letter-spacing="7" fill="#2b1f06">ARDI</text>
+
+    <use href="#vShape" fill="url(#vSheen)"/>
+  </g>
+
+  <use href="#vShape" fill="none" stroke="url(#vRim)" stroke-width="9"/>
+  <use href="#vShape" fill="none" stroke="#0a0c10" stroke-width="2.5"/>
+</svg>
