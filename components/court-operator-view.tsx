@@ -37,6 +37,7 @@ import {
 import { HOTKEY_EVENT, OPEN_HOTKEYS_EVENT } from '@/lib/hotkeys'
 import { SanctionsList } from '@/components/scoreboard/SanctionsList'
 import { RefereeActions } from '@/components/scoreboard/RefereeActions'
+import { PosModal } from '@/components/scoreboard/PosModal'
 import { useTheme } from '@/lib/themes'
 import { PERIODO_CORTO } from '@/lib/periodos'
 
@@ -233,6 +234,20 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
   const [addNumber, setAddNumber] = useState('')
   const [cancelling, setCancelling] = useState<{ id: string; num: string; tipo: string } | null>(null)
   const [subbing, setSubbing] = useState<{ out: Player; team: 'home' | 'away' } | null>(null)
+  /**
+   * Entra por banca: al tocar a alguien de la banca y no haber cupo, el
+   * cambio se resuelve preguntando a QUIEN saca — el espejo del dialogo de
+   * arriba, que preguntaba a quien hace entrar. Las dos puntas del mismo
+   * gesto, cada una accesible desde el lado que corresponde.
+   */
+  const [saliendo, setSaliendo] = useState<{ entra: Player; team: 'home' | 'away' } | null>(null)
+  /**
+   * GOL MANUAL — el mismo PosModal de CONTROL, sin tocarlo. Marca el gol a
+   * CUALQUIER numero del plantel, este en pista o en banca, sin pedir
+   * primero que el cambio este al dia. El operador resuelve despues quien
+   * entro o salio, con el cambio normal.
+   */
+  const [golManual, setGolManual] = useState<'home' | 'away' | null>(null)
 
   const askCancel = (id: string, num: string, tipo: string) => setCancelling({ id, num, tipo })
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -502,6 +517,38 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
         toast.info('El equipo esta en el minimo: elige por quien entra.', { duration: 3000 })
         return
       }
+
+      /**
+       * ENTRA POR BANCA. Antes, tocar a alguien de la banca sin cupo solo
+       * mostraba el aviso y ahi quedaba: para hacerlo entrar habia que ir a
+       * buscar a un jugador de PISTA primero y recien ahi aparecia "quien
+       * entra". Es al reves de como se juega: en la cancha primero se sabe
+       * quien entra, no quien sale.
+       *
+       * Si entra un portero y ya hay uno en pista, el cambio es evidente —
+       * sale el otro portero, nadie mas puede ser — asi que se resuelve
+       * directo, sin preguntar.
+       */
+      const lineup = getLineup(players, ids, team, cardHistory, sanctions)
+      if (isGoalie(player) && lineup.goalie) {
+        const r = resolveSubstitution(player, lineup.goalie, team, ids, players, cardHistory, sanctions)
+        if (r.ok) {
+          props.setCourtLineup(team, r.ids, [
+            { playerNumber: getDisplayNumber(lineup.goalie), direction: 'out' },
+            { playerNumber: getDisplayNumber(player), direction: 'in' }
+          ])
+          setSelected(null)
+          return
+        }
+      }
+
+      // De campo, sin cupo: se pregunta a quien saca para que entre ESTE.
+      if (!isGoalie(player)) {
+        setSaliendo({ entra: player, team })
+        setSelected(null)
+        return
+      }
+
       toast.warning(result.reason)
       return
     }
@@ -1716,6 +1763,26 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
               </button>
             ))}
           </div>
+          {/* GOL MANUAL — el mismo input de numero que usa CONTROL. Marca el
+              gol a cualquiera del plantel, este en pista o en banca, sin
+              esperar a que el cambio este al dia: el cambio se arregla
+              despues, con el cambio normal. */}
+          <div className="border-t border-zinc-800 pt-3">
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1 flex items-center gap-1">
+              <Goal className="w-3 h-3" /> Gol manual (banca o pista)
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button disabled={matchEnded} onClick={() => setGolManual('home')}
+                variant="outline" className="h-10 text-[11px] font-bold border-green-900 text-green-300 hover:bg-green-950">
+                <span className="truncate">{homeTeamName}</span>
+              </Button>
+              <Button disabled={matchEnded} onClick={() => setGolManual('away')}
+                variant="outline" className="h-10 text-[11px] font-bold border-green-900 text-green-300 hover:bg-green-950">
+                <span className="truncate">{awayTeamName}</span>
+              </Button>
+            </div>
+          </div>
+
           {/* El penal y la anulacion son decisiones del arbitro, asi que
               viven donde vive el silbato. */}
           <div className="border-t border-zinc-800 pt-3">
@@ -1737,6 +1804,78 @@ export function CourtOperatorView(props: CourtOperatorViewProps) {
           <Button onClick={() => setRefOpen(false)} variant="outline" className="w-full h-11 font-bold border-zinc-600">CERRAR</Button>
         </DialogContent>
       </Dialog>
+
+      {/* ── Entra por banca: el espejo del dialogo de abajo ──────────────────── */}
+      <Dialog open={!!saliendo} onOpenChange={o => { if (!o) setSaliendo(null) }}>
+        <DialogContent className="bg-zinc-900 border-2 border-indigo-700 text-white max-w-lg lg:max-w-2xl" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black">
+              Entra el #{saliendo ? getDisplayNumber(saliendo.entra) : ''} — ¿quién sale?
+            </DialogTitle>
+          </DialogHeader>
+          {saliendo && (() => {
+            const roster = saliendo.team === 'home' ? homePlayers : awayPlayers
+            const ids = saliendo.team === 'home' ? homeCourtIds : awayCourtIds
+            const enPista = roster.filter(p => ids.includes(p.id) && !isGoalie(p))
+            const opciones = enPista.filter(p =>
+              resolveSubstitution(saliendo.entra, p, saliendo.team, ids, roster, cardHistory, sanctions).ok
+            )
+            return (
+              <div className="space-y-3">
+                <p className="text-[11px] text-zinc-500 leading-snug">
+                  El cambio se aplica de una vez, así que el equipo nunca queda por debajo del mínimo.
+                </p>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-[320px] overflow-y-auto">
+                  {opciones.map(p => (
+                    <button key={p.id}
+                      onClick={() => {
+                        const r = resolveSubstitution(saliendo.entra, p, saliendo.team, ids, roster, cardHistory, sanctions)
+                        if (!r.ok) { toast.warning(r.reason); return }
+                        props.setCourtLineup(saliendo.team, r.ids, [
+                          { playerNumber: getDisplayNumber(p), direction: 'out' },
+                          { playerNumber: getDisplayNumber(saliendo.entra), direction: 'in' }
+                        ])
+                        setSaliendo(null)
+                      }}
+                      className="h-16 rounded-xl border-2 border-zinc-700 bg-zinc-950 hover:border-indigo-500 active:scale-95 active:border-indigo-400 flex flex-col items-center justify-center transition-transform touch-manipulation select-none">
+                      <span className="font-black text-lg">{getDisplayNumber(p)}</span>
+                    </button>
+                  ))}
+                </div>
+                {opciones.length === 0 && (
+                  <p className="text-sm text-zinc-500 text-center py-6">
+                    No hay nadie que pueda salir en este momento.
+                  </p>
+                )}
+                <Button onClick={() => setSaliendo(null)} variant="outline" className="w-full h-11 font-bold border-zinc-600">CANCELAR</Button>
+              </div>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Gol manual: el mismo PosModal de CONTROL ─────────────────────────── */}
+      <PosModal
+        open={!!golManual}
+        onClose={() => setGolManual(null)}
+        team={golManual || 'home'}
+        action="gol"
+        homeTeamName={homeTeamName}
+        awayTeamName={awayTeamName}
+        roster={(golManual === 'home' ? state.matchConfig.homeRoster : state.matchConfig.awayRoster) || []}
+        cardHistory={state.cardHistory || []}
+        onSelectPlayer={num => {
+          if (golManual === 'home') props.adjustHomeScore(1, num)
+          else if (golManual === 'away') props.adjustAwayScore(1, num)
+          setGolManual(null)
+        }}
+        getPlayerYellowCount={(t, num) => getYellowCount(
+          (t === 'home' ? homePlayers : awayPlayers).find(p => getDisplayNumber(p) === num) || ({} as Player),
+          t, cardHistory, sanctions
+        )}
+        getCurrentPlayers={t => t === 'home' ? homePlayers : awayPlayers}
+        onOpenBenchModal={() => {}}
+      />
 
       {/* ── Cambio jugador por jugador: una sola operación ──────────────────── */}
       <Dialog open={!!subbing} onOpenChange={o => { if (!o) setSubbing(null) }}>

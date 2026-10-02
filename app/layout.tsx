@@ -14,7 +14,7 @@ import '@fontsource/chivo-mono/700.css'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'ARDI Hockey Patín 3.61',
+  title: 'ARDI Hockey Patín 3.62',
   description: 'Sistema profesional de marcador y control de tiempo para Hockey Patín',
   generator: 'v0.app',
   /**
